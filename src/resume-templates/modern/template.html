@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>{{name}} - Resume</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: #000;
+            margin: 40px auto;
+            max-width: 800px;
+            padding: 0 40px;
+            line-height: 1.6;
+        }
+
+        h1 {
+            font-size: 24px;
+            text-transform: uppercase;
+            margin: 0;
+        }
+
+        h2 {
+            font-size: 16px;
+            margin-top: 32px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            font-weight: bold;
+            margin-top: 4px;
+            font-size: 14px;
+        }
+
+        .contact {
+            font-size: 12px;
+            margin-top: 8px;
+            margin-bottom: 24px;
+        }
+
+        .contact a {
+            color: #000;
+            text-decoration: none;
+        }
+
+        .section {
+            margin-top: 16px;
+        }
+
+        .skills {
+            margin-top: 10px;
+        }
+
+        .skills strong {
+            display: inline-block;
+            width: 200px;
+        }
+
+        ul {
+            padding-left: 20px;
+            margin-top: 4px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        .experience {
+            margin-top: 16px;
+        }
+
+        .job-title {
+            font-weight: bold;
+        }
+
+        .job-info {
+            font-size: 12px;
+            color: #444;
+            margin-bottom: 8px;
+        }
+
+        .technologies {
+            font-size: 12px;
+            font-style: italic;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>{{name}}</h1>
+    <div class="subtitle">{{title}}</div>
+    <div class="contact">
+        {{email}} | {{phone}} |
+        <a href="{{github}}" target="_blank">{{github}}</a> |
+        <a href="{{linkedin}}" target="_blank">{{linkedin}}</a>
+    </div>
+
+    <h2>Professional Summary</h2>
+    <div class="section">{{summary}}</div>
+
+    <h2>Technical Skills</h2>
+    <div class="section skills">
+        <div><strong>Programming Languages:</strong> {{skills.languages}}</div>
+        <div><strong>Frameworks & Libraries:</strong> {{skills.frameworks}}</div>
+        <div><strong>Databases:</strong> {{skills.databases}}</div>
+        <div><strong>Cloud & Tools:</strong> {{skills.tools}}</div>
+        <div><strong>Concepts:</strong> {{skills.concepts}}</div>
+    </div>
+
+    <h2>Professional Experience</h2>
+    {{#each experience}}
+    <div class="experience">
+        <div class="job-title">{{role}}</div>
+        <div class="job-info">
+            {{company}}, {{location}} | {{startDate}} - {{endDate}}
+        </div>
+        <ul>
+            {{#each responsibilities}}
+            <li>{{this}}</li>
+            {{/each}}
+        </ul>
+        <div class="technologies">Technologies: {{technologies}}</div>
+    </div>
+    {{/each}}
+</body>
+
+</html>

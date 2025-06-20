@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{fullName}} - Resume</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background: #fff;
+            color: #000;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin: 0 0 10px;
+        }
+
+        h1 {
+            font-size: 24px;
+        }
+
+        h2 {
+            font-size: 18px;
+            color: #007bff;
+            text-transform: uppercase;
+            margin-top: 30px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+        }
+
+        .header {
+            text-align: center;
+        }
+
+        .contact {
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .job-title,
+        .project-title {
+            font-weight: bold;
+            font-size: 15px;
+        }
+
+        .job-meta,
+        .project-meta {
+            font-style: italic;
+            font-size: 13px;
+            color: #555;
+        }
+
+        ul {
+            margin-top: 5px;
+            margin-bottom: 15px;
+            padding-left: 20px;
+        }
+
+        .skills span {
+            display: inline-block;
+            background: #f2f2f2;
+            margin: 2px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 15px;
+                font-size: 13px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+
+            h2 {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>{{fullName}}</h1>
+        <div class="contact">
+            <span>{{email}}</span> |
+            <span>{{phone}}</span> |
+            <span>{{location}}</span>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Work Experience</h2>
+        {{#each workExperience}}
+        <div class="job-title">{{company}} - {{role}}</div>
+        <div class="job-meta">{{year}} - {{#if endYear}}{{endYear}}{{else}}current{{/if}} | {{location}}</div>
+        <ul>
+            {{#each responsibilities}}
+            <li>{{this}}</li>
+            {{/each}}
+        </ul>
+        {{/each}}
+    </div>
+
+    <div class="section">
+        <h2>Projects</h2>
+        {{#each projects}}
+        <div class="project-title">{{name}} - {{role}}</div>
+        <div class="project-meta">{{year}}</div>
+        <ul>
+            {{#each points}}
+            <li>{{this}}</li>
+            {{/each}}
+        </ul>
+        {{/each}}
+    </div>
+
+    <div class="section">
+        <h2>Education</h2>
+        <div class="job-title">{{education.school}} - {{education.degree}}</div>
+        <div class="job-meta">{{education.years}} | {{education.location}}</div>
+    </div>
+
+    <div class="section">
+        <h2>Skills</h2>
+        <div class="skills">
+            {{#each skills}}
+            <span>{{this}}</span>
+            {{/each}}
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Hobbies</h2>
+        <ul>
+            {{#each hobbies}}
+            <li>{{this}}</li>
+            {{/each}}
+        </ul>
+    </div>
+</body>
+
+</html>
