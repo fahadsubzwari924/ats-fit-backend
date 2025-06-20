@@ -6,7 +6,6 @@ import { ConfigService } from '@nestjs/config';
 import { User } from '../../database/entities/user.entity';
 import { Resume } from '../../database/entities/resume.entity';
 import { ResumeTemplate } from '../../database/entities/resume-templates.entity';
-import { IResumeTemplate } from './interfaces/resume-template.interface';
 
 @Injectable()
 export class ResumeService {
@@ -32,7 +31,7 @@ export class ResumeService {
     });
   }
 
-  async getResumeTemplates(): Promise<IResumeTemplate[]> {
+  async getResumeTemplates(): Promise<ResumeTemplate[]> {
     const resumeTemplates = await this.templateRepository.find();
     return resumeTemplates || [];
   }
