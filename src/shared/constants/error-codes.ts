@@ -1,0 +1,14 @@
+export const ERROR_CODES = {
+  // Generic errors
+  NOT_FOUND: 'ERR_NOT_FOUND',
+  BAD_REQUEST: 'ERR_BAD_REQUEST',
+  UNAUTHORIZED: 'ERR_UNAUTHORIZED',
+  FORBIDDEN: 'ERR_FORBIDDEN',
+  INTERNAL_SERVER: 'ERR_INTERNAL_SERVER',
+
+  AUTH_REQUIRED: 'ERR_AUTH_REQUIRED',
+  ACCESS_DENIED: 'ERR_ACCESS_DENIED',
+} as const;
+
+// Type for error codes
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
