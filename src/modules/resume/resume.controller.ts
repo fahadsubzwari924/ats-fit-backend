@@ -8,8 +8,8 @@ export class ResumeController {
   constructor(private readonly resumeService: ResumeService) {}
 
   @Get('templates')
-  async getTemplates(): Promise<{ data: any }> {
+  async getTemplates() {
     const templates = await this.resumeService.getResumeTemplates();
-    return { data: templates };
+    return templates;
   }
 }

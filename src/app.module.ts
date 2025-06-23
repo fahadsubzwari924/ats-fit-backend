@@ -4,6 +4,9 @@ import { DatabaseModule } from './database/database.module';
 import { validationSchema } from './config/validation.schema';
 import { AuthModule } from './modules/auth/auth.module';
 import { ResumeModule } from './modules/resume/resume.module';
+import { APP_GUARD, Reflector } from '@nestjs/core';
+import { JwtAuthGuard } from './modules/auth/jwt.guard';
+import { SharedModule } from './shared/shared.module';
 
 @Module({
   imports: [
@@ -18,6 +21,14 @@ import { ResumeModule } from './modules/resume/resume.module';
     DatabaseModule,
     AuthModule,
     ResumeModule,
+    SharedModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    Reflector,
   ],
 })
 export class AppModule {}

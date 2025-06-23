@@ -1,11 +1,28 @@
-export interface ErrorDetail {
-  code: string; // e.g., "INVALID_EMAIL", "DUPLICATE_EMAIL"
-  message: string; // e.g., "Invalid email format"
+export interface ApiResponse<T> {
+  status: 'success' | 'error';
+  data?: T;
+  error?: ApiError;
+  meta?: MetaData;
 }
 
-export interface ApiResponse<T = any> {
-  status: 'success' | 'error';
-  payload?: T; // Payload for success responses
-  errors?: ErrorDetail[]; // Error details for error responses
-  message?: string; // Optional summary message
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: ErrorDetail[];
+  stack?: string;
+}
+
+export interface ErrorDetail {
+  field?: string;
+  message: string;
+}
+
+export interface MetaData {
+  timestamp?: string;
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+  };
+  [key: string]: any;
 }
