@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ValidationError } from 'class-validator';
 import { Response, Request } from 'express';
-import { ERROR_CODES, ErrorCode } from 'src/shared/constants/error-codes';
+import { ERROR_CODES, ErrorCode } from '../../../shared/constants/error-codes';
 import { ErrorDetailDto } from './response.dto';
 import { ResponseService } from './response.service';
 
