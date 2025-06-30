@@ -97,3 +97,130 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+# ATS-Fit Backend
+
+A NestJS backend service for generating tailored resumes using AI analysis and customizable templates.
+
+## Performance Optimizations
+
+The resume generation endpoint has been optimized to reduce response time from ~39 seconds to significantly faster times. Here are the key optimizations implemented:
+
+### 1. Parallel Processing
+- **Template fetching and PDF text extraction** now run in parallel using `Promise.all()`
+- **AI analysis operations** (keyword extraction and resume embedding) are parallelized
+- **Skill embedding generation** for multiple skills runs concurrently
+
+### 2. Caching Strategy
+- **Template content caching**: S3 template content is cached for 10 minutes (configurable)
+- **Resume service caching**: Template objects are cached for 5 minutes (configurable)
+- **Database query caching**: Template metadata queries use TypeORM caching
+
+### 3. AI Service Optimizations
+- **Limited skill analysis**: Only top 10 skills are processed for embeddings (configurable)
+- **Reduced missing skills**: Limited to top 5 most relevant missing skills (configurable)
+- **Eliminated redundant analysis**: Combined resume analysis into main method
+
+### 4. PDF Generation Improvements
+- **Browser reuse**: Puppeteer browser instance is reused across requests
+- **Faster page loading**: Changed from `networkidle0` to `domcontentloaded` wait strategy
+- **Optimized browser args**: Added performance-focused Chrome flags
+- **Configurable timeouts**: PDF generation timeouts are now configurable
+
+### 5. Configuration-Driven Performance
+All performance settings are configurable via environment variables:
+
+```env
+# Template caching (milliseconds)
+TEMPLATE_CACHE_TTL=600000
+RESUME_SERVICE_CACHE_TTL=300000
+
+# AI optimization
+MAX_SKILLS_FOR_EMBEDDING=10
+MAX_MISSING_SKILLS=5
+
+# PDF generation timeouts (milliseconds)
+PDF_TIMEOUT=15000
+PDF_PAGE_TIMEOUT=10000
+
+# File size limits (bytes)
+MAX_FILE_SIZE=5242880
+```
+
+### 6. Performance Monitoring
+The service now logs detailed timing information for each step:
+- Template and text extraction time
+- AI analysis time
+- Template application time
+- PDF generation time
+- Total processing time
+
+### Expected Performance Improvements
+- **Template fetching**: ~2-3 seconds → ~100-200ms (with cache)
+- **AI analysis**: ~15-20 seconds → ~8-12 seconds (parallel processing)
+- **PDF generation**: ~8-10 seconds → ~3-5 seconds (browser reuse)
+- **Overall**: ~39 seconds → ~12-18 seconds (60-70% improvement)
+
+## Features
+
+- AI-powered resume analysis and tailoring
+- Multiple professional resume templates
+- PDF generation with custom styling
+- JWT authentication
+- AWS S3 integration for template storage
+- Configurable performance settings
+
+## Installation
+
+```bash
+npm install
+```
+
+## Configuration
+
+Set up your environment variables in `config/.env.dev` or `config/.env.prod`:
+
+```env
+# Database
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_USERNAME=postgres
+DATABASE_PASSWORD=password
+DATABASE_NAME=ats_fit
+
+# JWT
+JWT_SECRET=your-secret-key
+
+# AWS
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_S3_RESUME_TEMPLATES_BUCKET=your-templates-bucket
+
+# OpenAI
+OPENAI_API_KEY=your-openai-key
+```
+
+## Running the Application
+
+```bash
+# Development
+npm run start:dev
+
+# Production
+npm run start:prod
+```
+
+## API Endpoints
+
+### Authentication
+- `POST /auth/signup` - User registration
+- `POST /auth/signin` - User login
+
+### Resume Generation
+- `GET /resumes/templates` - Get available templates
+- `POST /resumes/generate` - Generate tailored resume (requires authentication)
+
+## License
+
+MIT

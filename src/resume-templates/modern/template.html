@@ -91,41 +91,85 @@
 </head>
 
 <body>
-    <h1>{{name}}</h1>
-    <div class="subtitle">{{title}}</div>
+    <h1>{{contactInfo.name}}</h1>
     <div class="contact">
-        {{email}} | {{phone}} |
-        <a href="{{github}}" target="_blank">{{github}}</a> |
-        <a href="{{linkedin}}" target="_blank">{{linkedin}}</a>
+        {{contactInfo.email}} | {{contactInfo.phone}} | {{contactInfo.location}}
+        {{#if contactInfo.github}} | <a href="{{contactInfo.github}}" target="_blank">GitHub</a>{{/if}}
+        {{#if contactInfo.linkedin}} | <a href="{{contactInfo.linkedin}}" target="_blank">LinkedIn</a>{{/if}}
     </div>
 
+    {{#if summary}}
+    {{#if title}}<div class="subtitle">{{title}}</div>{{/if}}
     <h2>Professional Summary</h2>
     <div class="section">{{summary}}</div>
+    {{/if}}
 
     <h2>Technical Skills</h2>
     <div class="section skills">
-        <div><strong>Programming Languages:</strong> {{skills.languages}}</div>
-        <div><strong>Frameworks & Libraries:</strong> {{skills.frameworks}}</div>
-        <div><strong>Databases:</strong> {{skills.databases}}</div>
-        <div><strong>Cloud & Tools:</strong> {{skills.tools}}</div>
-        <div><strong>Concepts:</strong> {{skills.concepts}}</div>
+        {{#if skills.languages}}<div><strong>Programming Languages:</strong> {{skills.languages}}</div>{{/if}}
+        {{#if skills.frameworks}}<div><strong>Frameworks & Libraries:</strong> {{skills.frameworks}}</div>{{/if}}
+        {{#if skills.databases}}<div><strong>Databases:</strong> {{skills.databases}}</div>{{/if}}
+        {{#if skills.tools}}<div><strong>Cloud & Tools:</strong> {{skills.tools}}</div>{{/if}}
+        {{#if skills.concepts}}<div><strong>Concepts:</strong> {{skills.concepts}}</div>{{/if}}
     </div>
 
     <h2>Professional Experience</h2>
     {{#each experience}}
     <div class="experience">
-        <div class="job-title">{{role}}</div>
+        <div class="job-title">{{position}}</div>
         <div class="job-info">
-            {{company}}, {{location}} | {{startDate}} - {{endDate}}
+            {{company}}, {{location}} | {{startDate}} - {{#if endDate}}{{endDate}}{{else}}current{{/if}}
         </div>
         <ul>
             {{#each responsibilities}}
             <li>{{this}}</li>
             {{/each}}
         </ul>
-        <div class="technologies">Technologies: {{technologies}}</div>
+        {{#if achievements.length}}
+        <ul>
+            {{#each achievements}}
+            <li>{{this}}</li>
+            {{/each}}
+        </ul>
+        {{/if}}
+        {{#if technologies}}<div class="technologies">Technologies: {{technologies}}</div>{{/if}}
     </div>
     {{/each}}
+
+    {{#if education.length}}
+    <h2>Education</h2>
+    {{#each education}}
+    <div class="experience">
+        <div class="job-title">{{degree}}</div>
+        <div class="job-info">
+            {{institution}} | {{startDate}} - {{endDate}} | {{major}}
+        </div>
+    </div>
+    {{/each}}
+    {{/if}}
+
+    {{#if certifications.length}}
+    <h2>Certifications</h2>
+    {{#each certifications}}
+    <div class="experience">
+        <div class="job-title">{{name}}</div>
+        <div class="job-info">{{issuer}} - {{date}}</div>
+    </div>
+    {{/each}}
+    {{/if}}
+
+    {{#if additionalSections.length}}
+    {{#each additionalSections}}
+    <h2>{{title}}</h2>
+    <div class="section">
+        <ul>
+            {{#each items}}
+            <li>{{this}}</li>
+            {{/each}}
+        </ul>
+    </div>
+    {{/each}}
+    {{/if}}
 </body>
 
 </html>
