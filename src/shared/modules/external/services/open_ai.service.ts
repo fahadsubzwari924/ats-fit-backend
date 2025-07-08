@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { ConfigService } from '@nestjs/config';
 import { head } from 'lodash';
-import { InternalServerErrorException } from '../../shared/exceptions/custom-http-exceptions';
+import { InternalServerErrorException } from '../../../exceptions/custom-http-exceptions';
 
 interface OpenApiRequestParams {
   model: string;

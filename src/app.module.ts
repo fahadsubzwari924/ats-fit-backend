@@ -7,6 +7,7 @@ import { ResumeModule } from './modules/resume/resume.module';
 import { APP_GUARD, Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './modules/auth/jwt.guard';
 import { SharedModule } from './shared/shared.module';
+import { AtsMatchModule } from './modules/ats-match/ats-match.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SharedModule } from './shared/shared.module';
     AuthModule,
     ResumeModule,
     SharedModule,
+    AtsMatchModule
   ],
   providers: [
     {
