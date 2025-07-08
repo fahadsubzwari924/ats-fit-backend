@@ -5,9 +5,7 @@ import { ResumeController } from './resume.controller';
 import { ResumeTemplate } from '../../database/entities/resume-templates.entity';
 import { User } from '../../database/entities/user.entity';
 import { Resume } from '../../database/entities/resume.entity';
-import { OpenAIService } from '../../external/services/open_ai.service';
 import { HandlebarsService } from '../../shared/services/handlebars.service';
-import { S3Service } from '../../external/services/s3.service';
 import {
   GeneratePdfService,
   ResumeTemplateService,
@@ -15,22 +13,22 @@ import {
   AIService,
   PromptService,
 } from './services';
-import { EmbeddingService } from '../../external/services/embedding.service';
+import { SharedModule } from '../../shared/shared.module';
+import { ExternalModule } from 'src/shared/modules/external/external.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ResumeTemplate, User, Resume]),
     ConfigModule,
+    SharedModule,
+    ExternalModule
   ],
   providers: [
     ResumeService,
-    OpenAIService,
     HandlebarsService,
-    S3Service,
     ResumeTemplateService,
     GeneratePdfService,
     AIService,
-    EmbeddingService,
     PromptService,
   ],
   controllers: [ResumeController],
@@ -39,6 +37,7 @@ import { EmbeddingService } from '../../external/services/embedding.service';
     ResumeService,
     HandlebarsService,
     GeneratePdfService,
+    AIService,
   ],
 })
 export class ResumeModule {}

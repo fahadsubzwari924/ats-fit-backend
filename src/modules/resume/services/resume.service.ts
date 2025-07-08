@@ -9,6 +9,7 @@ import { GeneratePdfService } from './generate-pdf.service';
 import { Response } from 'express';
 import { AnalysisResultSchema } from '../schemas/resume-tailored-content.schema';
 import { AnalysisResult } from '../interfaces/resume-extracted-keywords.interface';
+import { ERROR_CODES } from 'src/shared/constants/error-codes';
 
 @Injectable()
 export class ResumeService {
@@ -132,7 +133,7 @@ export class ResumeService {
       return await this.extractTextFromPdf(file.buffer);
     }
 
-    throw new Error('Unsupported file type');
+    throw new BadRequestException('Unsupported file type', ERROR_CODES.UNSUPPORTED_FILE_TYPE);
   }
 
   private validateFile(file: Express.Multer.File) {

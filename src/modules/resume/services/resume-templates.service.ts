@@ -7,7 +7,7 @@ import {
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ResumeTemplate } from '../../../database/entities/resume-templates.entity';
-import { S3Service } from '../../../external/services/s3.service';
+import { S3Service } from '../../../shared/modules/external/services/s3.service';
 import { HandlebarsService } from '../../../shared/services/handlebars.service';
 import { formatUnknownError } from '../../../shared/utils/error-formatter.util';
 import {

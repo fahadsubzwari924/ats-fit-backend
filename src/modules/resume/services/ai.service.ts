@@ -1,8 +1,8 @@
 // ai.service.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EmbeddingService } from '../../../external/services/embedding.service';
-import { OpenAIService } from '../../../external/services/open_ai.service';
+import { EmbeddingService } from '../../../shared/modules/external/services/embedding.service';
+import { OpenAIService } from '../../../shared/modules/external/services/open_ai.service';
 import {
   AnalysisResult,
   ResumeAnalysis,
@@ -13,8 +13,8 @@ import { get, head, isEmpty } from 'lodash';
 import {
   ChatCompletionChoice,
   ChatCompletionResponse,
-} from '../../../external/interfaces/open-ai-chat.interface';
-import { PromptService } from './prompt.service';
+} from '../../../shared/modules/external/interfaces/open-ai-chat.interface';
+import { PromptService } from '../../../shared/services/prompt.service';
 import {
   ResumeExtractedKeywordsSchema,
   TailoredContentSchema,
@@ -32,7 +32,7 @@ export class AIService {
   async analyzeResumeAndJobDescription(
     resumeText: string,
     jobDescription: string,
-    companyName: string,
+    companyName?: string,
   ): Promise<AnalysisResult> {
     // Get performance configuration
     const maxSkillsForEmbedding = this.configService.get<number>(
@@ -104,8 +104,8 @@ export class AIService {
     const tailoredContent = await this.generateTailoredContent(
       resumeAnalysis,
       jobDescription,
-      companyName,
       resumeText,
+      companyName,
     );
 
     return {
@@ -117,9 +117,95 @@ export class AIService {
     };
   }
 
-  private async extractKeywordsFromJD(
-    jd: string,
-  ): Promise<ResumeExtractedKeywords> {
+  async analyzeResumeForAtsScore(
+    resumeText: string,
+    jobDescription: string,
+  ): Promise<{ skillMatchScore: number; missingKeywords: string[] }> {
+    // Get performance configuration for ATS scoring
+    const maxSkillsForEmbedding = this.configService.get<number>(
+      'performance.maxSkillsForEmbedding',
+      15, // Increased for ATS scoring
+    );
+    const maxMissingSkills = this.configService.get<number>(
+      'performance.maxMissingSkills',
+      5,
+    );
+
+    // Parallel execution of independent operations
+    const [extractedData, resumeEmbedding] = await Promise.all([
+      this.extractKeywordsFromJDForAts(jobDescription),
+      this.embeddingService.getEmbedding(resumeText),
+    ]);
+
+    const requiredSkills = [
+      ...extractedData.hardSkills,
+      ...extractedData.softSkills,
+      ...extractedData.qualifications,
+    ];
+
+    // Limit skills to configured maximum to reduce embedding calls
+    const limitedSkills = requiredSkills.slice(0, maxSkillsForEmbedding);
+
+    // Get embeddings for skills in parallel
+    const skillEmbeddings = await Promise.all(
+      limitedSkills.map((skill: string) =>
+        this.embeddingService.getEmbedding(skill),
+      ),
+    );
+
+    // Calculate similarity scores
+    const similarityScores = skillEmbeddings.map((embedding: number[]) =>
+      this.embeddingService.cosineSimilarity(resumeEmbedding, embedding),
+    );
+
+    // Calculate weighted match score (improved algorithm for ATS)
+    const skillScores = limitedSkills.map((skill, index) => ({
+      skill,
+      score: similarityScores[index],
+    }));
+
+    // Sort by score and apply weighted scoring
+    const sortedSkillScores = skillScores.sort((a, b) => b.score - a.score);
+    
+    // Weight top skills more heavily (top 3 get higher weight)
+    const weightedScores = sortedSkillScores.map((item, index) => {
+      let weight = 1;
+      if (index < 3) weight = 1.5; // Top 3 skills get 50% more weight
+      else if (index < 7) weight = 1.2; // Next 4 skills get 20% more weight
+      return item.score * weight;
+    });
+
+    // Calculate weighted average
+    const totalWeight = weightedScores.reduce((sum, _, index) => {
+      if (index < 3) return sum + 1.5;
+      else if (index < 7) return sum + 1.2;
+      return sum + 1;
+    }, 0);
+
+    const averageScore = weightedScores.reduce((sum, score) => sum + score, 0) / totalWeight;
+
+    // Identify missing skills with improved threshold for ATS
+    const missingSkills = limitedSkills.filter(
+      (_: string, index: number) => similarityScores[index] < 0.4, // Lowered threshold for ATS
+    );
+
+    // Prioritize missing skills by similarity score
+    const prioritizedMissing = missingSkills
+      .map((skill) => ({
+        skill,
+        score: similarityScores[limitedSkills.indexOf(skill)],
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map((item) => item.skill)
+      .slice(0, maxMissingSkills);
+
+    return {
+      skillMatchScore: averageScore,
+      missingKeywords: prioritizedMissing,
+    };
+  }
+
+  async extractKeywordsFromJD(jd: string): Promise<ResumeExtractedKeywords> {
     const prompt =
       this.promptService.getExtractKeywordsFromJobDescriptionPrompt(jd);
 
@@ -141,7 +227,9 @@ export class AIService {
 
     try {
       const parsed = JSON.parse(content);
-      return ResumeExtractedKeywordsSchema.parse(parsed && typeof parsed === 'object' ? parsed : {}) as ResumeExtractedKeywords;
+      return ResumeExtractedKeywordsSchema.parse(
+        parsed && typeof parsed === 'object' ? parsed : {},
+      ) as ResumeExtractedKeywords;
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown parsing error';
@@ -151,11 +239,45 @@ export class AIService {
     }
   }
 
+  async extractKeywordsFromJDForAts(jd: string): Promise<ResumeExtractedKeywords> {
+    const prompt =
+      this.promptService.getExtractKeywordsFromJobDescriptionForAtsPrompt(jd);
+
+    const result = (await this.openAIService.chatCompletion({
+      model: 'gpt-4-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+    })) as ChatCompletionResponse;
+
+    const choices = get(result, 'choices', []) as ChatCompletionChoice[];
+    if (isEmpty(choices)) {
+      throw new Error('No response choices received from OpenAI');
+    }
+
+    const content = get(head(choices), 'message.content');
+    if (!content) {
+      throw new Error('No content in OpenAI response');
+    }
+
+    try {
+      const parsed = JSON.parse(content);
+      return ResumeExtractedKeywordsSchema.parse(
+        parsed && typeof parsed === 'object' ? parsed : {},
+      ) as ResumeExtractedKeywords;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown parsing error';
+      throw new Error(
+        `Failed to parse OpenAI response for ATS keyword extraction: ${errorMessage}`,
+      );
+    }
+  }
+
   private async generateTailoredContent(
     analysis: ResumeAnalysis,
     jobDescription: string,
-    companyName: string,
     originalResumeText: string,
+    companyName?: string,
   ): Promise<TailoredContent> {
     const prompt = this.promptService.getTailoredResumePrompt(
       originalResumeText,
@@ -184,7 +306,9 @@ export class AIService {
 
     try {
       const parsedContent = JSON.parse(content);
-      return TailoredContentSchema.parse(parsedContent && typeof parsedContent === 'object' ? parsedContent : {}) as TailoredContent;
+      return TailoredContentSchema.parse(
+        parsedContent && typeof parsedContent === 'object' ? parsedContent : {},
+      ) as TailoredContent;
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown parsing error';
@@ -265,5 +389,21 @@ export class AIService {
           }))
         : [],
     };
+  }
+
+  async evaluateResumeWithAtsCriteria(resumeText: string, jobDescription: string): Promise<any> {
+    const prompt = this.promptService.getAtsEvaluationPrompt(resumeText, jobDescription);
+    const result = await this.openAIService.chatCompletion({
+      model: 'gpt-4-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+    });
+    const content = result.choices?.[0]?.message?.content;
+    if (!content) throw new Error('No content in ATS evaluation response');
+    try {
+      return JSON.parse(content);
+    } catch (e) {
+      throw new Error('Failed to parse ATS evaluation JSON');
+    }
   }
 }
