@@ -14,18 +14,32 @@ export class ValidationLoggingInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     return next.handle().pipe(
-      catchError(error => {
-        this.logger.error('Validation or processing error caught:', {
-          error: error.message,
-          stack: error.stack,
-          status: error.status,
-          response: error.response,
-          path: context.switchToHttp().getRequest().url,
-          method: context.switchToHttp().getRequest().method,
-        });
-        
-        return throwError(() => error);
-      }),
+      catchError(
+        (error: {
+          message?: string;
+          stack?: string;
+          status?: number;
+          response?: any;
+        }) => {
+          this.logger.error('Validation or processing error caught:', {
+            error: error.message ?? 'Unknown error message',
+            stack: error.stack ?? 'No stack trace available',
+            status: error.status ?? 500,
+            response:
+              typeof error.response === 'string'
+                ? error.response
+                : 'No response available',
+            path:
+              context.switchToHttp().getRequest<{ url?: string }>()?.url ??
+              'Unknown path',
+            method:
+              context.switchToHttp().getRequest<{ method?: string }>()
+                ?.method ?? 'Unknown method',
+          });
+
+          return throwError(() => error);
+        },
+      ),
     );
   }
-} 
+}

@@ -8,6 +8,9 @@ import { APP_GUARD, Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './modules/auth/jwt.guard';
 import { SharedModule } from './shared/shared.module';
 import { AtsMatchModule } from './modules/ats-match/ats-match.module';
+import { UserModule } from './modules/user/user.module';
+import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
+import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
 
 @Module({
   imports: [
@@ -23,9 +26,15 @@ import { AtsMatchModule } from './modules/ats-match/ats-match.module';
     AuthModule,
     ResumeModule,
     SharedModule,
-    AtsMatchModule
+    AtsMatchModule,
+    UserModule,
+    RateLimitModule,
   ],
   providers: [
+    {
+      provide: APP_GUARD,
+      useClass: RateLimitGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
