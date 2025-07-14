@@ -7,16 +7,14 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
-  BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { 
-  ApiTags, 
-  ApiOperation, 
-  ApiConsumes, 
-  ApiBody, 
+import {
+  ApiTags,
+  ApiOperation,
+  ApiConsumes,
   ApiResponse,
-  ApiBearerAuth 
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { ResumeTemplateService } from './services/resume-templates.service';
@@ -27,6 +25,10 @@ import { FileValidationPipe } from './pipes/file-validation.pipe';
 import { ValidationLoggingInterceptor } from './interceptors/validation-logging.interceptor';
 import { Response } from 'express';
 import { NotFoundException } from '../../shared/exceptions/custom-http-exceptions';
+import { RateLimitFeature } from '../rate-limit/rate-limit.guard';
+import { FeatureType } from '../../database/entities/usage-tracking.entity';
+import { Public } from '../auth/decorators/public.decorator';
+import { UsageTrackingInterceptor } from '../rate-limit/usage-tracking.interceptor';
 
 @ApiTags('Resumes')
 @Controller('resumes')
@@ -42,8 +44,8 @@ export class ResumeController {
 
   @Get('templates')
   @ApiOperation({ summary: 'Get available resume templates' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'List of available resume templates',
     schema: {
       type: 'array',
@@ -54,9 +56,9 @@ export class ResumeController {
           name: { type: 'string' },
           description: { type: 'string' },
           thumbnail: { type: 'string' },
-        }
-      }
-    }
+        },
+      },
+    },
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getTemplates() {
@@ -64,25 +66,31 @@ export class ResumeController {
     return templates;
   }
 
-
   @Post('generate')
-  @UseInterceptors(FileInterceptor('resumeFile'), ValidationLoggingInterceptor)
-  @ApiOperation({ 
+  @Public()
+  @RateLimitFeature(FeatureType.RESUME_GENERATION)
+  @UseInterceptors(
+    FileInterceptor('resumeFile'),
+    ValidationLoggingInterceptor,
+    UsageTrackingInterceptor,
+  )
+  @ApiOperation({
     summary: 'Generate a tailored resume',
-    description: 'Upload a resume file and generate a tailored version based on job description and company'
+    description:
+      'Upload a resume file and generate a tailored version based on job description and company',
   })
   @ApiConsumes('multipart/form-data')
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Tailored resume generated successfully',
     content: {
       'application/pdf': {
         schema: {
           type: 'string',
-          format: 'binary'
-        }
-      }
-    }
+          format: 'binary',
+        },
+      },
+    },
   })
   async generateTailoredResume(
     @Body() generateResumeDto: GenerateTailoredResumeDto,
@@ -97,28 +105,30 @@ export class ResumeController {
         filename: resumeFile?.originalname,
         mimetype: resumeFile?.mimetype,
         size: resumeFile?.size,
-        hasBuffer: !!resumeFile?.buffer
+        hasBuffer: !!resumeFile?.buffer,
       });
 
       // Validate that the template exists before processing
       await this.validateResumeTemplateExists(generateResumeDto.templateId);
 
       return this.resumeService.generateTailoredResume(
-          generateResumeDto.jobDescription,
-          generateResumeDto.companyName,
+        generateResumeDto.jobDescription,
+        generateResumeDto.companyName,
         resumeFile,
-          generateResumeDto.templateId,
+        generateResumeDto.templateId,
         res,
       );
     } catch (error) {
       this.logger.error('Error in generateTailoredResume:', error);
-      this.logger.error('Error stack:', error.stack);
-      this.logger.error('Error message:', error.message);
-      
+      if (error instanceof Error) {
+        this.logger.error('Error stack:', error.stack);
+        this.logger.error('Error message:', error.message);
+      }
+
       if (error instanceof NotFoundException) {
         throw error;
       }
-      if (error.message?.includes('not found')) {
+      if ((error as Error)?.message?.includes('not found')) {
         throw new NotFoundException('Template not found');
       }
       // Re-throw the error to let the global exception filter handle it
@@ -126,11 +136,16 @@ export class ResumeController {
     }
   }
 
-  private async validateResumeTemplateExists(templateId: string): Promise<void> {
+  private async validateResumeTemplateExists(
+    templateId: string,
+  ): Promise<void> {
     try {
       await this.resumeTemplateService.getTemplateById(templateId);
     } catch (error) {
-      this.logger.error(`Template validation failed for ID: ${templateId}`, error);
+      this.logger.error(
+        `Template validation failed for ID: ${templateId}`,
+        error,
+      );
       throw new NotFoundException('Template not found');
     }
   }

@@ -270,28 +270,18 @@ export class ResumeTemplateService {
     return validatedData;
   }
 
-  private validateEducation(education: any): Education[] {
+  private validateEducation(education: unknown): Education[] {
     if (!education) {
       return [];
     }
 
     // If education is a single object, convert it to an array
     if (!Array.isArray(education)) {
-      education = [education];
+      education = [education] as Education[];
     }
 
     // Validate each education entry and provide defaults
-    return education.map((edu) => {
-      if (typeof edu !== 'object' || edu === null) {
-        return {
-          institution: '',
-          degree: '',
-          major: '',
-          startDate: '',
-          endDate: '',
-        };
-      }
-
+    return (education as Education[]).map((edu: Education) => {
       return {
         institution: edu.institution || '',
         degree: edu.degree || '',

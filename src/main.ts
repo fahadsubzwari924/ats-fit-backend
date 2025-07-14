@@ -7,10 +7,23 @@ import { ResponseInterceptor } from './shared/modules/response/response.intercep
 import { AllExceptionsFilter } from './shared/modules/response/exception.filter';
 import { RequestIdMiddleware } from './shared/modules/response/request-id.middleware';
 import { Request, Response, NextFunction } from 'express';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
+
+  // --- Swagger setup ---
+  const config = new DocumentBuilder()
+    .setTitle('ATS Fit API')
+    .setDescription('API documentation for ATS Fit Backend')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
+  // --- End Swagger setup ---
 
   // Resolve ResponseService instance
   const responseService = await app.resolve(ResponseService);

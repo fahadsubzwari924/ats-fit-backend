@@ -9,7 +9,7 @@ import { GeneratePdfService } from './generate-pdf.service';
 import { Response } from 'express';
 import { AnalysisResultSchema } from '../schemas/resume-tailored-content.schema';
 import { AnalysisResult } from '../interfaces/resume-extracted-keywords.interface';
-import { ERROR_CODES } from 'src/shared/constants/error-codes';
+import { ERROR_CODES } from '../../../shared/constants/error-codes';
 
 @Injectable()
 export class ResumeService {
@@ -54,10 +54,18 @@ export class ResumeService {
     this.logger.log(`AI analysis: ${Date.now() - aiStart}ms`);
 
     // Validate and ensure correct structure
-    const validatedResult = AnalysisResultSchema.parse(analysisResult)  as AnalysisResult;
+    const validatedResult = AnalysisResultSchema.parse(
+      analysisResult,
+    ) as AnalysisResult;
 
     // Apply the template with the analyzed data
     const templateApplyStart = Date.now();
+    if (typeof template === 'string') {
+      throw new BadRequestException(
+        'Template is not of the expected type',
+        ERROR_CODES.INVALID_TEMPLATE_TYPE,
+      );
+    }
     const tailoredResume = await this.templateService.applyTemplate(
       template,
       validatedResult,
@@ -103,7 +111,7 @@ export class ResumeService {
 
     // Check cache first
     if (this.templateCache.has(templateId)) {
-      return this.templateCache.get(templateId);
+      return this.templateCache.get(templateId) as string; // Ensure the value has the correct type
     }
 
     // Fetch from service and cache
@@ -133,7 +141,10 @@ export class ResumeService {
       return await this.extractTextFromPdf(file.buffer);
     }
 
-    throw new BadRequestException('Unsupported file type', ERROR_CODES.UNSUPPORTED_FILE_TYPE);
+    throw new BadRequestException(
+      'Unsupported file type',
+      ERROR_CODES.UNSUPPORTED_FILE_TYPE,
+    );
   }
 
   private validateFile(file: Express.Multer.File) {

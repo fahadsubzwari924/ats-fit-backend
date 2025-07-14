@@ -257,7 +257,10 @@ ${jobDescription}
 `;
   }
 
-  getPremiumAtsEvaluationPrompt(resumeText: string, jobDescription: string): string {
+  getPremiumAtsEvaluationPrompt(
+    resumeText: string,
+    jobDescription: string,
+  ): string {
     return `
 You are a premium ATS (Applicant Tracking System) evaluator with expertise in resume analysis and job matching. You are evaluating a resume against a job description using industry-standard ATS criteria.
 
@@ -366,7 +369,9 @@ ${jobDescription}
 `;
   }
 
-  getExtractKeywordsFromJobDescriptionForAtsPrompt(jobDescription: string): string {
+  getExtractKeywordsFromJobDescriptionForAtsPrompt(
+    jobDescription: string,
+  ): string {
     try {
       // Validate job description input
       this.validateJobDescriptionInput(jobDescription);
@@ -415,7 +420,10 @@ For a "Lead Back-end Engineer" role, you might extract:
 - keywords: ["Backend", "API", "Scalable", "Performance", "Architecture", "System Design"]
 `;
     } catch (error) {
-      this.logger.error('Failed to generate ATS keyword extraction prompt', error);
+      this.logger.error(
+        'Failed to generate ATS keyword extraction prompt',
+        error,
+      );
       if (error instanceof BadRequestException) {
         throw error;
       }

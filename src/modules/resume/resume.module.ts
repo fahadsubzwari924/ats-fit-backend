@@ -14,14 +14,16 @@ import {
   PromptService,
 } from './services';
 import { SharedModule } from '../../shared/shared.module';
-import { ExternalModule } from 'src/shared/modules/external/external.module';
+import { ExternalModule } from '../../shared/modules/external/external.module';
+import { RateLimitModule } from '../rate-limit/rate-limit.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ResumeTemplate, User, Resume]),
     ConfigModule,
     SharedModule,
-    ExternalModule
+    ExternalModule,
+    RateLimitModule,
   ],
   providers: [
     ResumeService,
