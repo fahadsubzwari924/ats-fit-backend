@@ -3,19 +3,14 @@ import {
   Controller,
   Get,
   Post,
-  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
   Logger,
+  Req,
+  Res,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiConsumes,
-  ApiResponse,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { ResumeTemplateService } from './services/resume-templates.service';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -23,12 +18,14 @@ import { ResumeService } from './services/resume.service';
 import { GenerateTailoredResumeDto } from './dtos/generate-tailored-resume.dto';
 import { FileValidationPipe } from './pipes/file-validation.pipe';
 import { ValidationLoggingInterceptor } from './interceptors/validation-logging.interceptor';
-import { Response } from 'express';
 import { NotFoundException } from '../../shared/exceptions/custom-http-exceptions';
 import { RateLimitFeature } from '../rate-limit/rate-limit.guard';
 import { FeatureType } from '../../database/entities/usage-tracking.entity';
 import { Public } from '../auth/decorators/public.decorator';
 import { UsageTrackingInterceptor } from '../rate-limit/usage-tracking.interceptor';
+import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
+import { ERROR_CODES } from 'src/shared/constants/error-codes';
+import { Response } from 'express';
 
 @ApiTags('Resumes')
 @Controller('resumes')
@@ -43,24 +40,6 @@ export class ResumeController {
   ) {}
 
   @Get('templates')
-  @ApiOperation({ summary: 'Get available resume templates' })
-  @ApiResponse({
-    status: 200,
-    description: 'List of available resume templates',
-    schema: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          name: { type: 'string' },
-          description: { type: 'string' },
-          thumbnail: { type: 'string' },
-        },
-      },
-    },
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getTemplates() {
     const templates = await this.resumeTemplateService.getResumeTemplates();
     return templates;
@@ -74,30 +53,14 @@ export class ResumeController {
     ValidationLoggingInterceptor,
     UsageTrackingInterceptor,
   )
-  @ApiOperation({
-    summary: 'Generate a tailored resume',
-    description:
-      'Upload a resume file and generate a tailored version based on job description and company',
-  })
-  @ApiConsumes('multipart/form-data')
-  @ApiResponse({
-    status: 200,
-    description: 'Tailored resume generated successfully',
-    content: {
-      'application/pdf': {
-        schema: {
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
-  })
   async generateTailoredResume(
     @Body() generateResumeDto: GenerateTailoredResumeDto,
     @UploadedFile(FileValidationPipe) resumeFile: Express.Multer.File,
+    @Req() request: RequestWithUserContext,
     @Res() res: Response,
   ) {
     try {
+      const authContext = request.userContext;
       // Debug logging
       this.logger.log('Received generate resume request');
       this.logger.log('Body data:', JSON.stringify(generateResumeDto, null, 2));
@@ -111,13 +74,39 @@ export class ResumeController {
       // Validate that the template exists before processing
       await this.validateResumeTemplateExists(generateResumeDto.templateId);
 
-      return this.resumeService.generateTailoredResume(
-        generateResumeDto.jobDescription,
-        generateResumeDto.companyName,
-        resumeFile,
-        generateResumeDto.templateId,
-        res,
-      );
+      const { orignalResumeText, tailoredResume, analysis } =
+        await this.resumeService.generateTailoredResume(
+          generateResumeDto?.jobDescription,
+          generateResumeDto?.companyName,
+          resumeFile,
+          generateResumeDto?.templateId,
+        );
+
+      const generatedPDF =
+        await this.resumeService['generatePdfService'].generatePdfFromHtml(
+          tailoredResume,
+        );
+
+      const resumeGenerationPayload = {
+        user_id: authContext?.userId,
+        guest_id: authContext?.guestId,
+        file_path: resumeFile?.originalname,
+        original_content: orignalResumeText,
+        tailored_content: analysis,
+        template_id: generateResumeDto?.templateId,
+        job_description: generateResumeDto?.jobDescription,
+        company_name: generateResumeDto?.companyName,
+        analysis: analysis ?? null,
+      };
+      await this.resumeService.saveResumeGeneration(resumeGenerationPayload);
+
+      // Send the PDF back as the response
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename=tailored-resume-${Date.now()}.pdf`,
+        'Content-Length': generatedPDF.length,
+      });
+      res.end(generatedPDF);
     } catch (error) {
       this.logger.error('Error in generateTailoredResume:', error);
       if (error instanceof Error) {
@@ -129,7 +118,10 @@ export class ResumeController {
         throw error;
       }
       if ((error as Error)?.message?.includes('not found')) {
-        throw new NotFoundException('Template not found');
+        throw new NotFoundException(
+          'Template not found',
+          ERROR_CODES.RESUME_TEMPLATE_NOT_FOUND,
+        );
       }
       // Re-throw the error to let the global exception filter handle it
       throw error;

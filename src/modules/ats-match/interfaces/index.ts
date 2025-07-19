@@ -1,2 +1,2 @@
 // index.ts - ATS Module Interfaces
-export * from './ats-evaluation.interface'; 
+export * from './ats-evaluation.interface';

@@ -6,10 +6,12 @@ import { AIService } from './ai.service';
 import * as pdf from 'pdf-parse';
 import { BadRequestException } from '../../../shared/exceptions/custom-http-exceptions';
 import { GeneratePdfService } from './generate-pdf.service';
-import { Response } from 'express';
 import { AnalysisResultSchema } from '../schemas/resume-tailored-content.schema';
 import { AnalysisResult } from '../interfaces/resume-extracted-keywords.interface';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 
 @Injectable()
 export class ResumeService {
@@ -22,6 +24,9 @@ export class ResumeService {
     private aiService: AIService,
     private generatePdfService: GeneratePdfService,
     private configService: ConfigService,
+
+    @InjectRepository(ResumeGeneration)
+    private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
   ) {}
 
   async generateTailoredResume(
@@ -29,9 +34,7 @@ export class ResumeService {
     companyName: string,
     resumeFile: Express.Multer.File,
     templateId: string,
-    res?: Response,
   ) {
-    const startTime = Date.now();
     this.validateFile(resumeFile);
 
     // Parallel execution of independent operations
@@ -74,31 +77,11 @@ export class ResumeService {
       `Template application: ${Date.now() - templateApplyStart}ms`,
     );
 
-    // Generate PDF from HTML
-    const pdfStart = Date.now();
-    const pdfBuffer =
-      await this.generatePdfService.generatePdfFromHtml(tailoredResume);
-    this.logger.log(`PDF generation: ${Date.now() - pdfStart}ms`);
-
-    const totalTime = Date.now() - startTime;
-    this.logger.log(`Total resume generation time: ${totalTime}ms`);
-
-    // Return the generated PDF
-    if (res) {
-      // For direct download
-      res.set({
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename=tailored-resume-${Date.now()}.pdf`,
-        'Content-Length': pdfBuffer.length,
-      });
-      res.end(pdfBuffer);
-      return;
-    }
-
     // For API response
     return {
-      pdfBuffer,
-      analysis: validatedResult.metadata,
+      orignalResumeText: resumeText,
+      tailoredResume,
+      analysis: validatedResult,
     };
   }
 
@@ -163,5 +146,14 @@ export class ResumeService {
         `File size exceeds maximum allowed size of ${maxFileSize / 1024 / 1024}MB`,
       );
     }
+  }
+
+  async saveResumeGeneration(
+    resumeGenerationPayload: Partial<ResumeGeneration>,
+  ): Promise<void> {
+    const resumeGeneration = this.resumeGenerationRepository.create(
+      resumeGenerationPayload,
+    );
+    await this.resumeGenerationRepository.save(resumeGeneration);
   }
 }

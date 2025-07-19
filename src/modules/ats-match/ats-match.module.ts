@@ -10,11 +10,27 @@ import { ClaudeService } from '../../shared/modules/external/services/claude.ser
 import { ResumeModule } from '../resume/resume.module';
 import { S3Service } from '../../shared/modules/external/services/s3.service';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AtsMatchHistory } from '../../database/entities/ats-match-history.entity';
+import { ResumeGeneration } from '../../database/entities/resume-generations.entity';
 
 @Module({
   controllers: [AtsMatchController],
-  providers: [AtsMatchService, AIService, ResumeService, OpenAIService, EmbeddingService, ClaudeService, S3Service],
-  imports: [SharedModule, ResumeModule, RateLimitModule],
+  providers: [
+    AtsMatchService,
+    AIService,
+    ResumeService,
+    OpenAIService,
+    EmbeddingService,
+    ClaudeService,
+    S3Service,
+  ],
+  imports: [
+    SharedModule,
+    ResumeModule,
+    RateLimitModule,
+    TypeOrmModule.forFeature([AtsMatchHistory, ResumeGeneration]),
+  ],
   exports: [AtsMatchService],
 })
-export class AtsMatchModule {} 
+export class AtsMatchModule {}

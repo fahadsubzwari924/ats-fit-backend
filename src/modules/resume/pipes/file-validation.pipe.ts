@@ -7,7 +7,7 @@ export class FileValidationPipe implements PipeTransform {
     if (!file) {
       throw new BadRequestException(
         'Resume file is required',
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
 
@@ -15,7 +15,7 @@ export class FileValidationPipe implements PipeTransform {
     if (file.mimetype !== 'application/pdf') {
       throw new BadRequestException(
         'Only PDF files are supported for resume upload',
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
 
@@ -24,7 +24,7 @@ export class FileValidationPipe implements PipeTransform {
     if (file.size > maxSize) {
       throw new BadRequestException(
         `File size exceeds maximum allowed size of ${maxSize / 1024 / 1024}MB`,
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
 
@@ -32,10 +32,10 @@ export class FileValidationPipe implements PipeTransform {
     if (!file.buffer || file.buffer.length === 0) {
       throw new BadRequestException(
         'Resume file is empty or corrupted',
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
 
     return file;
   }
-} 
+}

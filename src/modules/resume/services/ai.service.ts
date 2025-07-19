@@ -19,6 +19,8 @@ import {
   ResumeExtractedKeywordsSchema,
   TailoredContentSchema,
 } from '../schemas/resume-tailored-content.schema';
+import { InternalServerErrorException } from 'src/shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from 'src/shared/constants/error-codes';
 
 @Injectable()
 export class AIService {
@@ -166,11 +168,12 @@ export class AIService {
 
     // Sort by score and apply weighted scoring
     const sortedSkillScores = skillScores.sort((a, b) => b.score - a.score);
-    
+
     // Weight top skills more heavily (top 3 get higher weight)
     const weightedScores = sortedSkillScores.map((item, index) => {
       let weight = 1;
-      if (index < 3) weight = 1.5; // Top 3 skills get 50% more weight
+      if (index < 3)
+        weight = 1.5; // Top 3 skills get 50% more weight
       else if (index < 7) weight = 1.2; // Next 4 skills get 20% more weight
       return item.score * weight;
     });
@@ -182,7 +185,8 @@ export class AIService {
       return sum + 1;
     }, 0);
 
-    const averageScore = weightedScores.reduce((sum, score) => sum + score, 0) / totalWeight;
+    const averageScore =
+      weightedScores.reduce((sum, score) => sum + score, 0) / totalWeight;
 
     // Identify missing skills with improved threshold for ATS
     const missingSkills = limitedSkills.filter(
@@ -226,7 +230,7 @@ export class AIService {
     }
 
     try {
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(content) as ResumeExtractedKeywords;
       return ResumeExtractedKeywordsSchema.parse(
         parsed && typeof parsed === 'object' ? parsed : {},
       ) as ResumeExtractedKeywords;
@@ -239,7 +243,9 @@ export class AIService {
     }
   }
 
-  async extractKeywordsFromJDForAts(jd: string): Promise<ResumeExtractedKeywords> {
+  async extractKeywordsFromJDForAts(
+    jd: string,
+  ): Promise<ResumeExtractedKeywords> {
     const prompt =
       this.promptService.getExtractKeywordsFromJobDescriptionForAtsPrompt(jd);
 
@@ -260,7 +266,7 @@ export class AIService {
     }
 
     try {
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(content) as ResumeExtractedKeywords;
       return ResumeExtractedKeywordsSchema.parse(
         parsed && typeof parsed === 'object' ? parsed : {},
       ) as ResumeExtractedKeywords;
@@ -305,7 +311,7 @@ export class AIService {
     }
 
     try {
-      const parsedContent = JSON.parse(content);
+      const parsedContent = JSON.parse(content) as TailoredContent;
       return TailoredContentSchema.parse(
         parsedContent && typeof parsedContent === 'object' ? parsedContent : {},
       ) as TailoredContent;
@@ -391,8 +397,14 @@ export class AIService {
     };
   }
 
-  async evaluateResumeWithAtsCriteria(resumeText: string, jobDescription: string): Promise<any> {
-    const prompt = this.promptService.getAtsEvaluationPrompt(resumeText, jobDescription);
+  async evaluateResumeWithAtsCriteria(
+    resumeText: string,
+    jobDescription: string,
+  ): Promise<any> {
+    const prompt = this.promptService.getAtsEvaluationPrompt(
+      resumeText,
+      jobDescription,
+    );
     const result = await this.openAIService.chatCompletion({
       model: 'gpt-4-turbo',
       messages: [{ role: 'user', content: prompt }],
@@ -402,8 +414,13 @@ export class AIService {
     if (!content) throw new Error('No content in ATS evaluation response');
     try {
       return JSON.parse(content);
-    } catch (e) {
-      throw new Error('Failed to parse ATS evaluation JSON');
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Failed to parse ATS evaluation JSON',
+        ERROR_CODES.FAILED_TO_PARSE_ATS_EVALUATION_JSON,
+        null,
+        error,
+      );
     }
   }
 }

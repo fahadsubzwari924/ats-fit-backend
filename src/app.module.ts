@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
 import { validationSchema } from './config/validation.schema';
@@ -11,6 +11,7 @@ import { AtsMatchModule } from './modules/ats-match/ats-match.module';
 import { UserModule } from './modules/user/user.module';
 import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
 import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
+import { UserContextMiddleware } from './shared/middlewares/user-context.middleware';
 
 @Module({
   imports: [
@@ -42,4 +43,8 @@ import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
     Reflector,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(UserContextMiddleware).forRoutes('*'); // Apply middleware globally
+  }
+}

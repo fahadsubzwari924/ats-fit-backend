@@ -2,10 +2,13 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { User } from './entities/user.entity';
-import { Resume } from './entities/resume.entity';
-import { ResumeTemplate } from './entities/resume-templates.entity';
-import { UsageTracking } from './entities/usage-tracking.entity';
-import { RateLimitConfig } from './entities/rate-limit-config.entity';
+import {
+  ResumeGeneration,
+  ResumeTemplate,
+  UsageTracking,
+  RateLimitConfig,
+  AtsMatchHistory,
+} from './entities';
 
 @Module({
   imports: [
@@ -20,13 +23,17 @@ import { RateLimitConfig } from './entities/rate-limit-config.entity';
         database: configService.get<string>('DATABASE_NAME'),
         entities: [
           User,
-          Resume,
+          ResumeGeneration,
           ResumeTemplate,
           UsageTracking,
           RateLimitConfig,
+          AtsMatchHistory,
         ],
         synchronize: process.env.NODE_ENV !== 'production',
         logging: process.env.NODE_ENV !== 'production',
+        migrations: [__dirname + '/migrations/*.ts'],
+        migrationsTableName: 'migrations',
+        migrationsRun: false, // Set to true if you want to run migrations automatically
       }),
       inject: [ConfigService],
     }),

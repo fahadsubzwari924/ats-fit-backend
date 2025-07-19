@@ -36,9 +36,8 @@ export class UsageTrackingInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap({
         next: () => {
-          // Only record usage on successful responses
           try {
-            const userContext = request.userContext;
+            const userContext = request?.userContext; // Use userContext from middleware
             if (userContext) {
               this.rateLimitService
                 .recordUsage(userContext, feature)
@@ -54,14 +53,7 @@ export class UsageTrackingInterceptor implements NestInterceptor {
             }
           } catch (error) {
             this.logger.error(`Failed to record usage for ${feature}:`, error);
-            // Don't throw error to avoid breaking the response
           }
-        },
-        error: (error: Error) => {
-          // Don't record usage on errors
-          this.logger.debug(
-            `Not recording usage for ${feature} due to error: ${error.message ?? 'Unknown error'}`,
-          );
         },
       }),
     );

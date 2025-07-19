@@ -5,7 +5,6 @@ import {
   ClaudeRequestParams,
   ClaudeResponse,
   ClaudeAtsEvaluationParams,
-  ClaudeConfig,
 } from '../interfaces';
 
 @Injectable()
@@ -23,9 +22,12 @@ export class ClaudeService {
 
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
-    this.baseUrl = 'https://api.anthropic.com/v1/messages';
-    this.maxConcurrentRequests = this.configService.get<number>('CLAUDE_MAX_CONCURRENT', 5);
-    
+    this.baseUrl = this.configService.get<string>('CLAUDE_CHAT_API_ENDPOINT');
+    this.maxConcurrentRequests = this.configService.get<number>(
+      'CLAUDE_MAX_CONCURRENT',
+      5,
+    );
+
     if (!this.apiKey) {
       this.logger.warn('ANTHROPIC_API_KEY not found in environment variables');
     }
@@ -33,7 +35,10 @@ export class ClaudeService {
 
   async chatCompletion(params: ClaudeRequestParams): Promise<ClaudeResponse> {
     const maxRetries = this.configService.get<number>('CLAUDE_MAX_RETRIES', 3);
-    const initialDelay = this.configService.get<number>('CLAUDE_RETRY_DELAY', 1000);
+    const initialDelay = this.configService.get<number>(
+      'CLAUDE_RETRY_DELAY',
+      1000,
+    );
 
     // Check if we can process immediately or need to queue
     if (this.activeRequests >= this.maxConcurrentRequests) {
@@ -74,7 +79,10 @@ export class ClaudeService {
   }
 
   private processQueue(): void {
-    if (this.requestQueue.length > 0 && this.activeRequests < this.maxConcurrentRequests) {
+    if (
+      this.requestQueue.length > 0 &&
+      this.activeRequests < this.maxConcurrentRequests
+    ) {
       const request = this.requestQueue.shift();
       if (request) {
         this.chatCompletion(request.params)
@@ -84,7 +92,9 @@ export class ClaudeService {
     }
   }
 
-  private async makeClaudeRequest(params: ClaudeRequestParams): Promise<ClaudeResponse> {
+  private async makeClaudeRequest(
+    params: ClaudeRequestParams,
+  ): Promise<ClaudeResponse> {
     if (!this.apiKey) {
       throw new Error('ANTHROPIC_API_KEY is required for Claude API calls');
     }
@@ -98,9 +108,15 @@ export class ClaudeService {
     };
 
     // Add system parameter for better performance if not present
-    const hasSystemMessage = params.messages.some(msg => (msg as any).role === 'system');
+    const hasSystemMessage = params.messages.some(
+      (msg) =>
+        typeof msg === 'object' &&
+        'role' in msg &&
+        (msg as { role?: string }).role === 'system',
+    );
     if (!hasSystemMessage) {
-      requestBody.system = 'You are a helpful AI assistant. Provide concise, accurate responses in the requested format.';
+      (requestBody as { system?: string }).system =
+        'You are a helpful AI assistant. Provide concise, accurate responses in the requested format.';
     }
 
     const startTime = Date.now();
@@ -126,26 +142,58 @@ export class ClaudeService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        this.logger.error(`Claude API error: ${response.status} - ${errorText}`);
+        this.logger.error(
+          `Claude API error: ${response.status} - ${errorText}`,
+        );
         throw new Error(`Claude API error: ${response.status} - ${errorText}`);
       }
 
-      const data = await response.json();
-      
-      this.logger.debug(`Claude API request completed in ${Date.now() - startTime}ms`);
-      
+      const data: unknown = await response.json();
+
+      this.logger.debug(
+        `Claude API request completed in ${Date.now() - startTime}ms`,
+      );
+
       // Transform Claude response to match OpenAI format for compatibility
+      let content = '';
+      function isClaudeApiResponse(
+        data: unknown,
+      ): data is { content: Array<{ text: string }> } {
+        if (
+          typeof data === 'object' &&
+          data !== null &&
+          Object.prototype.hasOwnProperty.call(data, 'content')
+        ) {
+          const content = (data as { content?: unknown }).content;
+          return (
+            Array.isArray(content) &&
+            content.length > 0 &&
+            typeof content[0] === 'object' &&
+            content[0] !== null &&
+            'text' in content[0] &&
+            typeof (content[0] as { text?: unknown }).text === 'string'
+          );
+        }
+        return false;
+      }
+      if (isClaudeApiResponse(data)) {
+        content = data.content[0].text;
+      }
+
       return {
         choices: [
           {
             message: {
-              content: data.content[0].text,
+              content,
             },
           },
         ],
       };
     } catch (error) {
-      this.logger.error(`Claude API request failed after ${Date.now() - startTime}ms`, error);
+      this.logger.error(
+        `Claude API request failed after ${Date.now() - startTime}ms`,
+        error,
+      );
       throw error;
     }
   }
@@ -154,10 +202,10 @@ export class ClaudeService {
   async evaluateAtsMatch(params: ClaudeAtsEvaluationParams): Promise<any> {
     try {
       this.logger.log('Starting Claude ATS evaluation...');
-      
+
       // Optimize the prompt for faster processing
       const optimizedPrompt = this.optimizeAtsPrompt(params.prompt);
-      
+
       const result = await this.chatCompletion({
         model: 'claude-3-5-sonnet-20241022',
         messages: [{ role: 'user', content: optimizedPrompt }],
@@ -174,24 +222,34 @@ export class ClaudeService {
       return JSON.parse(content);
     } catch (error) {
       this.logger.error('Claude ATS evaluation failed', error);
-      
+
       // Provide more specific error information
       if (error instanceof Error) {
         if (error.message.includes('response_format')) {
-          throw new InternalServerErrorException('Claude API response format error - please check API configuration');
+          throw new InternalServerErrorException(
+            'Claude API response format error - please check API configuration',
+          );
         }
         if (error.message.includes('401')) {
-          throw new InternalServerErrorException('Claude API authentication failed - please check API key');
+          throw new InternalServerErrorException(
+            'Claude API authentication failed - please check API key',
+          );
         }
         if (error.message.includes('429')) {
-          throw new InternalServerErrorException('Claude API rate limit exceeded - please try again later');
+          throw new InternalServerErrorException(
+            'Claude API rate limit exceeded - please try again later',
+          );
         }
         if (error.message.includes('AbortError')) {
-          throw new InternalServerErrorException('Claude API request timed out - please try again');
+          throw new InternalServerErrorException(
+            'Claude API request timed out - please try again',
+          );
         }
       }
-      
-      throw new InternalServerErrorException('Failed to evaluate ATS match with Claude');
+
+      throw new InternalServerErrorException(
+        'Failed to evaluate ATS match with Claude',
+      );
     }
   }
 
@@ -202,4 +260,4 @@ export class ClaudeService {
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
   }
-} 
+}

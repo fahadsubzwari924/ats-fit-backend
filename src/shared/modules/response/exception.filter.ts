@@ -38,6 +38,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
 
+      // Debug log for exception response
+      console.debug(
+        'AllExceptionsFilter: exceptionResponse =',
+        exceptionResponse,
+      );
+
       if (this.isCustomExceptionResponse(exceptionResponse)) {
         // Handle CustomHttpException format
         message = exceptionResponse.message;
@@ -56,7 +62,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
         if ('errors' in typedResponse && Array.isArray(typedResponse.errors)) {
           if (this.isValidationErrorArray(typedResponse.errors)) {
             errors = this.formatValidationErrors(typedResponse.errors);
+          } else {
+            // If errors is an array but not ValidationError[], just return as is
+            errors = typedResponse.errors as ErrorDetailDto[];
           }
+        }
+        // If exceptionResponse has a 'message' array (class-validator default), map to errors
+        if (
+          'message' in typedResponse &&
+          Array.isArray(typedResponse.message)
+        ) {
+          errors = (typedResponse.message as string[]).map((msg) => ({
+            field: '',
+            message: msg,
+          }));
         }
       } else {
         // Handle string response or fallback

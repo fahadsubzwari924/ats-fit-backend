@@ -43,16 +43,18 @@ export default () => ({
   performance: {
     // Template caching settings
     templateCacheTtl: parseInt(process.env.TEMPLATE_CACHE_TTL, 10) || 600000, // 10 minutes
-    resumeServiceCacheTtl: parseInt(process.env.RESUME_SERVICE_CACHE_TTL, 10) || 300000, // 5 minutes
-    
+    resumeServiceCacheTtl:
+      parseInt(process.env.RESUME_SERVICE_CACHE_TTL, 10) || 300000, // 5 minutes
+
     // AI optimization settings
-    maxSkillsForEmbedding: parseInt(process.env.MAX_SKILLS_FOR_EMBEDDING, 10) || 10,
+    maxSkillsForEmbedding:
+      parseInt(process.env.MAX_SKILLS_FOR_EMBEDDING, 10) || 10,
     maxMissingSkills: parseInt(process.env.MAX_MISSING_SKILLS, 10) || 5,
-    
+
     // PDF generation settings
     pdfTimeout: parseInt(process.env.PDF_TIMEOUT, 10) || 15000, // 15 seconds
     pdfPageTimeout: parseInt(process.env.PDF_PAGE_TIMEOUT, 10) || 10000, // 10 seconds
-    
+
     // File size limits
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 5242880, // 5MB
   },
