@@ -32,4 +32,4 @@ export interface ClaudeConfig {
   defaultModel: string;
   defaultTemperature: number;
   defaultMaxTokens: number;
-} 
+}

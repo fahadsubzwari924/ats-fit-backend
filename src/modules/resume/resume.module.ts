@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ResumeController } from './resume.controller';
-import { ResumeTemplate } from '../../database/entities/resume-templates.entity';
-import { User } from '../../database/entities/user.entity';
-import { Resume } from '../../database/entities/resume.entity';
+import {
+  ResumeGeneration,
+  ResumeTemplate,
+  User,
+} from '../../database/entities';
 import { HandlebarsService } from '../../shared/services/handlebars.service';
 import {
   GeneratePdfService,
@@ -19,7 +21,7 @@ import { RateLimitModule } from '../rate-limit/rate-limit.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ResumeTemplate, User, Resume]),
+    TypeOrmModule.forFeature([ResumeTemplate, User, ResumeGeneration]),
     ConfigModule,
     SharedModule,
     ExternalModule,

@@ -36,4 +36,4 @@ export interface AiPromptParams {
   format?: 'json' | 'text';
   temperature?: number;
   maxTokens?: number;
-} 
+}

@@ -81,4 +81,4 @@ export interface AtsScoreBreakdown {
   resumeQuality: number;
   overallScore: number;
   confidence: number;
-} 
+}

@@ -9,6 +9,9 @@ import { ResumeService } from '../resume/services/resume.service';
 import { ClaudeService } from '../../shared/modules/external/services/claude.service';
 import { PremiumAtsEvaluation, StandardAtsEvaluation } from './interfaces';
 import { PromptService } from '../resume/services';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AtsMatchHistory } from '../../database/entities/ats-match-history.entity';
 
 interface CacheEntry {
   result: PremiumAtsEvaluation;
@@ -23,18 +26,14 @@ export class AtsMatchService {
   private readonly cacheTtl = 30 * 60 * 1000; // 30 minutes
   private readonly maxCacheSize = 1000; // Maximum cache entries
 
-  // Performance metrics
-  private cacheHits = 0;
-  private cacheMisses = 0;
-  private totalRequests = 0;
-  private averageResponseTime = 0;
-  private responseTimes: number[] = [];
-
   constructor(
     private readonly aiService: AIService,
     private readonly resumeService: ResumeService,
     private readonly claudeService: ClaudeService,
     private readonly promptService: PromptService,
+
+    @InjectRepository(AtsMatchHistory)
+    private readonly atsMatchHistoryRepository: Repository<AtsMatchHistory>,
   ) {
     // Clean up cache every 5 minutes
     setInterval(() => this.cleanupCache(), 5 * 60 * 1000);
@@ -579,5 +578,14 @@ export class AtsMatchService {
       this.logger.warn('Failed to extract LLM score, using fallback', error);
       return 0.5;
     }
+  }
+
+  async saveAtsMatchHistory(
+    atsMatchResponsePayload: Partial<AtsMatchHistory>,
+  ): Promise<void> {
+    const atsMatchHistory = this.atsMatchHistoryRepository.create(
+      atsMatchResponsePayload,
+    );
+    await this.atsMatchHistoryRepository.save(atsMatchHistory);
   }
 }

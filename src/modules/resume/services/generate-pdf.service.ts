@@ -16,7 +16,7 @@ export class GeneratePdfService implements OnModuleDestroy {
       return this.browser;
     }
 
-    if (this.browserPromise) {
+    if (this.browserPromise !== null) {
       return this.browserPromise;
     }
 
@@ -50,8 +50,14 @@ export class GeneratePdfService implements OnModuleDestroy {
       page = await browser.newPage();
 
       // Get performance configuration
-      const pdfPageTimeout = this.configService.get<number>('performance.pdfPageTimeout', 10000);
-      const pdfTimeout = this.configService.get<number>('performance.pdfTimeout', 15000);
+      const pdfPageTimeout = this.configService.get<number>(
+        'performance.pdfPageTimeout',
+        10000,
+      );
+      const pdfTimeout = this.configService.get<number>(
+        'performance.pdfTimeout',
+        15000,
+      );
 
       // Optimize page settings for faster rendering
       await page.setViewport({ width: 1200, height: 800 });

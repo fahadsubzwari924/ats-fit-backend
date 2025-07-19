@@ -16,4 +16,5 @@ export class AtsScoreResponseDto {
     tailoredContent: any; // LLM feedback and tailored content
     atsEvaluation: any; // advanced LLM-based ATS feedback
   };
-} 
+  analysis?: any;
+}
