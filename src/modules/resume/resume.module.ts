@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ResumeController } from './resume.controller';
@@ -6,6 +6,7 @@ import {
   ResumeGeneration,
   ResumeTemplate,
   User,
+  Resume,
 } from '../../database/entities';
 import { HandlebarsService } from '../../shared/services/handlebars.service';
 import {
@@ -21,11 +22,11 @@ import { RateLimitModule } from '../rate-limit/rate-limit.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ResumeTemplate, User, ResumeGeneration]),
+    TypeOrmModule.forFeature([ResumeTemplate, User, ResumeGeneration, Resume]),
     ConfigModule,
     SharedModule,
     ExternalModule,
-    RateLimitModule,
+    forwardRef(() => RateLimitModule),
   ],
   providers: [
     ResumeService,

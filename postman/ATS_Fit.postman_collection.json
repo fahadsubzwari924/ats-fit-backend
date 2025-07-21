@@ -1,0 +1,251 @@
+{
+	"info": {
+		"_postman_id": "2b5b600b-3ea8-430a-8a28-79cd1edb9004",
+		"name": "ATS Fit",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "2089160"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Signup",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"full_name\": \"Fahad Subzwari\",\n    \"email\": \"fahadsubzwari924@gmail.com\",\n    \"password\": \"Jumpshare__1\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{Host-Url}}/auth/signup",
+							"host": [
+								"{{Host-Url}}"
+							],
+							"path": [
+								"auth",
+								"signup"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "signin",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"fahadsubzwari924@gmail.com\",\n    \"password\": \"Jumpshare__1\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{Host-Url}}/auth/signin",
+							"host": [
+								"{{Host-Url}}"
+							],
+							"path": [
+								"auth",
+								"signin"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Resume",
+			"item": [
+				{
+					"name": "Get Resume Templates List",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MjY0ZDVkZi1iM2I1LTQ3OTMtOGZhMy03MzZmYmVhOGUzMWIiLCJlbWFpbCI6ImZhaGFkc3Viendhcmk5MjRAZ21haWwuY29tIiwiaWF0IjoxNzUwNjkyMTAwLCJleHAiOjE3NTA2OTU3MDB9.pMXtlRkdu61p6qEZcPXv49IV5bO3Vz3G-F-gIiO5Wck",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{Host-Url}}/resumes/templates",
+							"host": [
+								"{{Host-Url}}"
+							],
+							"path": [
+								"resumes",
+								"templates"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Tailored Resume",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MjY0ZDVkZi1iM2I1LTQ3OTMtOGZhMy03MzZmYmVhOGUzMWIiLCJlbWFpbCI6ImZhaGFkc3Viendhcmk5MjRAZ21haWwuY29tIiwiaWF0IjoxNzUxMzE3NzAyLCJleHAiOjE3NTEzMjEzMDJ9.PWOyiqqkrpDqWcR9PnwCHtRxYxX45uaE_7lBemHWFyM",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "jobDescription",
+									"value": "Job Summary:\n\nA Full Stack Software Engineer for .NET and Angular is an associate at Creative Chaos who is mainly responsible for developing server and client applications for various software platforms including but not limited to writing Restful APIs and developing front-end interfaces for web. A software engineer makes sure that the functionality, security and performance of the application is as per the design and is completely bug free. Senior engineers have a responsibility to mentor their juniors and build team strength through training.\n\nJob Description:\n\nAnalyze business requirements\nEstimate assigned tasks\nWrite code and unit tests\nCollaborate with other team members\nTune your code for enhanced security and performance\nMaintain systems by fixing any existing issues\nUpdate issue tracking software\nProvide status updates\nCommunicate with client\nControl versions of your code\nResearch new technologies\nLead a team of software engineers\nMentor team members through training and guidance\nUpgrade skills and knowledge\nEvaluate candidates for open positions\n\n\nRequirements\n\nRequirements:\n\nBachelors/Master's degree in CS/Software Engineering or related discipline\nProven 3-7 years of working experience as a Full stack developer\nStrong proficiency in Microsoft technologies, tools and platforms\nKnowledge and experience of .Net Core, ASP.Net MVC and Web API\nKnowledge and experience of developing user interfaces with HTML and CSS\nKnowledge and experience of developing applications with Angular, Redux and Context\nKnowledge and experience in writing backend components and Restful APIs\nExperience with different relational and schemaless databases such as Oracle/SQL Server, MySQL, PostgreSQL and MongoDB\nKnowledge and experience of Azure and AWS\nCreating database structure for the required functionality\nExperience with writing unit tests and ensuring the minimum 90% test coverage\nKnowledge of and experience with Github, JIRA and other collaboration tools\nExcellent verbal and written English communication skills\nFlexible attitude and versatile personality\nStrong presentation skills\nStrong influence among team members",
+									"type": "text"
+								},
+								{
+									"key": "companyName",
+									"value": "10Pearls",
+									"type": "text"
+								},
+								{
+									"key": "templateId",
+									"value": "456a8e23-638d-4b18-9358-285635e1458b",
+									"type": "text"
+								},
+								{
+									"key": "resumeFile",
+									"type": "file",
+									"src": "/Users/fahadsubzwari924/Downloads/KASHIF FARAZ CV .pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{Host-Url}}/resumes/generate",
+							"host": [
+								"{{Host-Url}}"
+							],
+							"path": [
+								"resumes",
+								"generate"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "ATS Match Score",
+			"item": [
+				{
+					"name": "Get ATS Compliance Score",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MjY0ZDVkZi1iM2I1LTQ3OTMtOGZhMy03MzZmYmVhOGUzMWIiLCJlbWFpbCI6ImZhaGFkc3Viendhcmk5MjRAZ21haWwuY29tIiwiaWF0IjoxNzUxNjc1MDI4LCJleHAiOjE3NTE2Nzg2Mjh9.84C7stfiCJ_UBj1z_9RDulVkK4w9C-RpaMlh6i_3Wak",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "resumeFile",
+									"type": "file",
+									"src": "/Users/fahadsubzwari924/Documents/sideProjects/ats-fit-backend/src/generated/tailored-1.pdf"
+								},
+								{
+									"key": "jobDescription",
+									"value": "Lead Back-end Engineer:\n\nTech Stack\nCore: Node.js, MongoDB, AWS (EC2, Lambda, S3, VPC, etc.), Redis, RabbitMQ/SQS;\nTesting: Jest (unit), REST Assured (E2E);\nDevOps: Docker, CI/CD (GitHub Actions/AWS CodePipeline), Load Balancing, VPC networking;\nMonitoring: NewRelic\\Datadog, CloudWatch.\n\n\nRequirements\nSolid experience in backend development with Node.js (Express/Nest.js/Fastify) and NoSQL databases (MongoDB).\nHands-on experience with AWS (EC2, S3, Lambda, etc.) and message queues (RabbitMQ/SQS).\nStrong understanding of high-load systems like caching (Redis), concurrency, database sharding, and microservices patterns. \nUnderstanding of data warehousing.\nKnowledge of Jest, API testing (REST Assured/Postman), and TDD/BDD principles.\nFamiliarity with Docker, load balancing, VPCs, and monitoring (CloudWatch/Prometheus). \nAbility to own the backend roadmap, mentor peers, and collaborate across teams.\n",
+									"type": "text"
+								},
+								{
+									"key": "companyName",
+									"value": "Gaditek",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{Host-Url}}/ats-match/score",
+							"host": [
+								"{{Host-Url}}"
+							],
+							"path": [
+								"ats-match",
+								"score"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Upload Resume",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MjY0ZDVkZi1iM2I1LTQ3OTMtOGZhMy03MzZmYmVhOGUzMWIiLCJlbWFpbCI6ImZhaGFkc3Viendhcmk5MjRAZ21haWwuY29tIiwiaWF0IjoxNzUzMDU1NjMwLCJleHAiOjE3NTMwNTkyMzB9.WJ_osN2yIxd1nVpxhl1VzNrC2rVwvLYnxpzrsyOjSQA",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "resumeFile",
+									"type": "file",
+									"src": "/Users/fahadsubzwari924/Documents/Fahad Docs/Fahad_Sabzwari_Senior_Backend_Nodejs_Engineer.pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{Host-Url}}/users/upload-resume",
+							"host": [
+								"{{Host-Url}}"
+							],
+							"path": [
+								"users",
+								"upload-resume"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

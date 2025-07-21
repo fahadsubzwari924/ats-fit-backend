@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsageTracking } from '../../database/entities/usage-tracking.entity';
 import { RateLimitConfig } from '../../database/entities/rate-limit-config.entity';
@@ -12,7 +12,7 @@ import { AuthModule } from '../auth/auth.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([UsageTracking, RateLimitConfig]),
-    UserModule,
+    forwardRef(() => UserModule),
     AuthModule,
   ],
   providers: [RateLimitService, RateLimitGuard, UsageTrackingInterceptor],

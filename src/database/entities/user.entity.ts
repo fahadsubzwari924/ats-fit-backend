@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ResumeGeneration } from './resume-generations.entity';
+import { Resume } from './resume.entity';
 
 export enum UserPlan {
   FREEMIUM = 'freemium',
@@ -66,4 +67,7 @@ export class User {
 
   @OneToMany(() => ResumeGeneration, (resume) => resume.user)
   resumes: ResumeGeneration[];
+
+  @OneToMany(() => Resume, (resume) => resume.user, { cascade: true })
+  uploadedResumes: Resume[];
 }

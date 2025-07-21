@@ -9,6 +9,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { User } from '../../database/entities/user.entity';
 import { BaseMapperService } from '../../shared/services/base-mapper.service';
 import { JwtAuthGuard } from './jwt.guard';
+import { PremiumUserGuard } from './guards/premium-user.guard';
 
 @Module({
   imports: [
@@ -24,8 +25,20 @@ import { JwtAuthGuard } from './jwt.guard';
     TypeOrmModule.forFeature([User]),
     ConfigModule,
   ],
-  providers: [AuthService, JwtStrategy, BaseMapperService, JwtAuthGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    BaseMapperService,
+    JwtAuthGuard,
+    PremiumUserGuard,
+  ],
   controllers: [AuthController],
-  exports: [AuthService, JwtStrategy, PassportModule, JwtAuthGuard],
+  exports: [
+    AuthService,
+    JwtStrategy,
+    PassportModule,
+    JwtAuthGuard,
+    PremiumUserGuard,
+  ],
 })
 export class AuthModule {}

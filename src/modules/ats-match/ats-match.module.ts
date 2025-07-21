@@ -13,6 +13,7 @@ import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AtsMatchHistory } from '../../database/entities/ats-match-history.entity';
 import { ResumeGeneration } from '../../database/entities/resume-generations.entity';
+import { Resume, User } from 'src/database/entities';
 
 @Module({
   controllers: [AtsMatchController],
@@ -29,7 +30,7 @@ import { ResumeGeneration } from '../../database/entities/resume-generations.ent
     SharedModule,
     ResumeModule,
     RateLimitModule,
-    TypeOrmModule.forFeature([AtsMatchHistory, ResumeGeneration]),
+    TypeOrmModule.forFeature([AtsMatchHistory, ResumeGeneration, Resume, User]),
   ],
   exports: [AtsMatchService],
 })

@@ -1,5 +1,4 @@
-// resume.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ResumeTemplateService } from './resume-templates.service';
 import { AIService } from './ai.service';
@@ -12,6 +11,10 @@ import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
+import { Resume } from '../../../database/entities/resume.entity';
+import { User } from '../../../database/entities/user.entity';
+import { S3Service } from '../../../shared/modules/external/services/s3.service';
+import { MimeTypes } from '../../../shared/constants/mime-types.enum';
 
 @Injectable()
 export class ResumeService {
@@ -27,6 +30,14 @@ export class ResumeService {
 
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
+
+    @InjectRepository(Resume)
+    private readonly resumeRepository: Repository<Resume>,
+
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+
+    private readonly s3Service: S3Service,
   ) {}
 
   async generateTailoredResume(
@@ -155,5 +166,73 @@ export class ResumeService {
       resumeGenerationPayload,
     );
     await this.resumeGenerationRepository.save(resumeGeneration);
+  }
+
+  async uploadUserResume(
+    userId: string,
+    resumeFile: Express.Multer.File,
+  ): Promise<Resume> {
+    // Find the user
+    const user = await this.userRepository.findOne({
+      where: { id: userId, is_active: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
+    }
+
+    // Generate unique file name to avoid conflicts
+    const timestamp = Date.now();
+    const uniqueFileName = `${userId}-${timestamp}-${resumeFile.originalname}`;
+
+    // Upload file to S3
+    const s3Url = await this.uploadToS3(resumeFile, uniqueFileName);
+
+    // Save resume in the database
+    const resume = this.resumeRepository.create({
+      fileName: resumeFile.originalname,
+      fileSize: resumeFile.size,
+      mimeType: resumeFile.mimetype,
+      s3Url,
+      user,
+    });
+
+    return await this.resumeRepository.save(resume);
+  }
+
+  private async uploadToS3(
+    file: Express.Multer.File,
+    customFileName?: string,
+  ): Promise<string> {
+    const bucketName = this.configService.get<string>(
+      'AWS_S3_CANDIDATES_RESUMES_BUCKET',
+    );
+
+    // Validate file type
+    if (!Object.values(MimeTypes).map(String).includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Only PDF files are allowed',
+        ERROR_CODES.UNSUPPORTED_FILE_TYPE,
+      );
+    }
+
+    try {
+      const fileName = customFileName || file.originalname;
+      const key = await this.s3Service.uploadFile({
+        bucketName,
+        key: fileName,
+        file: file.buffer,
+        contentType: file.mimetype,
+      });
+
+      this.logger.log(`File uploaded successfully to S3: ${key}`);
+      return `https://${bucketName}.s3.${this.configService.get<string>('AWS_BUCKET_REGION')}.amazonaws.com/${key}`;
+    } catch (error) {
+      this.logger.error('Error uploading file to S3', error);
+      throw new BadRequestException(
+        'Failed to upload file to S3',
+        ERROR_CODES.S3_UPLOAD_FAILED,
+      );
+    }
   }
 }

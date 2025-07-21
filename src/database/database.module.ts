@@ -8,6 +8,7 @@ import {
   UsageTracking,
   RateLimitConfig,
   AtsMatchHistory,
+  Resume,
 } from './entities';
 
 @Module({
@@ -28,6 +29,7 @@ import {
           UsageTracking,
           RateLimitConfig,
           AtsMatchHistory,
+          Resume,
         ],
         synchronize: process.env.NODE_ENV !== 'production',
         logging: process.env.NODE_ENV !== 'production',
