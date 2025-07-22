@@ -6,10 +6,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
-import { User } from '../../database/entities/user.entity';
 import { BaseMapperService } from '../../shared/services/base-mapper.service';
 import { JwtAuthGuard } from './jwt.guard';
 import { PremiumUserGuard } from './guards/premium-user.guard';
+import { RateLimitConfig, UsageTracking, User } from '../../database/entities';
 
 @Module({
   imports: [
@@ -22,7 +22,7 @@ import { PremiumUserGuard } from './guards/premium-user.guard';
       }),
       inject: [ConfigService],
     }),
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, UsageTracking, RateLimitConfig]),
     ConfigModule,
   ],
   providers: [

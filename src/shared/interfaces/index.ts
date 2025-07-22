@@ -2,3 +2,4 @@
 export * from './ai-services.interface';
 export * from './jwt-payload.interface';
 export * from './response-types.interface';
+export * from './feature-usage.interface';

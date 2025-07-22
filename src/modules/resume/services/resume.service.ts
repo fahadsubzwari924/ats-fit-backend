@@ -200,6 +200,42 @@ export class ResumeService {
     return await this.resumeRepository.save(resume);
   }
 
+  async getResumeById(resumeId: string): Promise<Resume | null> {
+    if (!resumeId) {
+      throw new BadRequestException(
+        'Resume ID is required',
+        ERROR_CODES.RESUME_ID_REQUIRED_VALIDATION_ERROR,
+      );
+    }
+
+    return this.resumeRepository.findOne({
+      where: { id: resumeId, isActive: true },
+      relations: ['user'],
+    });
+  }
+
+  async deleteResume(resumeId: string): Promise<void> {
+    const resume = await this.getResumeById(resumeId);
+    if (!resume) {
+      throw new NotFoundException(
+        'Resume not found',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    await this.resumeRepository.remove(resume);
+
+    // Extract the key from the full S3 URL
+    const s3Key = this.s3Service.extractS3KeyFromUrl(resume.s3Url);
+
+    await this.s3Service.deleteObject({
+      bucketName: this.configService.get<string>(
+        'AWS_S3_CANDIDATES_RESUMES_BUCKET',
+      ),
+      key: s3Key,
+    });
+  }
+
   private async uploadToS3(
     file: Express.Multer.File,
     customFileName?: string,
@@ -234,5 +270,18 @@ export class ResumeService {
         ERROR_CODES.S3_UPLOAD_FAILED,
       );
     }
+  }
+
+  async getUserResumes(userId: string): Promise<Resume[]> {
+    if (!userId) {
+      throw new BadRequestException(
+        'User ID is required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+
+    return this.resumeRepository.find({
+      where: { user: { id: userId }, isActive: true },
+    });
   }
 }
