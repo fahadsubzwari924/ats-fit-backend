@@ -5,8 +5,9 @@ import {
   UseInterceptors,
   UploadedFile,
   Req,
-  BadRequestException,
   Logger,
+  Delete,
+  Param,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -17,6 +18,11 @@ import { RequestWithUserContext } from '../../shared/interfaces/request-user.int
 import { MimeTypes } from '../../shared/constants/mime-types.enum';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { ResumeService } from '../resume/services/resume.service';
+import { Resume } from 'src/database/entities';
+import {
+  BadRequestException,
+  NotFoundException,
+} from '../../shared/exceptions/custom-http-exceptions';
 
 @ApiTags('Users')
 @Controller('users')
@@ -33,22 +39,10 @@ export class UserController {
   async uploadResume(
     @UploadedFile(FileValidationPipe) resumeFile: Express.Multer.File,
     @Req() request: RequestWithUserContext,
-  ): Promise<{ message: string; resumeId: string }> {
-    // Validate file type at controller level
-    if (resumeFile.mimetype !== String(MimeTypes.PDF)) {
-      throw new BadRequestException(
-        'Only PDF files are allowed',
-        ERROR_CODES.UNSUPPORTED_FILE_TYPE,
-      );
-    }
-
+  ): Promise<Partial<Resume>> {
     const userId = request?.userContext?.userId;
-    if (!userId) {
-      throw new BadRequestException(
-        'User ID is required',
-        ERROR_CODES.AUTHENTICATION_REQUIRED,
-      );
-    }
+
+    await this.validateUploadResumeRequest(resumeFile, userId);
 
     const resume = await this.resumeService.uploadUserResume(
       userId,
@@ -56,8 +50,77 @@ export class UserController {
     );
 
     return {
-      message: 'Resume uploaded successfully',
-      resumeId: resume.id,
+      id: resume.id,
+      fileName: resume.fileName,
+      s3Url: resume.s3Url,
     };
+  }
+
+  @Delete('delete-resume/:resumeId')
+  async deleteResume(
+    @Param('resumeId') resumeId: string,
+    @Req() request: RequestWithUserContext,
+  ): Promise<{ message: string }> {
+    const userId = request?.userContext?.userId;
+
+    this.validatedeleteResumeRequest(userId, resumeId);
+
+    const resume = await this.resumeService.getResumeById(resumeId);
+    if (!resume || resume.user.id !== userId) {
+      throw new NotFoundException(
+        'Resume not found or does not belong to the user',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    await this.resumeService.deleteResume(resumeId);
+
+    return { message: 'Resume deleted successfully' };
+  }
+
+  private async validateUploadResumeRequest(
+    resumeFile: Express.Multer.File,
+    userId: string,
+  ): Promise<void> {
+    // Validate file type
+    if (resumeFile.mimetype !== String(MimeTypes.PDF)) {
+      throw new BadRequestException(
+        'Only PDF files are allowed',
+        ERROR_CODES.UNSUPPORTED_FILE_TYPE,
+      );
+    }
+
+    // Validate user ID
+    if (!userId) {
+      throw new BadRequestException(
+        'User ID is required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+
+    // Check if user already uploaded a resume
+    const existingResumes = await this.resumeService.getUserResumes(userId);
+    if (existingResumes?.length) {
+      throw new BadRequestException(
+        'Only one PDF resume is allowed to be uploaded',
+        ERROR_CODES.SINGLE_RESUME_UPLOAD_ALLOWED,
+      );
+    }
+  }
+
+  private validatedeleteResumeRequest(userId: string, resumeId: string): void {
+    if (!resumeId) {
+      throw new BadRequestException(
+        'Resume ID is required',
+        ERROR_CODES.RESUME_ID_REQUIRED_VALIDATION_ERROR,
+      );
+    }
+
+    if (!userId) {
+      throw new BadRequestException(
+        'User ID is required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
   }
 }

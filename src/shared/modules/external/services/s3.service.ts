@@ -10,6 +10,8 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
+import { BadRequestException } from '../../../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../../../shared/constants/error-codes';
 
 @Injectable()
 export class S3Service {
@@ -173,6 +175,56 @@ export class S3Service {
         error,
       );
       throw this.handleS3Error(error, 'check-existence');
+    }
+  }
+
+  extractS3KeyFromUrl(s3Url: string): string {
+    try {
+      // Validate input
+      if (!s3Url || typeof s3Url !== 'string') {
+        throw new BadRequestException(
+          'Invalid S3 URL provided',
+          ERROR_CODES.BAD_REQUEST,
+        );
+      }
+
+      // Parse the URL
+      const parsedUrl = new URL(s3Url);
+
+      // Validate that it's an S3 URL
+      if (
+        !parsedUrl.hostname.includes('s3') ||
+        !parsedUrl.hostname.includes('amazonaws.com')
+      ) {
+        throw new BadRequestException(
+          'URL is not a valid S3 URL',
+          ERROR_CODES.BAD_REQUEST,
+        );
+      }
+
+      // Extract the key (pathname without leading slash)
+      const key = parsedUrl.pathname.slice(1);
+
+      // Validate that we have a key
+      if (!key) {
+        throw new BadRequestException(
+          'No S3 object key found in URL',
+          ERROR_CODES.BAD_REQUEST,
+        );
+      }
+
+      // Decode URI components to handle special characters
+      return decodeURIComponent(key);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      this.logger.error(`Failed to extract S3 key from URL: ${s3Url}`, error);
+      throw new BadRequestException(
+        'Failed to parse S3 URL',
+        ERROR_CODES.BAD_REQUEST,
+      );
     }
   }
 
