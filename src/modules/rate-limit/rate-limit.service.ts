@@ -43,11 +43,6 @@ export class RateLimitService {
     userContext: UserContext,
     featureType: FeatureType,
   ): Promise<RateLimitResult> {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-
-    // Get rate limit configuration
     const config = await this.getRateLimitConfig(
       userContext.plan as UserPlan,
       userContext.userType as UserType,
@@ -58,14 +53,12 @@ export class RateLimitService {
       throw new BadRequestException(
         `Rate limit configuration not found for ${featureType}`,
         ERROR_CODES.BAD_REQUEST,
-        undefined,
-        {
-          plan: userContext.plan,
-          userType: userContext.userType,
-          featureType,
-        },
       );
     }
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
 
     // Get current usage
     const currentUsage = await this.getCurrentUsage(
@@ -190,7 +183,7 @@ export class RateLimitService {
   /**
    * Get rate limit configuration
    */
-  private async getRateLimitConfig(
+  public async getRateLimitConfig(
     plan: UserPlan,
     userType: UserType,
     featureType: FeatureType,
@@ -267,18 +260,6 @@ export class RateLimitService {
       resume_generation: resumeGeneration,
       ats_score: atsScore,
     };
-  }
-
-  /**
-   * Clean up old cache entries
-   */
-  private cleanupCache(): void {
-    const now = Date.now();
-    for (const [key, value] of this.cache.entries()) {
-      if (now - value.lastUpdated > this.CACHE_TTL) {
-        this.cache.delete(key);
-      }
-    }
   }
 
   /**
