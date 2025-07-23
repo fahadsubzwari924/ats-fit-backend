@@ -28,6 +28,9 @@ import {
 import { ERROR_CODES } from 'src/shared/constants/error-codes';
 import { AtsMatchHistory } from 'src/database/entities';
 import { AtsMatchHistoryQueryDto } from './dto/ats-match-history-query.dto';
+import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { UserPlan, UserType } from '../../database/entities/user.entity';
+import { HelperUtil } from 'src/shared/utils/helper.util';
 
 @ApiTags('ATS Match')
 @Controller('ats-match')
@@ -35,6 +38,7 @@ export class AtsMatchController {
   constructor(
     private readonly atsMatchService: AtsMatchService,
     private readonly atsMatchHistoryService: AtsMatchHistoryService,
+    private readonly rateLimitService: RateLimitService,
   ) {}
 
   @Post('score')
@@ -71,6 +75,7 @@ export class AtsMatchController {
   async getAtsMatchHistory(
     @Param('userId') userId: string,
     @Query() query: AtsMatchHistoryQueryDto,
+    @Req() request: RequestWithUserContext,
   ): Promise<Partial<AtsMatchHistory>[]> {
     const { fields } = query;
 
@@ -81,10 +86,39 @@ export class AtsMatchController {
       );
     }
 
+    const userContext = request?.userContext;
+    if (!userContext) {
+      throw new BadRequestException(
+        'User context is missing',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+
+    const userPlan = HelperUtil.validateEnumValue(
+      UserPlan,
+      userContext.plan,
+      UserPlan.FREEMIUM,
+    );
+
+    const userType = HelperUtil.validateEnumValue(
+      UserType,
+      userContext.userType,
+      UserType.REGISTERED,
+    );
+
+    const rateLimitConfig = await this.rateLimitService.getRateLimitConfig(
+      userPlan,
+      userType,
+      FeatureType.ATS_SCORE_HISTORY,
+    );
+
+    const allowedDays = rateLimitConfig?.monthly_limit || 0;
+
     const atsMatchHistory =
       await this.atsMatchHistoryService.getAtsMatchHistoryByUserId(
         userId,
         fields,
+        allowedDays,
       );
 
     if (!atsMatchHistory.length) {

@@ -11,6 +11,7 @@ import { User } from './user.entity';
 export enum FeatureType {
   RESUME_GENERATION = 'resume_generation',
   ATS_SCORE = 'ats_score',
+  ATS_SCORE_HISTORY = 'ats_score_history',
 }
 
 @Entity({ name: 'usage_tracking' })
