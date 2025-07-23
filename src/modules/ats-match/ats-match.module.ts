@@ -14,6 +14,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AtsMatchHistory } from '../../database/entities/ats-match-history.entity';
 import { ResumeGeneration } from '../../database/entities/resume-generations.entity';
 import { Resume, User } from 'src/database/entities';
+import { AtsMatchHistoryService } from './ats-match-history.service';
 
 @Module({
   controllers: [AtsMatchController],
@@ -25,6 +26,7 @@ import { Resume, User } from 'src/database/entities';
     EmbeddingService,
     ClaudeService,
     S3Service,
+    AtsMatchHistoryService,
   ],
   imports: [
     SharedModule,

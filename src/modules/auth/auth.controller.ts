@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { SignUpDto } from './dtos/sign-up.dto';
 import { SignInDto } from './dtos/sign-in.dto';
 import { Public } from './decorators/public.decorator';
+import { SignInResponse } from './types/sign-in-response.types';
 
 @Controller('auth')
 export class AuthController {
@@ -21,7 +22,7 @@ export class AuthController {
   @Post('signin')
   async signIn(
     @Body(ValidationPipe) signInDto: SignInDto,
-  ): Promise<{ user: User; access_token: string }> {
+  ): Promise<SignInResponse> {
     return this.authService.signIn(signInDto);
   }
 }

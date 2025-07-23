@@ -201,6 +201,41 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Get ATS Match History By User ID",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MjY0ZDVkZi1iM2I1LTQ3OTMtOGZhMy03MzZmYmVhOGUzMWIiLCJlbWFpbCI6ImZhaGFkc3Viendhcmk5MjRAZ21haWwuY29tIiwiaWF0IjoxNzUzMjg0MzY1LCJleHAiOjE3NTMyODc5NjV9.hX0YKjG37r3PDbbXHZ9lReVlpkzpc38qrUw3OkVdJ7U",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{Host-Url}}/ats-match/history/5264d5df-b3b5-4793-8fa3-736fbea8e31b?fields=company_name,ats_score,created_at",
+							"host": [
+								"{{Host-Url}}"
+							],
+							"path": [
+								"ats-match",
+								"history",
+								"5264d5df-b3b5-4793-8fa3-736fbea8e31b"
+							],
+							"query": [
+								{
+									"key": "fields",
+									"value": "company_name,ats_score,created_at"
+								}
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		},
@@ -240,6 +275,35 @@
 							"path": [
 								"users",
 								"upload-resume"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Resume",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MjY0ZDVkZi1iM2I1LTQ3OTMtOGZhMy03MzZmYmVhOGUzMWIiLCJlbWFpbCI6ImZhaGFkc3Viendhcmk5MjRAZ21haWwuY29tIiwiaWF0IjoxNzUzMjE4MjQ3LCJleHAiOjE3NTMyMjE4NDd9.FBM3iTVu3wtWG7_BYyRRCaN1rHCccWf8iUwFtwV9Vj4",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{Host-Url}}/users/delete-resume/ffeff618-590c-4f71-bbb5-8274f0584638",
+							"host": [
+								"{{Host-Url}}"
+							],
+							"path": [
+								"users",
+								"delete-resume",
+								"ffeff618-590c-4f71-bbb5-8274f0584638"
 							]
 						}
 					},
