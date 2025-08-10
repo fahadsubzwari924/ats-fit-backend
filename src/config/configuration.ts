@@ -40,6 +40,11 @@ export default () => ({
     apiKey: process.env.OPENAI_API_KEY,
     model: process.env.OPENAI_MODEL || 'gpt-4-turbo',
   },
+  localLlm: {
+    ollamaUrl: process.env.LOCAL_LLM_OLLAMA_URL || 'http://localhost:11434',
+    model: process.env.LOCAL_LLM_MODEL || 'phi3:mini',
+    timeout: parseInt(process.env.LOCAL_LLM_TIMEOUT, 10) || 120000, // 2 minutes
+  },
   performance: {
     // Template caching settings
     templateCacheTtl: parseInt(process.env.TEMPLATE_CACHE_TTL, 10) || 600000, // 10 minutes

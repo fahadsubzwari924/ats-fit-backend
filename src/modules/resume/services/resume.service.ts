@@ -6,7 +6,10 @@ import * as pdf from 'pdf-parse';
 import { BadRequestException } from '../../../shared/exceptions/custom-http-exceptions';
 import { GeneratePdfService } from './generate-pdf.service';
 import { AnalysisResultSchema } from '../schemas/resume-tailored-content.schema';
-import { AnalysisResult } from '../interfaces/resume-extracted-keywords.interface';
+import {
+  AnalysisResult,
+  TailoredContent,
+} from '../interfaces/resume-extracted-keywords.interface';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -283,5 +286,57 @@ export class ResumeService {
     return this.resumeRepository.find({
       where: { user: { id: userId }, isActive: true },
     });
+  }
+
+  /**
+   * Analyze resume using AI to extract structured data
+   */
+  async analyzeResumeWithAI(resumeText: string): Promise<AnalysisResult> {
+    try {
+      this.logger.log('Starting AI-powered resume analysis');
+
+      // Create a simple job description for analysis purposes
+      const dummyJobDescription = `
+        Software Engineer position requiring experience with programming languages,
+        frameworks, databases, and various technical tools. Looking for candidates
+        with strong technical skills and relevant work experience.
+      `;
+
+      // Use existing AI service to analyze the resume
+      const analysisResult =
+        await this.aiService.analyzeResumeAndJobDescription(
+          resumeText,
+          dummyJobDescription,
+          'General Analysis',
+        );
+
+      // Extract the structured data part (excluding metadata)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { metadata: _, ...extractedData } = analysisResult;
+
+      return extractedData as AnalysisResult;
+    } catch (error) {
+      this.logger.error('AI resume analysis failed', error);
+      throw new Error('Failed to analyze resume with AI');
+    }
+  }
+
+  /**
+   * Extract pure structured data from resume text without any job analysis
+   * Returns only the extracted resume data in structured format
+   */
+  async extractResumeDataOnly(resumeText: string): Promise<TailoredContent> {
+    try {
+      this.logger.log('Starting pure resume data extraction');
+
+      // Use the new AI service method specifically for data extraction
+      const extractedData = await this.aiService.extractResumeData(resumeText);
+
+      this.logger.log('Resume data extraction completed successfully');
+      return extractedData;
+    } catch (error) {
+      this.logger.error('Resume data extraction failed', error);
+      throw new Error('Failed to extract resume data');
+    }
   }
 }

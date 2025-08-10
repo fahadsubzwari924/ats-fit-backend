@@ -423,4 +423,176 @@ export class AIService {
       );
     }
   }
+
+  /**
+   * Extract structured data from resume text without any job description analysis
+   * Returns pure resume data in structured format
+   */
+  async extractResumeData(resumeText: string): Promise<TailoredContent> {
+    try {
+      const prompt = this.createResumeExtractionPrompt(resumeText);
+
+      const response = await this.openAIService.chatCompletion({
+        model: 'gpt-4-turbo',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an expert resume parser. Extract structured data from resume text accurately and return it in the exact JSON format specified.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.1, // Low temperature for consistent extraction
+        max_tokens: 4000,
+      });
+
+      const choice = head(get(response, 'choices', []));
+      const content = get(choice, 'message.content', '');
+
+      if (!content) {
+        throw new Error('No content received from OpenAI');
+      }
+
+      // Parse the JSON response
+      const extractedData = JSON.parse(content) as TailoredContent;
+
+      // Validate the structure
+      this.validateExtractedData(extractedData);
+
+      return extractedData;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Failed to extract resume data',
+        ERROR_CODES.FAILED_TO_PARSE_ATS_EVALUATION_JSON,
+        null,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Create a prompt specifically for resume data extraction
+   */
+  private createResumeExtractionPrompt(resumeText: string): string {
+    return `
+Please extract structured data from the following resume and return it in JSON format. Extract ONLY the information that is explicitly present in the resume - do not infer or generate any content.
+
+RESUME TEXT:
+${resumeText}
+
+Return a JSON object with this exact structure:
+{
+  "title": "Professional title if mentioned (or null)",
+  "contactInfo": {
+    "name": "Full name",
+    "email": "Email address",
+    "phone": "Phone number",
+    "location": "Location/Address",
+    "linkedin": "LinkedIn URL (if present)",
+    "portfolio": "Portfolio URL (if present)",
+    "github": "GitHub URL (if present)"
+  },
+  "summary": "Professional summary or objective (extract the full text as written)",
+  "skills": {
+    "languages": ["Programming languages mentioned"],
+    "frameworks": ["Frameworks and libraries mentioned"],
+    "tools": ["Tools and software mentioned"],
+    "databases": ["Databases mentioned"],
+    "concepts": ["Technical concepts, methodologies, or other skills"]
+  },
+  "experience": [
+    {
+      "company": "Company name",
+      "position": "Job title",
+      "duration": "Duration as written (e.g., '2020-2023', 'Jan 2020 - Present')",
+      "location": "Location if mentioned",
+      "responsibilities": ["List of responsibilities/duties"],
+      "achievements": ["List of achievements/accomplishments"],
+      "startDate": "Start date if extractable",
+      "endDate": "End date if extractable (or 'Present')",
+      "technologies": "Technologies used in this role (if mentioned)"
+    }
+  ],
+  "education": [
+    {
+      "institution": "Institution name",
+      "degree": "Degree type and name",
+      "major": "Field of study",
+      "startDate": "Start date if available",
+      "endDate": "End date if available"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "Certification name",
+      "issuer": "Issuing organization",
+      "date": "Date obtained",
+      "expiryDate": "Expiry date if mentioned",
+      "credentialId": "Credential ID if mentioned"
+    }
+  ],
+  "additionalSections": [
+    {
+      "title": "Section title (e.g., 'Projects', 'Volunteer Work', 'Awards')",
+      "items": ["List of items in this section"]
+    }
+  ]
+}
+
+IMPORTANT RULES:
+1. Extract ONLY information that is explicitly present in the resume
+2. Use null for fields that are not present
+3. Use empty arrays [] for missing list fields
+4. Preserve the original text and formatting where possible
+5. Be comprehensive - extract all skills, experiences, education, and certifications mentioned
+6. For dates, preserve the original format when possible
+7. Return valid JSON only, no additional text or formatting
+`;
+  }
+
+  /**
+   * Validate the structure of extracted resume data
+   */
+  private validateExtractedData(data: TailoredContent): void {
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid extracted data structure');
+    }
+
+    // Ensure required fields exist
+    if (!data.contactInfo || typeof data.contactInfo !== 'object') {
+      throw new Error('Missing or invalid contact information');
+    }
+
+    // Ensure arrays are properly formatted
+    const arrayFields = [
+      'experience',
+      'education',
+      'certifications',
+      'additionalSections',
+    ];
+    arrayFields.forEach((field) => {
+      if (data[field] && !Array.isArray(data[field])) {
+        throw new Error(`Field ${field} must be an array`);
+      }
+    });
+
+    // Ensure skills object exists and has array properties
+    if (data.skills) {
+      const skillFields = [
+        'languages',
+        'frameworks',
+        'tools',
+        'databases',
+        'concepts',
+      ];
+      skillFields.forEach((field) => {
+        if (data.skills[field] && !Array.isArray(data.skills[field])) {
+          throw new Error(`Skills.${field} must be an array`);
+        }
+      });
+    }
+  }
 }

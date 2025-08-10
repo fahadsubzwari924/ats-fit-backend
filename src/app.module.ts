@@ -12,6 +12,7 @@ import { UserModule } from './modules/user/user.module';
 import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
 import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
 import { UserContextMiddleware } from './shared/middlewares/user-context.middleware';
+import { LocalLlmModule } from './modules/local-llm/local-llm.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UserContextMiddleware } from './shared/middlewares/user-context.middlew
     AtsMatchModule,
     UserModule,
     RateLimitModule,
+    LocalLlmModule,
   ],
   providers: [
     {

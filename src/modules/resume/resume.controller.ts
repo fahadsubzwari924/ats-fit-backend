@@ -128,6 +128,43 @@ export class ResumeController {
     }
   }
 
+  @Post('analyze-resume')
+  @Public()
+  // @RateLimitFeature(FeatureType.RESUME_GENERATION)
+  @UseInterceptors(
+    FileInterceptor('resumeFile'),
+    ValidationLoggingInterceptor,
+    UsageTrackingInterceptor,
+  )
+  async analyzeResume(
+    @UploadedFile(FileValidationPipe) resumeFile: Express.Multer.File,
+  ) {
+    try {
+      this.logger.log('Starting resume analysis with OpenAI');
+      this.logger.debug('File info:', {
+        filename: resumeFile?.originalname,
+        mimetype: resumeFile?.mimetype,
+        size: resumeFile?.size,
+      });
+
+      // Extract text from resume
+      const resumeText =
+        await this.resumeService.extractTextFromResume(resumeFile);
+
+      // Use new method specifically for pure data extraction
+      const extractedData =
+        await this.resumeService.extractResumeDataOnly(resumeText);
+
+      this.logger.log('Resume analysis completed successfully');
+
+      // Return only the extracted structured data
+      return extractedData;
+    } catch (error) {
+      this.logger.error('Resume analysis failed:', error);
+      throw error;
+    }
+  }
+
   private async validateResumeTemplateExists(
     templateId: string,
   ): Promise<void> {
