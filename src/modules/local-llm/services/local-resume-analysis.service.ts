@@ -32,7 +32,6 @@ export interface ExtractedResumeData {
     duration: string;
     location: string;
     responsibilities: string[];
-    achievements: string[];
     startDate: string;
     endDate: string;
     technologies: string;
@@ -147,13 +146,16 @@ export class LocalResumeAnalysisService {
         prompt,
         {
           temperature: 0.1,
-          maxTokens: 4000,
+          maxTokens: 10000, // Increased for resumes with many experiences/projects
           maxRetries: 3,
         },
       );
 
+      // Validate completeness of the extracted data
+      const extractedData = response as ExtractedResumeData;
+
       this.logger.debug('Resume data extraction successful');
-      return response as ExtractedResumeData;
+      return extractedData;
     } catch (error) {
       this.logger.error('Failed to extract resume data', error);
 
@@ -168,11 +170,13 @@ export class LocalResumeAnalysisService {
   private createResumeExtractionPrompt(resumeText: string): string {
     return `You are an expert resume parser. Extract structured information from the following resume text and return it as valid JSON.
 
-Instructions:
-- Extract all relevant information accurately
+CRITICAL INSTRUCTIONS:
+- Extract the COMPLETE professional summary - every sentence, the entire paragraph(s)
+- For job experience, extract ALL descriptions/bullet points into "responsibilities" field only for all job experience and do not skip any job experience
+- Extract EVERY bullet point and detail completely - do not skip or truncate any information
 - For missing information, use empty strings or empty arrays
 - Ensure the JSON is valid and properly formatted
-- Be thorough but concise
+- Be thorough and extract ALL content
 
 Resume text:
 ${resumeText}
@@ -189,7 +193,7 @@ Return the extracted information in the following JSON format:
     "portfolio": "portfolio/website URL",
     "github": "github profile URL"
   },
-  "summary": "professional summary or objective",
+  "summary": "COMPLETE professional summary - extract the ENTIRE paragraph(s), every sentence",
   "skills": {
     "languages": ["programming languages"],
     "frameworks": ["frameworks and libraries"], 
@@ -203,8 +207,7 @@ Return the extracted information in the following JSON format:
       "position": "job title",
       "duration": "employment period",
       "location": "work location",
-      "responsibilities": ["key responsibilities"],
-      "achievements": ["achievements and accomplishments"],
+      "responsibilities": ["ALL job descriptions, bullet points, and details - extract EVERYTHING"],
       "startDate": "start date",
       "endDate": "end date",
       "technologies": "technologies used"
@@ -214,7 +217,6 @@ Return the extracted information in the following JSON format:
     {
       "institution": "school/university name",
       "degree": "degree type",
-      "major": "field of study",
       "startDate": "start date",
       "endDate": "end date"
     }
@@ -223,9 +225,14 @@ Return the extracted information in the following JSON format:
     {
       "name": "certification name",
       "issuer": "issuing organization",
-      "date": "issue date",
-      "expiryDate": "expiry date if any",
-      "credentialId": "credential ID if any"
+    }
+  ],
+  "projects": [
+    {
+      "name": "project name",
+      "description": "project description",
+      "technologies": ["technologies used"],
+      "achievements": ["project achievements"]
     }
   ],
   "additionalSections": [
@@ -234,7 +241,12 @@ Return the extracted information in the following JSON format:
       "items": ["section items"]
     }
   ]
-}`;
+}
+
+IMPORTANT REMINDERS:
+- Summary: Extract the COMPLETE summary paragraph - do not stop at 1-2 sentences
+- Experience responsibilities: Include ALL bullet points and descriptions completely
+- Extract every detail without skipping or summarizing`;
   }
 
   /**
@@ -387,9 +399,6 @@ EXTRACT EVERYTHING - NO EXCEPTIONS!
               typeof expObj.location === 'string' ? expObj.location : '',
             responsibilities: Array.isArray(expObj.responsibilities)
               ? expObj.responsibilities.map(String)
-              : [],
-            achievements: Array.isArray(expObj.achievements)
-              ? expObj.achievements.map(String)
               : [],
             startDate:
               typeof expObj.startDate === 'string' ? expObj.startDate : '',
@@ -582,24 +591,27 @@ You are an expert resume parser with a focus on COMPLETE and COMPREHENSIVE data 
 - Extract EVERY piece of information accurately - do not truncate or summarize
 - For summary section: Extract the COMPLETE professional summary/objective paragraph(s) - include ALL sentences
 - For skills section: Include EVERY single skill, framework, tool, database, and concept mentioned
-- For experience section: Include ALL work experiences with COMPLETE details
+- For experience section: Include ALL work experiences with COMPLETE details - if there are 5 experiences, extract ALL 5
 - For education section: Include ALL educational qualifications and degrees
 - For certifications section: Include EVERY certification mentioned - do not stop at the first one
+- For projects section: Include ALL projects mentioned - if there are 12 projects, extract ALL 12, not just the first few
 - Use empty strings or arrays only when information is truly not present
 - Be thorough and comprehensive - missing information is unacceptable
 - IMPORTANT: For "technologies" field in experience, provide a single comma-separated string, NOT an array
 - IMPORTANT: Only include valid experience objects in the experience array, do not include other sections
 - IMPORTANT: Return valid JSON only, no additional text or explanations
 - SCAN THE ENTIRE RESUME: Make sure you read through the complete resume text to catch all details
+- COUNT VERIFICATION: Count how many experiences/projects you see and extract that exact number
 
 **QUALITY CHECKLIST:**
 ✓ Summary: Contains the full professional summary (not just 1-2 sentences)
 ✓ Skills: Contains ALL frameworks (Angular, Node.js, Express.js, Nest.js, .NET Core, etc.)
 ✓ Skills: Contains ALL programming languages mentioned
 ✓ Skills: Contains ALL tools and technologies mentioned
-✓ Experience: Contains ALL work positions with complete details
+✓ Experience: Contains ALL work positions with complete details (verify count matches resume)
 ✓ Education: Contains ALL degrees and educational background
 ✓ Certifications: Contains ALL certifications (not just the first one)
+✓ Projects: Contains ALL projects mentioned (verify count matches resume)
 
 **Resume Text:**
 ${resumeText}

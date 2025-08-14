@@ -214,8 +214,11 @@ export class LocalLlmService implements OnModuleDestroy {
           stopSequences: options?.stopSequences,
         });
 
+        this.logger.log(`Ollama response: ${response}`);
+
         // Extract and validate JSON
         const jsonResponse = this.extractJsonFromResponse(response);
+        this.logger.log(`jsonResponse: ${jsonResponse}`);
         if (!jsonResponse) {
           throw new Error(
             `No valid JSON found in response: ${response.substring(0, 200)}...`,
@@ -255,28 +258,43 @@ export class LocalLlmService implements OnModuleDestroy {
    */
   private extractJsonFromResponse(response: string): string | null {
     try {
-      // Remove markdown code blocks and extra formatting
-      const cleaned = response
-        .replace(/```json\s*/g, '')
-        .replace(/```\s*/g, '')
-        .replace(/^\s*Here's?\s+(?:the|a)?\s*JSON:?\s*/i, '')
-        .replace(/^\s*Response:?\s*/i, '')
-        .trim();
+      // Trim and clean the response
+      const cleaned = response.trim();
 
-      // Find the first complete JSON object
-      const openBrace = cleaned.indexOf('{');
-      if (openBrace === -1) {
-        // Try to find JSON array
-        const openBracket = cleaned.indexOf('[');
-        if (openBracket === -1) return null;
-        return this.extractJsonArray(cleaned, openBracket);
+      // Check if the response starts with a JSON object or array
+      if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
+        // Validate and return the JSON directly
+        JSON.parse(cleaned);
+        return cleaned;
       }
 
-      return this.extractJsonObject(cleaned, openBrace);
+      // Attempt to locate the first JSON object in the response
+      const openBraceIndex = cleaned.indexOf('{');
+      if (openBraceIndex !== -1) {
+        const jsonCandidate = this.extractJsonObject(cleaned, openBraceIndex);
+        if (jsonCandidate) {
+          return jsonCandidate;
+        }
+      }
+
+      // Attempt to locate the first JSON array in the response
+      const openBracketIndex = cleaned.indexOf('[');
+      if (openBracketIndex !== -1) {
+        const jsonCandidate = this.extractJsonArray(cleaned, openBracketIndex);
+        if (jsonCandidate) {
+          return jsonCandidate;
+        }
+      }
+
+      // If no valid JSON is found, log the issue and return null
+      this.logger.warn('No valid JSON found in response', {
+        responsePreview: cleaned.substring(0, 200),
+      });
+      return null;
     } catch (error) {
-      this.logger.debug('Failed to extract JSON from response', {
+      this.logger.error('Failed to extract JSON from response', {
         error: error instanceof Error ? error.message : String(error),
-        responsePreview: response.substring(0, 100),
+        responsePreview: response.substring(0, 200),
       });
       return null;
     }
