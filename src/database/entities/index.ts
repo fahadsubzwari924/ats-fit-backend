@@ -1,4 +1,5 @@
 export * from './ats-match-history.entity';
+export * from './job-application.entity';
 export * from './rate-limit-config.entity';
 export * from './resume.entity';
 export * from './resume-generations.entity';

@@ -1,7 +1,12 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+  ValidationPipe,
+  VersioningType,
+  BadRequestException,
+} from '@nestjs/common';
+import { ValidationError } from 'class-validator';
 import { ResponseService } from './shared/modules/response/response.service';
 import { ResponseInterceptor } from './shared/modules/response/response.interceptor';
 import { AllExceptionsFilter } from './shared/modules/response/exception.filter';
@@ -40,6 +45,12 @@ async function bootstrap() {
       skipMissingProperties: false,
       skipNullProperties: false,
       skipUndefinedProperties: false,
+      exceptionFactory: (validationErrors: ValidationError[] = []) => {
+        return new BadRequestException({
+          message: 'Validation failed',
+          errors: validationErrors,
+        });
+      },
     }),
   );
 
@@ -62,4 +73,5 @@ async function bootstrap() {
 
   await app.listen(3000);
 }
-bootstrap();
+
+void bootstrap();
