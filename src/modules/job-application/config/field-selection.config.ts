@@ -1,0 +1,58 @@
+import { FieldSelectionConfig } from '../../../shared/services/field-selection.service';
+
+export const JOB_APPLICATION_FIELD_CONFIG: FieldSelectionConfig = {
+  entity: 'jobApplication',
+  allowedFields: [
+    'id',
+    'company_name',
+    'job_position',
+    'job_description',
+    'job_url',
+    'job_location',
+    'current_salary',
+    'expected_salary',
+    'status',
+    'application_source',
+    'application_deadline',
+    'applied_at',
+    'ats_score',
+    'ats_analysis',
+    'cover_letter',
+    'notes',
+    'contact_phone',
+    'interview_scheduled_at',
+    'interview_notes',
+    'follow_up_date',
+    'rejection_reason',
+    'metadata',
+    'created_at',
+    'updated_at',
+    'user_id',
+    'guest_id',
+  ],
+  defaultFields: [
+    'id',
+    'company_name',
+    'job_position',
+    'status',
+    'application_source',
+    'applied_at',
+    'ats_score',
+    'created_at',
+    'updated_at',
+  ],
+  relations: {
+    user: {
+      entity: 'user',
+      allowedFields: ['id', 'email', 'firstName', 'lastName'],
+    },
+    ats_match_history: {
+      entity: 'ats_match_history',
+      allowedFields: ['id', 'match_score', 'created_at'],
+    },
+    resume_generation: {
+      entity: 'resume_generation',
+      allowedFields: ['id', 'template_name', 'created_at'],
+    },
+  },
+};

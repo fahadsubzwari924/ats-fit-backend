@@ -9,6 +9,7 @@ import {
   RateLimitConfig,
   AtsMatchHistory,
   Resume,
+  JobApplication,
 } from './entities';
 
 @Module({
@@ -30,6 +31,7 @@ import {
           RateLimitConfig,
           AtsMatchHistory,
           Resume,
+          JobApplication,
         ],
         synchronize: process.env.NODE_ENV !== 'production',
         logging: process.env.NODE_ENV !== 'production',

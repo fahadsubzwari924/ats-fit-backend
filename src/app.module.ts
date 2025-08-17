@@ -10,6 +10,7 @@ import { SharedModule } from './shared/shared.module';
 import { AtsMatchModule } from './modules/ats-match/ats-match.module';
 import { UserModule } from './modules/user/user.module';
 import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
+import { JobApplicationModule } from './modules/job-application/job-application.module';
 import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
 import { UserContextMiddleware } from './shared/middlewares/user-context.middleware';
 
@@ -30,6 +31,7 @@ import { UserContextMiddleware } from './shared/middlewares/user-context.middlew
     AtsMatchModule,
     UserModule,
     RateLimitModule,
+    JobApplicationModule,
   ],
   providers: [
     {
