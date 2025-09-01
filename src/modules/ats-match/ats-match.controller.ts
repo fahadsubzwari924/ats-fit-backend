@@ -14,7 +14,6 @@ import { FeatureType } from '../../database/entities/usage-tracking.entity';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FileValidationPipe } from '../resume/pipes/file-validation.pipe';
 import { AtsScoreResponseDto } from './dto/ats-score-response.dto';
-import { ApiTags } from '@nestjs/swagger';
 import { AtsMatchService } from './ats-match.service';
 import { AtsScoreRequestDto } from './dto/ats-score-request.dto';
 import { Public } from '../auth/decorators/public.decorator';
@@ -32,7 +31,6 @@ import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { UserPlan, UserType } from '../../database/entities/user.entity';
 import { HelperUtil } from 'src/shared/utils/helper.util';
 
-@ApiTags('ATS Match')
 @Controller('ats-match')
 export class AtsMatchController {
   constructor(
@@ -50,23 +48,20 @@ export class AtsMatchController {
     @UploadedFile(FileValidationPipe) resumeFile: Express.Multer.File,
     @Req() request: RequestWithUserContext,
   ): Promise<AtsScoreResponseDto> {
+    const userContext = request?.userContext;
+
     const atsScoreResponse = await this.atsMatchService.calculateAtsScore(
       dto.jobDescription,
       resumeFile,
+      {
+        userId: userContext?.userId,
+        guestId: userContext?.guestId,
+      },
+      {
+        companyName: dto.companyName,
+        resumeContent: dto.resumeContent,
+      },
     );
-
-    const userContext = request?.userContext;
-
-    const atsMatchHistory = {
-      user_id: userContext?.userId || null,
-      guest_id: userContext?.guestId || null,
-      ats_score: atsScoreResponse.score,
-      company_name: dto.companyName,
-      job_description: dto.jobDescription,
-      resume_content: dto.resumeContent || '',
-      analysis: atsScoreResponse?.details,
-    };
-    await this.atsMatchService.saveAtsMatchHistory(atsMatchHistory);
 
     return atsScoreResponse;
   }

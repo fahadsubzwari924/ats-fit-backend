@@ -42,6 +42,11 @@ export class AtsMatchService {
   async calculateAtsScore(
     jobDescription: string,
     resumeFile: Express.Multer.File,
+    userContext?: { userId?: string; guestId?: string },
+    additionalData?: {
+      companyName?: string;
+      resumeContent?: string;
+    },
   ): Promise<AtsScoreResponseDto> {
     const startTime = Date.now();
 
@@ -62,7 +67,20 @@ export class AtsMatchService {
           `Cache hit! Returning cached ATS score in ${Date.now() - startTime}ms`,
         );
 
-        return this.formatResponse(cachedResult);
+        // Even with cached results, we need to save a new ATS match history record
+        const atsMatchHistory = {
+          user_id: userContext?.userId || null,
+          guest_id: userContext?.guestId || null,
+          ats_score: cachedResult.overallScore,
+          company_name: additionalData?.companyName || '',
+          job_description: jobDescription,
+          resume_content: additionalData?.resumeContent || '',
+          analysis: this.formatResponse(cachedResult).details,
+        };
+
+        const createdAtsHistoryRecord =
+          await this.saveAtsMatchHistory(atsMatchHistory);
+        return this.formatResponse(cachedResult, createdAtsHistoryRecord.id);
       }
 
       // 3. Extract text from resume (optimized)
@@ -78,8 +96,25 @@ export class AtsMatchService {
       // 5. Cache the result
       this.setCache(cacheKey, atsEvaluation);
 
-      // 6. Calculate final score and format response
-      const response = this.formatResponse(atsEvaluation);
+      // 6. Save ATS match history and get the ID
+      const atsMatchHistory = {
+        user_id: userContext?.userId || null,
+        guest_id: userContext?.guestId || null,
+        ats_score: atsEvaluation.overallScore,
+        company_name: additionalData?.companyName || '',
+        job_description: jobDescription,
+        resume_content: additionalData?.resumeContent || '',
+        analysis: this.formatResponse(atsEvaluation).details,
+      };
+
+      const createdAtsHistoryRecord =
+        await this.saveAtsMatchHistory(atsMatchHistory);
+
+      // 7. Calculate final score and format response with history ID
+      const response = this.formatResponse(
+        atsEvaluation,
+        createdAtsHistoryRecord.id,
+      );
 
       this.logger.log(`ATS score calculated in ${Date.now() - startTime}ms`);
 
@@ -353,9 +388,11 @@ export class AtsMatchService {
 
   private formatResponse(
     atsEvaluation: PremiumAtsEvaluation,
+    atsMatchHistoryId?: string,
   ): AtsScoreResponseDto {
     return {
       score: atsEvaluation.overallScore,
+      atsMatchHistoryId: atsMatchHistoryId ?? '',
       details: {
         keywordScore: atsEvaluation.technicalSkillsScore,
         contactInfoScore: atsEvaluation.resumeQualityScore,
@@ -582,10 +619,12 @@ export class AtsMatchService {
 
   async saveAtsMatchHistory(
     atsMatchResponsePayload: Partial<AtsMatchHistory>,
-  ): Promise<void> {
+  ): Promise<AtsMatchHistory> {
     const atsMatchHistory = this.atsMatchHistoryRepository.create(
       atsMatchResponsePayload,
     );
-    await this.atsMatchHistoryRepository.save(atsMatchHistory);
+    const savedRecord =
+      await this.atsMatchHistoryRepository.save(atsMatchHistory);
+    return savedRecord;
   }
 }
