@@ -9,7 +9,7 @@ import { SignInDto } from './dtos/sign-in.dto';
 import { BaseMapperService } from '../../shared/services/base-mapper.service';
 import { UsageTracking } from '../../database/entities/usage-tracking.entity';
 import { RateLimitConfig } from '../../database/entities/rate-limit-config.entity';
-import { IFeatureUsage } from 'src/shared/interfaces';
+import { IFeatureUsage } from '../../shared/interfaces';
 import {
   BadRequestException,
   UnauthorizedException,

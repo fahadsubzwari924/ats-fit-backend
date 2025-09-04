@@ -18,7 +18,7 @@ import { RequestWithUserContext } from '../../shared/interfaces/request-user.int
 import { MimeTypes } from '../../shared/constants/mime-types.enum';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { ResumeService } from '../resume/services/resume.service';
-import { Resume } from 'src/database/entities';
+import { Resume } from '../../database/entities';
 import {
   BadRequestException,
   NotFoundException,

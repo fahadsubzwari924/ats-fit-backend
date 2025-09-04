@@ -24,7 +24,7 @@ import { FeatureType } from '../../database/entities/usage-tracking.entity';
 import { Public } from '../auth/decorators/public.decorator';
 import { UsageTrackingInterceptor } from '../rate-limit/usage-tracking.interceptor';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
-import { ERROR_CODES } from 'src/shared/constants/error-codes';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { Response } from 'express';
 
 @ApiTags('Resumes')

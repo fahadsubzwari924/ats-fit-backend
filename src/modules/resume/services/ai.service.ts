@@ -19,8 +19,8 @@ import {
   ResumeExtractedKeywordsSchema,
   TailoredContentSchema,
 } from '../schemas/resume-tailored-content.schema';
-import { InternalServerErrorException } from 'src/shared/exceptions/custom-http-exceptions';
-import { ERROR_CODES } from 'src/shared/constants/error-codes';
+import { InternalServerErrorException } from '../../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../../shared/constants/error-codes';
 
 @Injectable()
 export class AIService {
