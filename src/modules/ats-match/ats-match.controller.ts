@@ -20,16 +20,16 @@ import { Public } from '../auth/decorators/public.decorator';
 import { UsageTrackingInterceptor } from '../rate-limit/usage-tracking.interceptor';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
 import { AtsMatchHistoryService } from './ats-match-history.service';
-import {
-  BadRequestException,
-  NotFoundException,
-} from 'src/shared/exceptions/custom-http-exceptions';
-import { ERROR_CODES } from 'src/shared/constants/error-codes';
-import { AtsMatchHistory } from 'src/database/entities';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { AtsMatchHistory } from '../../database/entities';
 import { AtsMatchHistoryQueryDto } from './dto/ats-match-history-query.dto';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { UserPlan, UserType } from '../../database/entities/user.entity';
-import { HelperUtil } from 'src/shared/utils/helper.util';
+import { HelperUtil } from '../../shared/utils/helper.util';
+import {
+  BadRequestException,
+  NotFoundException,
+} from '../../shared/exceptions/custom-http-exceptions';
 
 @Controller('ats-match')
 export class AtsMatchController {

@@ -13,6 +13,7 @@ import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
 import { JobApplicationModule } from './modules/job-application/job-application.module';
 import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
 import { UserContextMiddleware } from './shared/middlewares/user-context.middleware';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { UserContextMiddleware } from './shared/middlewares/user-context.middlew
     UserModule,
     RateLimitModule,
     JobApplicationModule,
+    HealthModule,
   ],
   providers: [
     {

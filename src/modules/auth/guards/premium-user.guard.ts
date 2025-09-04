@@ -1,7 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { RequestWithUserContext } from '../../../shared/interfaces/request-user.interface';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
-import { ForbiddenException } from 'src/shared/exceptions/custom-http-exceptions';
+import { ForbiddenException } from '../../../shared/exceptions/custom-http-exceptions';
 
 @Injectable()
 export class PremiumUserGuard implements CanActivate {
