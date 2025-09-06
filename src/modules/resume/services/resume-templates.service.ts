@@ -24,6 +24,8 @@ export class ResumeTemplateService {
     string,
     { content: string; timestamp: number }
   >();
+  private readonly defaultCacheTtl = 10 * 60 * 1000; // 10 minutes default
+  private readonly maxCacheSize = 50; // Maximum number of cached templates
 
   constructor(
     @InjectRepository(ResumeTemplate)
@@ -40,6 +42,23 @@ export class ResumeTemplateService {
     return resumeTemplates || [];
   }
 
+  /**
+   * Lightweight validation that only checks if template exists in database
+   * without fetching S3 content. Use this for validation steps.
+   */
+  async validateTemplateExists(id: string): Promise<boolean> {
+    try {
+      const template = await this.templateRepository.findOne({
+        where: { id },
+        cache: true,
+      });
+      return !!template;
+    } catch (error) {
+      this.logger.error(`Error validating template ${id}`, error);
+      return false;
+    }
+  }
+
   async getTemplateById(
     id: string,
   ): Promise<ResumeTemplate & { content: string }> {
@@ -52,26 +71,25 @@ export class ResumeTemplateService {
       if (!template) {
         throw new NotFoundException(`Template with ID ${id} not found`);
       }
-    } catch (error) {
-      this.logger.error(`Database error finding template ${id}`, error);
-      throw new InternalServerErrorException('Failed to retrieve template');
-    }
 
-    try {
-      // Get cache TTL from configuration
+      // Get cache TTL from configuration with fallback
       const cacheTtl = this.configService.get<number>(
         'performance.templateCacheTtl',
-        600000,
+        this.defaultCacheTtl,
       );
 
       // Check cache first
       const cached = this.templateContentCache.get(id);
       if (cached && Date.now() - cached.timestamp < cacheTtl) {
+        this.logger.debug(`Using cached template content for ${id}`);
         return {
           ...template,
           content: cached.content,
         };
       }
+
+      // Clean cache if it's getting too large
+      this.cleanCacheIfNeeded();
 
       // Get bucket name from config - fixed the type annotation
       const bucketName = this.configService.get<string>(
@@ -82,10 +100,17 @@ export class ResumeTemplateService {
         throw new Error('AWS_S3_RESUME_TEMPLATES_BUCKET is not configured');
       }
 
-      const templateContent = await this.s3Service.getObject({
-        bucketName: bucketName,
-        key: getTemplateS3Key(template.key),
-      });
+      // Retry logic for S3 operations to handle socket timeouts
+      const templateContent = await this.retryS3Operation(
+        async () => {
+          return await this.s3Service.getObject({
+            bucketName: bucketName,
+            key: getTemplateS3Key(template.key),
+          });
+        },
+        3, // Max retries
+        1000, // Initial delay (1 second)
+      );
 
       const content = templateContent.toString('utf-8');
 
@@ -94,6 +119,8 @@ export class ResumeTemplateService {
         content,
         timestamp: Date.now(),
       });
+
+      this.logger.debug(`Successfully loaded and cached template ${id}`);
 
       return {
         ...template,
@@ -303,5 +330,112 @@ export class ResumeTemplateService {
     } catch (loggingError) {
       this.logger.error('Failed to log template usage', loggingError);
     }
+  }
+
+  /**
+   * Retry mechanism for S3 operations to handle socket connection timeouts
+   */
+  private async retryS3Operation<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 1000,
+  ): Promise<T> {
+    let lastError: Error;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.logger.debug(`S3 operation attempt ${attempt}/${maxRetries}`);
+        return await operation();
+      } catch (error) {
+        lastError = error as Error;
+
+        // Check if this is a retryable error (socket timeout, connection issues)
+        const isRetryable = this.isRetryableError(error);
+
+        if (!isRetryable || attempt === maxRetries) {
+          this.logger.error(
+            `S3 operation failed after ${attempt} attempts`,
+            error,
+          );
+          throw error;
+        }
+
+        // Calculate exponential backoff delay
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        this.logger.warn(
+          `S3 operation failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`,
+          error,
+        );
+
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
+   * Check if an error is retryable (socket timeouts, connection issues)
+   */
+  private isRetryableError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+
+    const errorMessage = error.message.toLowerCase();
+    const errorCode = (error as Error & { code?: string })?.code;
+
+    // Check for socket connection timeouts and network issues
+    return (
+      errorCode === 'ERR_SOCKET_CONNECTION_TIMEOUT' ||
+      errorCode === 'ECONNRESET' ||
+      errorCode === 'ECONNREFUSED' ||
+      errorCode === 'ETIMEDOUT' ||
+      errorMessage.includes('socket connection timeout') ||
+      errorMessage.includes('connection timeout') ||
+      errorMessage.includes('network error') ||
+      errorMessage.includes('socket hang up')
+    );
+  }
+
+  /**
+   * Clean cache if it exceeds maximum size
+   */
+  private cleanCacheIfNeeded(): void {
+    if (this.templateContentCache.size <= this.maxCacheSize) {
+      return;
+    }
+
+    // Convert to array and sort by timestamp (oldest first)
+    const entries = Array.from(this.templateContentCache.entries()).sort(
+      (a, b) => a[1].timestamp - b[1].timestamp,
+    );
+
+    // Remove oldest entries until we're under the limit
+    const entriesToRemove = entries.slice(
+      0,
+      this.templateContentCache.size - this.maxCacheSize + 10, // Remove a few extra
+    );
+
+    for (const [key] of entriesToRemove) {
+      this.templateContentCache.delete(key);
+    }
+
+    this.logger.debug(
+      `Cache cleaned: removed ${entriesToRemove.length} old entries`,
+    );
+  }
+
+  /**
+   * Get cache statistics for monitoring
+   */
+  getCacheStats(): {
+    size: number;
+    maxSize: number;
+    hitRate?: number;
+  } {
+    return {
+      size: this.templateContentCache.size,
+      maxSize: this.maxCacheSize,
+    };
   }
 }

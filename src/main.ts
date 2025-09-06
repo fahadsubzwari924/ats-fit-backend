@@ -16,6 +16,28 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Enable CORS for all origins (adjust for production)
+  app.enableCors({
+    origin: true, // Allow all origins for development
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-Resume-Generation-Id',
+      'X-ATS-Score',
+      'X-Filename',
+    ],
+    exposedHeaders: [
+      'X-Resume-Generation-Id',
+      'X-ATS-Score',
+      'X-Filename',
+      'Content-Disposition',
+    ],
+    credentials: true,
+  });
+
   app.setGlobalPrefix('api');
 
   // --- Swagger setup ---

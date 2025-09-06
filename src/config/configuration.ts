@@ -52,8 +52,8 @@ export default () => ({
     maxMissingSkills: parseInt(process.env.MAX_MISSING_SKILLS, 10) || 5,
 
     // PDF generation settings
-    pdfTimeout: parseInt(process.env.PDF_TIMEOUT, 10) || 15000, // 15 seconds
-    pdfPageTimeout: parseInt(process.env.PDF_PAGE_TIMEOUT, 10) || 10000, // 10 seconds
+    pdfTimeout: parseInt(process.env.PDF_TIMEOUT, 10) || 10000, // OPTIMIZATION: Reduced from 15000 to 10000
+    pdfPageTimeout: parseInt(process.env.PDF_PAGE_TIMEOUT, 10) || 8000, // OPTIMIZATION: Reduced from 10000 to 8000
 
     // File size limits
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 5242880, // 5MB
