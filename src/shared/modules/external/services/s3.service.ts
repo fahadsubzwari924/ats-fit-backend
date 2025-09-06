@@ -12,13 +12,17 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'stream';
 import { BadRequestException } from '../../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../../shared/constants/error-codes';
+import { CircuitBreakerService } from '../../../services/circuit-breaker.service';
 
 @Injectable()
 export class S3Service {
   private readonly logger = new Logger(S3Service.name);
   private readonly s3Client: S3Client;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private circuitBreaker: CircuitBreakerService,
+  ) {
     this.s3Client = new S3Client({
       region: this.configService.get<string>('AWS_BUCKET_REGION'),
       credentials: {
@@ -28,7 +32,19 @@ export class S3Service {
         ),
       },
       maxAttempts: 3, // Retry up to 3 times
+      retryMode: 'adaptive', // Use adaptive retry mode for better backoff
+      requestHandler: {
+        requestTimeout: 30000, // 30 seconds request timeout
+        connectionTimeout: 10000, // 10 seconds connection timeout
+      },
+      // Add service-specific configurations
+      forcePathStyle: false, // Use virtual hosted-style URLs
+      useAccelerateEndpoint: false, // Don't use S3 Transfer Acceleration unless needed
     });
+
+    this.logger.log(
+      'S3 Client initialized with enhanced timeout and retry configuration',
+    );
   }
 
   async uploadFile(params: {
@@ -69,39 +85,50 @@ export class S3Service {
   }): Promise<Buffer> {
     const { bucketName, key } = params;
 
-    try {
-      const command = new GetObjectCommand({
-        Bucket: bucketName,
-        Key: key,
-      });
+    // Use circuit breaker for S3 operations
+    return this.circuitBreaker.execute(
+      `s3-get-${bucketName}`,
+      async () => {
+        try {
+          const command = new GetObjectCommand({
+            Bucket: bucketName,
+            Key: key,
+          });
 
-      const response = await this.s3Client.send(command);
-      const stream = response.Body as Readable;
+          const response = await this.s3Client.send(command);
+          const stream = response.Body as Readable;
 
-      return new Promise<Buffer>((resolve, reject) => {
-        const chunks: Buffer[] = [];
-        stream.on('data', (chunk) => chunks.push(chunk));
-        stream.on('error', (error) => {
+          return new Promise<Buffer>((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+            stream.on('error', (error) => {
+              this.logger.error(
+                `Error reading stream from s3://${bucketName}/${key}`,
+                error,
+              );
+              reject(this.handleS3Error(error, 'read'));
+            });
+            stream.on('end', () => {
+              this.logger.debug(
+                `Successfully read file from s3://${bucketName}/${key}`,
+              );
+              resolve(Buffer.concat(chunks));
+            });
+          });
+        } catch (error) {
           this.logger.error(
-            `Error reading stream from s3://${bucketName}/${key}`,
+            `Failed to get object from s3://${bucketName}/${key}`,
             error,
           );
-          reject(this.handleS3Error(error, 'read'));
-        });
-        stream.on('end', () => {
-          this.logger.debug(
-            `Successfully read file from s3://${bucketName}/${key}`,
-          );
-          resolve(Buffer.concat(chunks));
-        });
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to get object from s3://${bucketName}/${key}`,
-        error,
-      );
-      throw this.handleS3Error(error, 'get');
-    }
+          throw this.handleS3Error(error, 'get');
+        }
+      },
+      {
+        failureThreshold: 3, // Open circuit after 3 failures
+        recoveryTimeout: 30000, // 30 seconds recovery time
+        monitoringPeriod: 5000, // 5 seconds monitoring
+      },
+    );
   }
 
   async getSignedUrl(params: {

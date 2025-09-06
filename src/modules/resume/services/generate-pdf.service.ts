@@ -52,11 +52,11 @@ export class GeneratePdfService implements OnModuleDestroy {
       // Get performance configuration
       const pdfPageTimeout = this.configService.get<number>(
         'performance.pdfPageTimeout',
-        10000,
+        8000, // OPTIMIZATION: Reduced from 10000ms to 8000ms
       );
       const pdfTimeout = this.configService.get<number>(
         'performance.pdfTimeout',
-        15000,
+        10000, // OPTIMIZATION: Reduced from 15000ms to 10000ms
       );
 
       // Optimize page settings for faster rendering

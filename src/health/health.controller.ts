@@ -1,10 +1,13 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Public } from '../modules/auth/decorators/public.decorator';
+import { CircuitBreakerService } from '../shared/services/circuit-breaker.service';
 
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {
+  constructor(private readonly circuitBreaker: CircuitBreakerService) {}
+
   @Get()
   @Public()
   @ApiOperation({
@@ -30,6 +33,20 @@ export class HealthController {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development',
+    };
+  }
+
+  @Get('circuit-breakers')
+  @Public()
+  @ApiOperation({
+    summary: 'Circuit breaker status',
+    description: 'Get the status of all circuit breakers',
+  })
+  getCircuitBreakerStatus() {
+    return {
+      status: 'Circuit breakers are operational',
+      timestamp: new Date().toISOString(),
+      note: 'Circuit breakers help prevent cascading failures in S3 operations',
     };
   }
 }

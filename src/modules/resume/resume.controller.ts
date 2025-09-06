@@ -22,9 +22,7 @@ import { NotFoundException } from '../../shared/exceptions/custom-http-exception
 import { RateLimitFeature } from '../rate-limit/rate-limit.guard';
 import { FeatureType } from '../../database/entities/usage-tracking.entity';
 import { Public } from '../auth/decorators/public.decorator';
-import { UsageTrackingInterceptor } from '../rate-limit/usage-tracking.interceptor';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
-import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { Response } from 'express';
 
 @ApiTags('Resumes')
@@ -48,97 +46,144 @@ export class ResumeController {
   @Post('generate')
   @Public()
   @RateLimitFeature(FeatureType.RESUME_GENERATION)
-  @UseInterceptors(
-    FileInterceptor('resumeFile'),
-    ValidationLoggingInterceptor,
-    UsageTrackingInterceptor,
-  )
-  async generateTailoredResume(
+  @UseInterceptors(FileInterceptor('resumeFile'), ValidationLoggingInterceptor)
+  async downloadGeneratedResume(
     @Body() generateResumeDto: GenerateTailoredResumeDto,
     @UploadedFile(FileValidationPipe) resumeFile: Express.Multer.File,
     @Req() request: RequestWithUserContext,
-    @Res() res: Response,
-  ) {
+    @Res({ passthrough: false }) res: Response,
+  ): Promise<void> {
+    const startTime = Date.now();
+
     try {
       const authContext = request.userContext;
-      // Debug logging
-      this.logger.log('Received generate resume request');
-      this.logger.log('Body data:', JSON.stringify(generateResumeDto, null, 2));
-      this.logger.log('File data:', {
-        filename: resumeFile?.originalname,
-        mimetype: resumeFile?.mimetype,
-        size: resumeFile?.size,
-        hasBuffer: !!resumeFile?.buffer,
-      });
 
-      // Validate that the template exists before processing
-      await this.validateResumeTemplateExists(generateResumeDto.templateId);
+      const templateExists = await this.validateTemplateForDownloadEndpoint(
+        generateResumeDto.templateId,
+        res,
+      );
 
-      const { orignalResumeText, tailoredResume, analysis } =
-        await this.resumeService.generateTailoredResume(
-          generateResumeDto?.jobDescription,
-          generateResumeDto?.companyName,
+      if (!templateExists) {
+        return; // Response already sent by validation method
+      }
+
+      // Use the enhanced service method that includes ATS scoring
+      const response =
+        await this.resumeService.generateTailoredResumeWithAtsScore(
+          generateResumeDto.jobDescription,
+          generateResumeDto.companyName,
           resumeFile,
-          generateResumeDto?.templateId,
+          generateResumeDto.templateId,
+          authContext,
         );
 
-      const generatedPDF =
-        await this.resumeService['generatePdfService'].generatePdfFromHtml(
-          tailoredResume,
-        );
+      const processingTime = Date.now() - startTime;
+      this.logger.log(
+        `Successfully generated resume for download with ID: ${response.resumeGenerationId}, ATS Score: ${response.atsScore} in ${processingTime}ms`,
+      );
 
-      const resumeGenerationPayload = {
-        user_id: authContext?.userId,
-        guest_id: authContext?.guestId,
-        file_path: resumeFile?.originalname,
-        original_content: orignalResumeText,
-        tailored_content: analysis,
-        template_id: generateResumeDto?.templateId,
-        job_description: generateResumeDto?.jobDescription,
-        company_name: generateResumeDto?.companyName,
-        analysis: analysis ?? null,
-      };
-      await this.resumeService.saveResumeGeneration(resumeGenerationPayload);
+      // Convert base64 back to buffer
+      const pdfBuffer = Buffer.from(response.pdfContent, 'base64');
 
-      // Send the PDF back as the response
-      res.set({
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename=tailored-resume-${Date.now()}.pdf`,
-        'Content-Length': generatedPDF.length,
-      });
-      res.end(generatedPDF);
+      // Set headers for PDF download
+      this.setPdfResponseHeaders(res, response, pdfBuffer.length);
+
+      // Send the PDF buffer directly
+      res.end(pdfBuffer);
+
+      const totalTime = Date.now() - startTime;
+      this.logger.log(`Total download response time: ${totalTime}ms`);
     } catch (error) {
-      this.logger.error('Error in generateTailoredResume:', error);
-      if (error instanceof Error) {
-        this.logger.error('Error stack:', error.stack);
-        this.logger.error('Error message:', error.message);
+      this.logger.error('Error in downloadGeneratedResume:', error);
+
+      // Handle specific known exceptions
+      if (error instanceof NotFoundException) {
+        res.status(404).json({
+          status: 'error',
+          message: error.message,
+          code: 'TEMPLATE_NOT_FOUND',
+          data: null,
+          errors: null,
+          meta: {
+            timestamp: new Date().toISOString(),
+            path: '/api/v1/resumes/generate/download',
+          },
+        });
+        return;
       }
 
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      if ((error as Error)?.message?.includes('not found')) {
-        throw new NotFoundException(
-          'Template not found',
-          ERROR_CODES.RESUME_TEMPLATE_NOT_FOUND,
-        );
-      }
-      // Re-throw the error to let the global exception filter handle it
-      throw error;
+      // Handle any other errors as 500
+      const errorMessage =
+        error instanceof Error ? error.message : 'Internal server error';
+      res.status(500).json({
+        status: 'error',
+        message: errorMessage,
+        code: 'INTERNAL_SERVER_ERROR',
+        data: null,
+        errors: null,
+        meta: {
+          timestamp: new Date().toISOString(),
+          path: '/api/v1/resumes/generate/download',
+        },
+      });
     }
   }
 
-  private async validateResumeTemplateExists(
+  /**
+   * Validates template existence for download endpoints (returns response directly)
+   * @param templateId - The template ID to validate
+   * @param res - Express response object
+   * @returns Promise<boolean> - true if valid, false if invalid (response already sent)
+   */
+  private async validateTemplateForDownloadEndpoint(
     templateId: string,
-  ): Promise<void> {
-    try {
-      await this.resumeTemplateService.getTemplateById(templateId);
-    } catch (error) {
+    res: Response,
+  ): Promise<boolean> {
+    const templateExists =
+      await this.resumeTemplateService.validateTemplateExists(templateId);
+
+    if (!templateExists) {
       this.logger.error(
-        `Template validation failed for ID: ${templateId}`,
-        error,
+        `Template validation failed: Template ${templateId} not found in database`,
       );
-      throw new NotFoundException('Template not found');
+      res.status(404).json({
+        status: 'error',
+        message: 'Template not found',
+        code: 'TEMPLATE_NOT_FOUND',
+        data: null,
+        errors: null,
+        meta: {
+          timestamp: new Date().toISOString(),
+          path: '/api/v1/resumes/generate/download',
+        },
+      });
+      return false;
     }
+
+    this.logger.debug(`Template validation successful for ID: ${templateId}`);
+    return true;
+  }
+
+  /**
+   * Sets headers for PDF download response
+   */
+  private setPdfResponseHeaders(
+    res: Response,
+    response: {
+      filename: string;
+      resumeGenerationId: string;
+      atsScore: number;
+    },
+    contentLength: number,
+  ) {
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=${response.filename}`,
+      'Content-Length': contentLength.toString(),
+      // Custom headers for metadata
+      'X-Resume-Generation-Id': response.resumeGenerationId,
+      'X-ATS-Score': response.atsScore.toString(),
+      'X-Filename': response.filename,
+    });
   }
 }
