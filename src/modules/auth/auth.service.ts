@@ -7,8 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { SignUpDto } from './dtos/sign-up.dto';
 import { SignInDto } from './dtos/sign-in.dto';
 import { BaseMapperService } from '../../shared/services/base-mapper.service';
-import { UsageTracking } from '../../database/entities/usage-tracking.entity';
-import { RateLimitConfig } from '../../database/entities/rate-limit-config.entity';
+import { UserService } from '../user/user.service';
 import { IFeatureUsage } from '../../shared/interfaces';
 import {
   BadRequestException,
@@ -22,10 +21,7 @@ export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    @InjectRepository(UsageTracking)
-    private readonly usageTrackingRepository: Repository<UsageTracking>,
-    @InjectRepository(RateLimitConfig)
-    private readonly rateLimitConfigRepository: Repository<RateLimitConfig>,
+    private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly mapper: BaseMapperService,
   ) {}
@@ -73,7 +69,7 @@ export class AuthService {
 
     // Step 3: Generate response data in parallel
     const [featureUsage, access_token] = await Promise.all([
-      this.getFeatureUsage(user.id),
+      this.getFeatureUsage(user),
       this.generateAccessToken(user),
     ]);
 
@@ -163,39 +159,13 @@ export class AuthService {
     return sanitizedUser;
   }
 
-  private async getFeatureUsage(userId: string): Promise<Array<IFeatureUsage>> {
-    // Optimize: Parallel execution of both database queries
-    const [usageTracking, rateLimitConfigs] = await Promise.all([
-      this.usageTrackingRepository.find({
-        where: { user_id: userId },
-        select: ['feature_type', 'usage_count'], // Select only necessary fields
-      }),
-      this.rateLimitConfigRepository.find({
-        where: { is_active: true },
-        select: ['feature_type', 'monthly_limit'], // Select only necessary fields
-        cache: 300000, // Cache for 5 minutes since rate limits don't change often
-      }),
-    ]);
-
-    // Optimize: Create a Map for O(1) lookup instead of array operations
-    const featureLimitsMap = new Map<string, number>();
-    rateLimitConfigs.forEach((config) => {
-      featureLimitsMap.set(config.feature_type, config.monthly_limit);
-    });
-
-    const featureUsage: Array<IFeatureUsage> = [];
-
-    usageTracking.forEach((track) => {
-      const allowedUsage = featureLimitsMap.get(track.feature_type);
-      if (allowedUsage !== undefined) {
-        featureUsage.push({
-          feature: track.feature_type,
-          allowed: allowedUsage,
-          remaining: Math.max(0, allowedUsage - track.usage_count), // Ensure non-negative
-        });
-      }
-    });
-
-    return featureUsage;
+  /**
+   * Get feature usage for a user using the user service
+   * This follows the Single Responsibility Principle by delegating to UserService
+   * @param user User entity
+   * @returns Formatted feature usage array
+   */
+  private async getFeatureUsage(user: User): Promise<Array<IFeatureUsage>> {
+    return this.userService.getFeatureUsageForUser(user);
   }
 }
