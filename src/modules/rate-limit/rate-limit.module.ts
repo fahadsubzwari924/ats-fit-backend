@@ -7,13 +7,11 @@ import { RateLimitGuard } from './rate-limit.guard';
 import { UsageTrackingInterceptor } from './usage-tracking.interceptor';
 import { RateLimitController } from './rate-limit.controller';
 import { UserModule } from '../user/user.module';
-import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([UsageTracking, RateLimitConfig]),
     forwardRef(() => UserModule),
-    AuthModule,
   ],
   providers: [RateLimitService, RateLimitGuard, UsageTrackingInterceptor],
   controllers: [RateLimitController],

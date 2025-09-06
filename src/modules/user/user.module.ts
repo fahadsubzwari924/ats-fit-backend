@@ -6,12 +6,14 @@ import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { ResumeModule } from '../resume/resume.module';
 import { AuthModule } from '../auth/auth.module';
+import { RateLimitModule } from '../rate-limit/rate-limit.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Resume]),
     forwardRef(() => ResumeModule),
-    AuthModule,
+    forwardRef(() => AuthModule),
+    forwardRef(() => RateLimitModule),
   ],
   controllers: [UserController],
   providers: [UserService],

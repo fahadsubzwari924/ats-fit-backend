@@ -5,6 +5,10 @@ import { User, UserType, UserPlan } from '../../database/entities/user.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { Request } from 'express';
 import { UserContext } from '../auth/types/user-context.type';
+import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { IFeatureUsage } from '../../shared/interfaces';
+import { NotFoundException } from '../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 
 export interface IUserContext {
   userId?: string;
@@ -22,6 +26,7 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly rateLimitService: RateLimitService,
   ) {}
 
   /**
@@ -137,5 +142,39 @@ export class UserService {
     return this.userRepository.findOne({
       where: { guest_id: guestId, is_active: true },
     });
+  }
+
+  /**
+   * Get feature usage for a user by user ID - Reusable method
+   * This method can be used by login API and dedicated feature usage endpoint
+   * @param userId User ID
+   * @returns Formatted feature usage array
+   */
+  async getUserFeatureUsage(userId: string): Promise<Array<IFeatureUsage>> {
+    const user = await this.getUserById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
+    }
+
+    return this.getFeatureUsageForUser(user);
+  }
+
+  /**
+   * Get feature usage for a user entity - Internal reusable method
+   * This follows the DRY principle and Single Responsibility Principle
+   * @param user User entity
+   * @returns Formatted feature usage array
+   */
+  async getFeatureUsageForUser(user: User): Promise<Array<IFeatureUsage>> {
+    const userContext: UserContext = {
+      userId: user.id,
+      userType: user.user_type,
+      plan: user.plan,
+      guestId: user.guest_id || null,
+      ipAddress: user.ip_address || '127.0.0.1',
+      userAgent: user.user_agent || 'UserService',
+    };
+
+    return this.rateLimitService.getFormattedFeatureUsage(userContext);
   }
 }

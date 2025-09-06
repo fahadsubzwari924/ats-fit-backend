@@ -18,6 +18,16 @@ export interface RateLimitResult {
   limit: number;
   remaining: number;
   resetDate: Date;
+  usagePercentage: number;
+}
+
+export interface FormattedFeatureUsage {
+  feature: string;
+  allowed: number;
+  remaining: number;
+  used: number;
+  usagePercentage: string;
+  resetDate: Date;
 }
 
 @Injectable()
@@ -72,6 +82,11 @@ export class RateLimitService {
     const allowed = currentUsage < config.monthly_limit;
     const remaining = Math.max(0, config.monthly_limit - currentUsage);
 
+    // Calculate usage percentage (rounded to whole number)
+    const usagePercentage = Math.round(
+      (currentUsage / config.monthly_limit) * 100,
+    );
+
     // Calculate reset date (first day of next month)
     const resetDate = new Date(currentYear, currentMonth, 1);
 
@@ -81,6 +96,7 @@ export class RateLimitService {
       limit: config.monthly_limit,
       remaining,
       resetDate,
+      usagePercentage,
     };
   }
 
@@ -245,12 +261,13 @@ export class RateLimitService {
   }
 
   /**
-   * Get usage statistics for a user
+   * Get usage statistics for a user - Always returns both main features
    */
   async getUserUsageStats(userContext: UserContext): Promise<{
     resume_generation: RateLimitResult;
     ats_score: RateLimitResult;
   }> {
+    // Always check both main features regardless of usage history
     const [resumeGeneration, atsScore] = await Promise.all([
       this.checkRateLimit(userContext, FeatureType.RESUME_GENERATION),
       this.checkRateLimit(userContext, FeatureType.ATS_SCORE),
@@ -260,6 +277,34 @@ export class RateLimitService {
       resume_generation: resumeGeneration,
       ats_score: atsScore,
     };
+  }
+
+  /**
+   * Get formatted feature usage for API responses - Always returns both features
+   */
+  async getFormattedFeatureUsage(
+    userContext: UserContext,
+  ): Promise<FormattedFeatureUsage[]> {
+    const stats = await this.getUserUsageStats(userContext);
+
+    return [
+      {
+        feature: 'ats_score',
+        allowed: stats.ats_score.limit,
+        remaining: stats.ats_score.remaining,
+        used: stats.ats_score.currentUsage,
+        usagePercentage: `${stats.ats_score.usagePercentage}%`,
+        resetDate: stats.ats_score.resetDate,
+      },
+      {
+        feature: 'resume_generation',
+        allowed: stats.resume_generation.limit,
+        remaining: stats.resume_generation.remaining,
+        used: stats.resume_generation.currentUsage,
+        usagePercentage: `${stats.resume_generation.usagePercentage}%`,
+        resetDate: stats.resume_generation.resetDate,
+      },
+    ];
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -9,7 +9,9 @@ import { JwtStrategy } from './jwt.strategy';
 import { BaseMapperService } from '../../shared/services/base-mapper.service';
 import { JwtAuthGuard } from './jwt.guard';
 import { PremiumUserGuard } from './guards/premium-user.guard';
-import { RateLimitConfig, UsageTracking, User } from '../../database/entities';
+import { User } from '../../database/entities';
+import { RateLimitModule } from '../rate-limit/rate-limit.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
@@ -22,8 +24,10 @@ import { RateLimitConfig, UsageTracking, User } from '../../database/entities';
       }),
       inject: [ConfigService],
     }),
-    TypeOrmModule.forFeature([User, UsageTracking, RateLimitConfig]),
+    TypeOrmModule.forFeature([User]),
     ConfigModule,
+    forwardRef(() => RateLimitModule),
+    forwardRef(() => UserModule),
   ],
   providers: [
     AuthService,
