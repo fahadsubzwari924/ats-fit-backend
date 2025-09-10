@@ -6,7 +6,10 @@ import * as pdf from 'pdf-parse';
 import { BadRequestException } from '../../../shared/exceptions/custom-http-exceptions';
 import { GeneratePdfService } from './generate-pdf.service';
 import { AnalysisResultSchema } from '../schemas/resume-tailored-content.schema';
-import { AnalysisResult } from '../interfaces/resume-extracted-keywords.interface';
+import {
+  AnalysisResult,
+  TailoredContent,
+} from '../interfaces/resume-extracted-keywords.interface';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -428,5 +431,37 @@ export class ResumeService {
     return this.resumeRepository.find({
       where: { user: { id: userId }, isActive: true },
     });
+  }
+
+  /**
+   * Extract structured content from resume text without job-specific analysis
+   * This method focuses solely on parsing and structuring resume content
+   * Following Single Responsibility Principle - only handles content extraction
+   *
+   * @param resumeText - Raw text extracted from resume
+   * @returns Promise<TailoredContent> - Structured resume content
+   */
+  async extractStructuredContentFromResume(
+    resumeText: string,
+  ): Promise<TailoredContent> {
+    this.logger.log('Extracting structured content from resume text');
+
+    try {
+      // Use AI service to parse and structure the resume content
+      // This focuses on content extraction, not job matching
+      const structuredContent =
+        await this.aiService.extractResumeContent(resumeText);
+
+      this.logger.log('Successfully extracted structured content from resume');
+      return structuredContent;
+    } catch (error) {
+      this.logger.error(
+        'Failed to extract structured content from resume',
+        error,
+      );
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Resume content extraction failed: ${errorMessage}`);
+    }
   }
 }

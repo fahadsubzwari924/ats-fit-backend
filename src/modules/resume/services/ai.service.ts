@@ -423,4 +423,43 @@ export class AIService {
       );
     }
   }
+
+  /**
+   * Extract structured content from resume text without job-specific analysis
+   * This method focuses solely on parsing raw resume text into structured format
+   * Following Single Responsibility Principle - only handles content parsing
+   *
+   * @param resumeText - Raw text extracted from resume
+   * @returns Promise<TailoredContent> - Structured resume content
+   */
+  async extractResumeContent(resumeText: string): Promise<TailoredContent> {
+    const prompt =
+      this.promptService.getResumeContentExtractionPrompt(resumeText);
+
+    const result = await this.openAIService.chatCompletion({
+      model: 'gpt-4-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+    });
+
+    const content = result.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('No content in resume extraction response');
+    }
+
+    try {
+      const parsedContent: unknown = JSON.parse(content);
+
+      // Validate the structure using existing schema
+      const validatedContent = TailoredContentSchema.parse(parsedContent);
+      return validatedContent as TailoredContent;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Failed to parse resume content JSON',
+        ERROR_CODES.FAILED_TO_PARSE_ATS_EVALUATION_JSON,
+        null,
+        error,
+      );
+    }
+  }
 }

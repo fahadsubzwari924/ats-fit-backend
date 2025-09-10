@@ -1,5 +1,6 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bull';
 import { DatabaseModule } from './database/database.module';
 import { validationSchema } from './config/validation.schema';
 import { AuthModule } from './modules/auth/auth.module';
@@ -11,6 +12,8 @@ import { AtsMatchModule } from './modules/ats-match/ats-match.module';
 import { UserModule } from './modules/user/user.module';
 import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
 import { JobApplicationModule } from './modules/job-application/job-application.module';
+import { QueueModule } from './modules/queue/queue.module';
+
 import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
 import { UserContextMiddleware } from './shared/middlewares/user-context.middleware';
 import { HealthModule } from './health/health.module';
@@ -25,6 +28,28 @@ import { HealthModule } from './health/health.module';
           : 'src/config/.env.dev',
       validationSchema,
     }),
+    // Configure Bull globally with Redis
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        redis: {
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+          password: configService.get<string>('REDIS_PASSWORD'),
+          db: configService.get<number>('REDIS_DB', 0),
+        },
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        },
+      }),
+      inject: [ConfigService],
+    }),
     DatabaseModule,
     AuthModule,
     ResumeModule,
@@ -33,6 +58,7 @@ import { HealthModule } from './health/health.module';
     UserModule,
     RateLimitModule,
     JobApplicationModule,
+    QueueModule,
     HealthModule,
   ],
   providers: [
