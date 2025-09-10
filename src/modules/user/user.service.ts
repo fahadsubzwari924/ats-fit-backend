@@ -69,6 +69,7 @@ export class UserService {
       guestId: guestUser.guest_id,
       userType: UserType.GUEST,
       plan: guestUser.plan,
+      isPremium: guestUser.plan === UserPlan.PREMIUM,
       ipAddress: guestUser.ip_address,
       userAgent: guestUser.user_agent,
     };
@@ -90,6 +91,7 @@ export class UserService {
       userId: user.id,
       userType: UserType.REGISTERED,
       plan: user.plan,
+      isPremium: user.plan === UserPlan.PREMIUM,
       ipAddress: user.ip_address || '',
       userAgent: user.user_agent || '',
     };

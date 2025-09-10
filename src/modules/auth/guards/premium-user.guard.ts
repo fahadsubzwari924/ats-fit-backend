@@ -16,7 +16,7 @@ export class PremiumUserGuard implements CanActivate {
       );
     }
 
-    if (userContext.plan !== 'premium') {
+    if (!userContext.isPremium) {
       throw new ForbiddenException(
         'Premium subscription required to upload resumes',
         ERROR_CODES.PREMIUM_REQUIRED,

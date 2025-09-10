@@ -565,4 +565,94 @@ For a "Lead Back-end Engineer" role, you might extract:
       );
     }
   }
+
+  /**
+   * Generate prompt for extracting structured content from resume text
+   * This method creates a prompt focused solely on parsing and structuring resume content
+   * without any job-specific analysis or matching
+   *
+   * @param resumeText - Raw text extracted from resume
+   * @returns string - Formatted prompt for AI to extract structured content
+   */
+  getResumeContentExtractionPrompt(resumeText: string): string {
+    return `
+You are an expert resume parser. Extract and structure the following resume text into a comprehensive JSON format. Focus on accurately parsing all sections and information present in the resume without making assumptions about missing data.
+
+**Instructions:**
+1. Extract all personal/contact information
+2. Parse work experience with dates, responsibilities, and achievements
+3. Identify education, certifications, and skills
+4. Structure additional sections like projects, volunteer work, etc.
+5. Maintain original text context and meaning
+6. Use consistent date formats (YYYY-MM-DD where possible)
+7. Organize skills into logical categories
+
+**Resume Text:**
+${resumeText}
+
+**Return a JSON object with the following exact structure:**
+{
+  "title": "Professional title/role (if mentioned)",
+  "contactInfo": {
+    "name": "Full name",
+    "email": "email@example.com",
+    "phone": "phone number",
+    "location": "city, state/country",
+    "linkedin": "LinkedIn URL (if present)",
+    "portfolio": "Portfolio/website URL (if present)",
+    "github": "GitHub URL (if present)"
+  },
+  "summary": "Professional summary or objective (if present)",
+  "skills": {
+    "languages": ["Programming languages"],
+    "frameworks": ["Frameworks and libraries"],
+    "tools": ["Software tools and platforms"],
+    "databases": ["Database technologies"],
+    "concepts": ["Technical concepts and methodologies"]
+  },
+  "experience": [
+    {
+      "company": "Company name",
+      "position": "Job title",
+      "duration": "Duration as written in resume",
+      "location": "Work location",
+      "startDate": "YYYY-MM-DD or YYYY-MM",
+      "endDate": "YYYY-MM-DD or YYYY-MM or 'Present'",
+      "responsibilities": ["List of responsibilities achievements if available"],
+      "technologies": "Technologies used (if mentioned)"
+    }
+  ],
+  "education": [
+    {
+      "institution": "School/University name",
+      "degree": "Degree type and level",
+      "startDate": "YYYY-MM-DD or YYYY",
+      "endDate": "YYYY-MM-DD or YYYY or 'Present'"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "Certification name",
+      "issuer": "Issuing organization",
+      "date": "YYYY-MM-DD or YYYY-MM",
+      "expiryDate": "YYYY-MM-DD (if applicable)",
+      "credentialId": "ID number (if present)"
+    }
+  ],
+  "additionalSections": [
+    {
+      "title": "Section name (e.g., Projects, Volunteer Work, Awards)",
+      "items": ["List of items in this section"]
+    }
+  ]
+}
+
+**Important Notes:**
+- If information is not present in the resume, use empty strings or empty arrays
+- Preserve the original wording and context as much as possible  
+- Extract dates in the most specific format available in the resume
+- For skills, categorize them logically based on context
+- Include all additional sections that don't fit standard categories
+`;
+  }
 }

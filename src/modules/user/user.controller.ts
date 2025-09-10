@@ -9,12 +9,15 @@ import {
   Logger,
   Delete,
   Param,
+  Body,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
+  ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
@@ -25,8 +28,12 @@ import { MimeTypes } from '../../shared/constants/mime-types.enum';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { ResumeService } from '../resume/services/resume.service';
 import { UserService } from './user.service';
-import { Resume } from '../../database/entities';
+import { QueueService } from '../queue/queue.service';
+
+import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { IFeatureUsage } from '../../shared/interfaces';
+import { GenerateTailoredResumeDto } from '../resume/dtos/generate-tailored-resume.dto';
+import { GenerateResumeResponseDto } from '../resume/dtos/generate-resume-response.dto';
 import {
   BadRequestException,
   NotFoundException,
@@ -42,6 +49,7 @@ export class UserController {
   constructor(
     private readonly resumeService: ResumeService,
     private readonly userService: UserService,
+    private readonly queueService: QueueService,
   ) {}
 
   @Get('feature-usage')
@@ -112,23 +120,315 @@ export class UserController {
   @Post('upload-resume')
   @UseGuards(PremiumUserGuard)
   @UseInterceptors(FileInterceptor('resumeFile'))
+  @ApiOperation({
+    summary: 'Upload resume with automatic premium processing',
+    description: `
+      Upload a resume file. The file will be uploaded to S3 immediately.
+      For premium users, the resume will automatically be processed in the 
+      background for faster future resume generation.
+    `,
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Resume uploaded successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Resume ID' },
+        fileName: { type: 'string', description: 'File name' },
+        s3Url: { type: 'string', description: 'S3 URL' },
+        asyncProcessing: {
+          type: 'object',
+          description: 'Async processing info (for premium users)',
+          properties: {
+            processingId: { type: 'string' },
+            status: { type: 'string' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+  })
   async uploadResume(
     @UploadedFile(FileValidationPipe) resumeFile: Express.Multer.File,
     @Req() request: RequestWithUserContext,
-  ): Promise<Partial<Resume>> {
+  ): Promise<{
+    id: string;
+    fileName: string;
+    s3Url: string;
+    asyncProcessing?: {
+      processingId: string;
+      status: string;
+      message: string;
+    };
+  }> {
     const userId = request?.userContext?.userId;
 
     await this.validateUploadResumeRequest(resumeFile, userId);
 
+    // Original S3 upload functionality (always happens)
     const resume = await this.resumeService.uploadUserResume(
       userId,
       resumeFile,
     );
 
-    return {
+    const result = {
       id: resume.id,
       fileName: resume.fileName,
       s3Url: resume.s3Url,
+    };
+
+    // Automatic async processing for premium users
+    const isPremiumUser = request?.userContext?.isPremium;
+
+    if (isPremiumUser) {
+      this.logger.log(
+        `Starting async processing for resume ${resume.fileName} (premium user: ${userId})`,
+      );
+
+      try {
+        const extractedContent = await this.queueService.addResumeProcessingJob(
+          userId,
+          resume.fileName,
+          resumeFile.buffer,
+        );
+
+        return {
+          ...result,
+          asyncProcessing: {
+            processingId: extractedContent.id,
+            status: extractedContent.queueMessage?.status || 'queued',
+            message:
+              'Premium feature: Async processing initiated for faster future generations',
+          },
+        };
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Async processing failed for resume ${resume.fileName}: ${errorMessage}`,
+        );
+        // Continue with regular upload even if async processing fails
+        return result;
+      }
+    }
+
+    return result;
+  }
+
+  @Get('processed-resumes')
+  @ApiOperation({
+    summary: 'Get all async processed resumes for the current user',
+    description:
+      'Retrieve a list of all resumes that have been processed asynchronously for faster generation',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of processed resumes',
+    type: [ExtractedResumeContent],
+  })
+  async getProcessedResumes(
+    @Req() request: RequestWithUserContext,
+  ): Promise<ExtractedResumeContent[]> {
+    const userId = request?.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'User authentication required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+
+    this.logger.log(`Fetching processed resumes for user ${userId}`);
+    return this.queueService.getUserExtractedResumes(userId);
+  }
+
+  @Get('processed-resumes/:processingId/status')
+  @ApiOperation({
+    summary: 'Get processing status of a specific resume',
+    description: 'Check the async processing status of an uploaded resume',
+  })
+  @ApiParam({
+    name: 'processingId',
+    description: 'ID of the processing job to check status for',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Processing status',
+    type: ExtractedResumeContent,
+  })
+  async getProcessingStatus(
+    @Param('processingId') processingId: string,
+    @Req() request: RequestWithUserContext,
+  ): Promise<ExtractedResumeContent> {
+    const userId = request?.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'User authentication required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+
+    const processedResume = await this.queueService.getUserExtractedResume(
+      processingId,
+      userId,
+    );
+
+    if (!processedResume) {
+      throw new NotFoundException(
+        'Processed resume not found',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    return processedResume;
+  }
+
+  @Post('generate-fast-resume/:processingId')
+  @ApiOperation({
+    summary: 'Generate tailored resume using pre-processed content',
+    description: `
+      Generate a tailored resume using previously processed content.
+      This is significantly faster than standard generation since the resume
+      has already been analyzed and structured.
+    `,
+  })
+  @ApiParam({
+    name: 'processingId',
+    description: 'ID of the pre-processed resume to use',
+  })
+  @ApiBody({
+    type: GenerateTailoredResumeDto,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tailored resume generated successfully',
+    type: GenerateResumeResponseDto,
+  })
+  async generateFastResume(
+    @Param('processingId') processingId: string,
+    @Body() generateDto: GenerateTailoredResumeDto,
+    @Req() request: RequestWithUserContext,
+  ): Promise<GenerateResumeResponseDto> {
+    const startTime = Date.now();
+    const userId = request?.userContext?.userId;
+
+    if (!userId) {
+      throw new BadRequestException(
+        'User authentication required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+
+    // Get the pre-processed resume content
+    const extractedContent = await this.queueService.getUserExtractedResume(
+      processingId,
+      userId,
+    );
+
+    if (!extractedContent) {
+      throw new NotFoundException(
+        'Processed resume not found',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    const queueStatus = extractedContent.queueMessage?.status;
+    if (queueStatus !== 'completed') {
+      throw new BadRequestException(
+        `Resume processing not completed. Current status: ${queueStatus || 'unknown'}`,
+        ERROR_CODES.PROCESSING_NOT_COMPLETED,
+      );
+    }
+
+    this.logger.log(
+      `Generating fast resume for user ${userId} using processed content ${processingId}`,
+    );
+
+    // Create a temporary file object with pre-extracted content
+    const tempFile: Express.Multer.File = {
+      fieldname: 'resumeFile',
+      originalname: extractedContent.originalFileName,
+      encoding: '7bit',
+      mimetype: 'application/pdf',
+      buffer: Buffer.from(extractedContent.extractedText),
+      size: extractedContent.fileSize,
+      stream: null,
+      destination: '',
+      filename: '',
+      path: '',
+    };
+
+    // Use existing resume generation service
+    const result = await this.resumeService.generateTailoredResumeWithAtsScore(
+      generateDto.jobDescription,
+      generateDto.companyName,
+      tempFile,
+      generateDto.templateId,
+      {
+        userId: userId,
+        guestId: null,
+      },
+    );
+
+    const totalTime = Date.now() - startTime;
+    this.logger.log(
+      `Fast resume generation completed in ${totalTime}ms using pre-processed content`,
+    );
+
+    return result;
+  }
+
+  @Delete('processed-resumes/:processingId')
+  @ApiOperation({
+    summary: 'Delete a processed resume',
+    description: 'Remove a processed resume and its extracted content',
+  })
+  @ApiParam({
+    name: 'processingId',
+    description: 'ID of the processed resume to delete',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Processed resume deleted successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        deleted: { type: 'boolean' },
+      },
+    },
+  })
+  async deleteProcessedResume(
+    @Param('processingId') processingId: string,
+    @Req() request: RequestWithUserContext,
+  ): Promise<{ message: string; deleted: boolean }> {
+    const userId = request?.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'User authentication required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+
+    const deleted = await this.queueService.deleteExtractedResume(
+      processingId,
+      userId,
+    );
+
+    if (!deleted) {
+      throw new NotFoundException(
+        'Processed resume not found',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    this.logger.log(
+      `Processed resume ${processingId} deleted successfully for user ${userId}`,
+    );
+
+    return {
+      message: 'Processed resume deleted successfully',
+      deleted: true,
     };
   }
 
