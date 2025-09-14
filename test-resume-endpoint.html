@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Generation Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        input,
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .download-btn {
+            background-color: #28a745;
+        }
+
+        .download-btn:hover {
+            background-color: #1e7e34;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .metadata {
+            background-color: #e2e3e5;
+            border: 1px solid #d6d8db;
+            color: #383d41;
+            margin-top: 10px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            display: none;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        .pdf-preview {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        #pdfFrame {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🚀 Resume Generation Test Page</h1>
+        <p style="text-align: center; color: #666; margin-bottom: 30px;">
+            Test the enhanced resume generation endpoint with ATS scoring
+        </p>
+
+        <form id="resumeForm">
+            <div class="form-group">
+                <label for="jobDescription">Job Description *</label>
+                <textarea id="jobDescription" name="jobDescription" required
+                    placeholder="Enter the job description here...">We are looking for a Senior Software Engineer with expertise in Node.js, TypeScript, and cloud technologies. The ideal candidate should have experience with microservices architecture, Docker, and AWS services. You will be responsible for designing and implementing scalable backend systems, working with databases, and collaborating with frontend developers.</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="companyName">Company Name *</label>
+                <input type="text" id="companyName" name="companyName" required placeholder="e.g., TechCorp Inc"
+                    value="TechCorp Inc">
+            </div>
+
+            <div class="form-group">
+                <label for="templateId">Template ID *</label>
+                <input type="text" id="templateId" name="templateId" required
+                    placeholder="e.g., 4b8cb866-5e56-474b-aede-8e37f97eae5e"
+                    value="4b8cb866-5e56-474b-aede-8e37f97eae5e">
+            </div>
+
+            <div class="form-group">
+                <label for="resumeFile">Resume File (PDF) *</label>
+                <input type="file" id="resumeFile" name="resumeFile" accept=".pdf" required>
+                <small style="color: #666; font-size: 12px;">
+                    Select a PDF file containing your resume content
+                </small>
+            </div>
+
+            <div class="buttons">
+                <button type="button" id="generateBtn">📊 Generate (JSON Response)</button>
+                <button type="button" id="downloadBtn" class="download-btn">📥 Generate & Download PDF</button>
+            </div>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing your resume...</p>
+        </div>
+
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000/api/v1';
+
+        // Store generated PDFs in memory
+        let storedPdf = null;
+        let pdfMetadata = null;
+
+        document.getElementById('generateBtn').addEventListener('click', handleJsonGenerate);
+        document.getElementById('downloadBtn').addEventListener('click', handleDownloadGenerate);
+
+        async function handleJsonGenerate() {
+            const formData = getFormData();
+            if (!formData) return;
+
+            try {
+                showLoading(true);
+                hideResult();
+
+                console.log('Making request to:', `${API_BASE_URL}/resumes/generate`);
+
+                const response = await fetch(`${API_BASE_URL}/resumes/generate`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+
+                const result = await response.json();
+                console.log('Response data:', result);
+
+                if (response.ok && result.status === 'success') {
+                    // Store PDF in memory
+                    if (result.data && result.data.pdfContent) {
+                        storedPdf = result.data.pdfContent;
+                        pdfMetadata = {
+                            resumeGenerationId: result.data.resumeGenerationId,
+                            atsScore: result.data.atsScore,
+                            filename: result.data.filename,
+                            contentType: result.data.contentType
+                        };
+                        console.log('PDF stored in memory:', pdfMetadata);
+                    }
+
+                    showSuccess(result, 'json');
+
+                    // Show download button for stored PDF
+                    if (storedPdf) {
+                        showStoredPdfDownloadOption();
+                    }
+                } else {
+                    showError(result);
+                }
+
+            } catch (error) {
+                console.error('Request failed:', error);
+                showError({ message: `Network error: ${error.message}` });
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function handleDownloadGenerate() {
+            const formData = getFormData();
+            if (!formData) return;
+
+            try {
+                showLoading(true);
+                hideResult();
+
+                console.log('Making request to:', `${API_BASE_URL}/resumes/generate/download`);
+
+                const response = await fetch(`${API_BASE_URL}/resumes/generate/download`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+
+                if (response.ok) {
+                    // Extract metadata from headers
+                    const metadata = {
+                        resumeGenerationId: response.headers.get('X-Resume-Generation-Id'),
+                        atsScore: response.headers.get('X-ATS-Score'),
+                        filename: response.headers.get('X-Filename'),
+                        contentType: response.headers.get('Content-Type')
+                    };
+
+                    console.log('Metadata from headers:', metadata);
+
+                    // Get the PDF blob and store it
+                    const pdfBlob = await response.blob();
+                    console.log('PDF blob size:', pdfBlob.size, 'bytes');
+
+                    // Convert blob to base64 for storage
+                    const base64Content = await blobToBase64(pdfBlob);
+                    storedPdf = base64Content;
+                    pdfMetadata = metadata;
+
+                    console.log('PDF stored in memory from download endpoint');
+
+                    showSuccess({ data: metadata }, 'download_stored');
+
+                    // Show download button for stored PDF
+                    showStoredPdfDownloadOption();
+
+                } else {
+                    const errorResult = await response.json();
+                    console.error('Error response:', errorResult);
+                    showError(errorResult);
+                }
+
+            } catch (error) {
+                console.error('Request failed:', error);
+                showError({ message: `Network error: ${error.message}` });
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function downloadStoredPdf() {
+            if (!storedPdf || !pdfMetadata) {
+                alert('No PDF available to download. Please generate a resume first.');
+                return;
+            }
+
+            try {
+                console.log('Downloading stored PDF:', pdfMetadata.filename);
+
+                // Convert base64 to blob
+                const binaryString = atob(storedPdf);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], { type: 'application/pdf' });
+
+                // Create download link
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = pdfMetadata.filename || `resume-${Date.now()}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                console.log('✅ PDF downloaded successfully!');
+
+                // Show download confirmation
+                showDownloadConfirmation();
+
+            } catch (error) {
+                console.error('Error downloading stored PDF:', error);
+                alert('Error downloading PDF. Please try again.');
+            }
+        }
+
+        function clearStoredPdf() {
+            storedPdf = null;
+            pdfMetadata = null;
+            console.log('Stored PDF cleared from memory');
+
+            // Remove download button
+            const downloadSection = document.getElementById('storedPdfSection');
+            if (downloadSection) {
+                downloadSection.remove();
+            }
+        }
+
+        // Helper function to convert blob to base64
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const base64 = reader.result.split(',')[1]; // Remove data:application/pdf;base64, prefix
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        function showStoredPdfDownloadOption() {
+            // Remove existing section if any
+            const existingSection = document.getElementById('storedPdfSection');
+            if (existingSection) {
+                existingSection.remove();
+            }
+
+            // Create download section
+            const resultDiv = document.getElementById('result');
+            const downloadSection = document.createElement('div');
+            downloadSection.id = 'storedPdfSection';
+            downloadSection.innerHTML = `
+                <div style="background-color: #e8f4fd; border: 1px solid #bee5eb; padding: 20px; border-radius: 4px; margin-top: 20px; text-align: center;">
+                    <h4 style="color: #0c5460; margin-top: 0;">📁 PDF Ready for Download</h4>
+                    <p style="color: #0c5460; margin: 10px 0;">
+                        <strong>File:</strong> ${pdfMetadata.filename}<br>
+                        <strong>ATS Score:</strong> ${pdfMetadata.atsScore}%<br>
+                        <strong>Generation ID:</strong> ${pdfMetadata.resumeGenerationId}
+                    </p>
+                    <div style="margin-top: 15px;">
+                        <button onclick="downloadStoredPdf()" style="background-color: #28a745; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px;">
+                            📥 Download PDF Now
+                        </button>
+                        <button onclick="previewStoredPdf()" style="background-color: #17a2b8; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px;">
+                            👁️ Preview PDF
+                        </button>
+                        <button onclick="clearStoredPdf()" style="background-color: #dc3545; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+                            🗑️ Clear
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            resultDiv.appendChild(downloadSection);
+        }
+
+        function previewStoredPdf() {
+            if (!storedPdf) {
+                alert('No PDF available to preview.');
+                return;
+            }
+
+            try {
+                // Convert base64 to blob
+                const binaryString = atob(storedPdf);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+
+                // Remove existing preview
+                const existingPreview = document.getElementById('pdfPreviewSection');
+                if (existingPreview) {
+                    existingPreview.remove();
+                }
+
+                // Add PDF preview
+                const resultDiv = document.getElementById('result');
+                const pdfPreview = document.createElement('div');
+                pdfPreview.id = 'pdfPreviewSection';
+                pdfPreview.innerHTML = `
+                    <div class="pdf-preview" style="margin-top: 20px;">
+                        <h4>📄 PDF Preview:</h4>
+                        <iframe src="${url}" style="width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 4px;"></iframe>
+                        <p style="margin-top: 10px; text-align: center;">
+                            <button onclick="document.getElementById('pdfPreviewSection').remove()" style="background-color: #6c757d; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;">
+                                ❌ Close Preview
+                            </button>
+                        </p>
+                    </div>
+                `;
+
+                resultDiv.appendChild(pdfPreview);
+
+            } catch (error) {
+                console.error('Error creating PDF preview:', error);
+                alert('Error previewing PDF. Please try again.');
+            }
+        }
+
+        function showDownloadConfirmation() {
+            // Show a temporary success message
+            const confirmationDiv = document.createElement('div');
+            confirmationDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background-color: #28a745;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 4px;
+                z-index: 1000;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            `;
+            confirmationDiv.innerHTML = `
+                <strong>✅ Download Complete!</strong><br>
+                PDF has been saved to your downloads folder.
+            `;
+
+            document.body.appendChild(confirmationDiv);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                if (confirmationDiv.parentNode) {
+                    document.body.removeChild(confirmationDiv);
+                }
+            }, 3000);
+        }
+
+        function getFormData() {
+            const form = document.getElementById('resumeForm');
+            const formData = new FormData();
+
+            // Validate required fields
+            const jobDescription = document.getElementById('jobDescription').value.trim();
+            const companyName = document.getElementById('companyName').value.trim();
+            const templateId = document.getElementById('templateId').value.trim();
+            const resumeFile = document.getElementById('resumeFile').files[0];
+
+            if (!jobDescription || !companyName || !templateId || !resumeFile) {
+                alert('Please fill in all required fields and select a PDF file.');
+                return null;
+            }
+
+            formData.append('jobDescription', jobDescription);
+            formData.append('companyName', companyName);
+            formData.append('templateId', templateId);
+            formData.append('resumeFile', resumeFile);
+
+            console.log('Form data prepared:', {
+                jobDescription: jobDescription.substring(0, 100) + '...',
+                companyName,
+                templateId,
+                resumeFileName: resumeFile.name,
+                resumeFileSize: resumeFile.size
+            });
+
+            return formData;
+        }
+
+        function showLoading(show) {
+            const loading = document.getElementById('loading');
+            const buttons = document.querySelectorAll('button');
+
+            loading.style.display = show ? 'block' : 'none';
+            buttons.forEach(btn => btn.disabled = show);
+        }
+
+        function hideResult() {
+            document.getElementById('result').style.display = 'none';
+
+            // Also clear stored PDF section
+            const storedSection = document.getElementById('storedPdfSection');
+            if (storedSection) {
+                storedSection.remove();
+            }
+
+            const previewSection = document.getElementById('pdfPreviewSection');
+            if (previewSection) {
+                previewSection.remove();
+            }
+        }
+
+        function showSuccess(result, type) {
+            const resultDiv = document.getElementById('result');
+
+            let content = `<h3>✅ Success!</h3>`;
+
+            if (type === 'json') {
+                content += `
+                    <div class="metadata">
+                        <h4>📊 Metadata:</h4>
+                        <p><strong>Resume Generation ID:</strong> ${result.data.resumeGenerationId}</p>
+                        <p><strong>ATS Score:</strong> ${result.data.atsScore}%</p>
+                        <p><strong>Filename:</strong> ${result.data.filename}</p>
+                        <p><strong>Content Type:</strong> ${result.data.contentType}</p>
+                        <p><strong>PDF Status:</strong> <span style="color: green;">Stored in memory, ready for download</span></p>
+                    </div>
+                    <details style="margin-top: 15px;">
+                        <summary style="cursor: pointer; font-weight: bold;">📋 Full Response JSON</summary>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </details>
+                `;
+            } else if (type === 'download_stored') {
+                content += `
+                    <div class="metadata">
+                        <h4>📥 PDF Generated and Stored:</h4>
+                        <p><strong>Resume Generation ID:</strong> ${result.data.resumeGenerationId}</p>
+                        <p><strong>ATS Score:</strong> ${result.data.atsScore}%</p>
+                        <p><strong>Filename:</strong> ${result.data.filename}</p>
+                        <p><strong>Content Type:</strong> ${result.data.contentType}</p>
+                        <p style="color: green;"><strong>Status:</strong> PDF stored in memory, ready for download on demand!</p>
+                    </div>
+                `;
+            }
+
+            resultDiv.innerHTML = content;
+            resultDiv.className = 'result success';
+            resultDiv.style.display = 'block';
+        }
+
+        function showError(error) {
+            const resultDiv = document.getElementById('result');
+
+            const content = `
+                <h3>❌ Error</h3>
+                <p><strong>Message:</strong> ${error.message || 'Unknown error'}</p>
+                ${error.code ? `<p><strong>Code:</strong> ${error.code}</p>` : ''}
+                ${error.errors ? `<p><strong>Validation Errors:</strong></p><pre>${JSON.stringify(error.errors, null, 2)}</pre>` : ''}
+                <details style="margin-top: 15px;">
+                    <summary style="cursor: pointer; font-weight: bold;">📋 Full Error Response</summary>
+                    <pre>${JSON.stringify(error, null, 2)}</pre>
+                </details>
+            `;
+
+            resultDiv.innerHTML = content;
+            resultDiv.className = 'result error';
+            resultDiv.style.display = 'block';
+        }
+
+        // Auto-fill sample data on page load
+        window.addEventListener('load', function () {
+            console.log('🚀 Resume Generation Test Page loaded');
+            console.log('API Base URL:', API_BASE_URL);
+            console.log('📁 PDF Storage: Ready to store PDFs in memory');
+            console.log('Ready to test endpoints!');
+        });
+    </script>
+</body>
+
+</html>

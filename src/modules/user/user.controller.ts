@@ -9,7 +9,6 @@ import {
   Logger,
   Delete,
   Param,
-  Body,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,7 +16,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiParam,
-  ApiBody,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
@@ -29,11 +27,10 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { ResumeService } from '../resume/services/resume.service';
 import { UserService } from './user.service';
 import { QueueService } from '../queue/queue.service';
+import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
 
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { IFeatureUsage } from '../../shared/interfaces';
-import { GenerateTailoredResumeDto } from '../resume/dtos/generate-tailored-resume.dto';
-import { GenerateResumeResponseDto } from '../resume/dtos/generate-resume-response.dto';
 import {
   BadRequestException,
   NotFoundException,
@@ -50,6 +47,7 @@ export class UserController {
     private readonly resumeService: ResumeService,
     private readonly userService: UserService,
     private readonly queueService: QueueService,
+    private readonly extractedResumeService: ExtractedResumeService,
   ) {}
 
   @Get('feature-usage')
@@ -150,7 +148,8 @@ export class UserController {
     },
   })
   async uploadResume(
-    @UploadedFile(FileValidationPipe) resumeFile: Express.Multer.File,
+    @UploadedFile(FileValidationPipe)
+    resumeFile: Express.Multer.File | undefined,
     @Req() request: RequestWithUserContext,
   ): Promise<{
     id: string;
@@ -239,7 +238,7 @@ export class UserController {
     }
 
     this.logger.log(`Fetching processed resumes for user ${userId}`);
-    return this.queueService.getUserExtractedResumes(userId);
+    return await this.extractedResumeService.getUserExtractedResumes(userId);
   }
 
   @Get('processed-resumes/:processingId/status')
@@ -268,10 +267,11 @@ export class UserController {
       );
     }
 
-    const processedResume = await this.queueService.getUserExtractedResume(
-      processingId,
-      userId,
-    );
+    const processedResume =
+      await this.extractedResumeService.getUserExtractedResumeById(
+        processingId,
+        userId,
+      );
 
     if (!processedResume) {
       throw new NotFoundException(
@@ -281,101 +281,6 @@ export class UserController {
     }
 
     return processedResume;
-  }
-
-  @Post('generate-fast-resume/:processingId')
-  @ApiOperation({
-    summary: 'Generate tailored resume using pre-processed content',
-    description: `
-      Generate a tailored resume using previously processed content.
-      This is significantly faster than standard generation since the resume
-      has already been analyzed and structured.
-    `,
-  })
-  @ApiParam({
-    name: 'processingId',
-    description: 'ID of the pre-processed resume to use',
-  })
-  @ApiBody({
-    type: GenerateTailoredResumeDto,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Tailored resume generated successfully',
-    type: GenerateResumeResponseDto,
-  })
-  async generateFastResume(
-    @Param('processingId') processingId: string,
-    @Body() generateDto: GenerateTailoredResumeDto,
-    @Req() request: RequestWithUserContext,
-  ): Promise<GenerateResumeResponseDto> {
-    const startTime = Date.now();
-    const userId = request?.userContext?.userId;
-
-    if (!userId) {
-      throw new BadRequestException(
-        'User authentication required',
-        ERROR_CODES.AUTHENTICATION_REQUIRED,
-      );
-    }
-
-    // Get the pre-processed resume content
-    const extractedContent = await this.queueService.getUserExtractedResume(
-      processingId,
-      userId,
-    );
-
-    if (!extractedContent) {
-      throw new NotFoundException(
-        'Processed resume not found',
-        ERROR_CODES.RESUME_NOT_FOUND,
-      );
-    }
-
-    const queueStatus = extractedContent.queueMessage?.status;
-    if (queueStatus !== 'completed') {
-      throw new BadRequestException(
-        `Resume processing not completed. Current status: ${queueStatus || 'unknown'}`,
-        ERROR_CODES.PROCESSING_NOT_COMPLETED,
-      );
-    }
-
-    this.logger.log(
-      `Generating fast resume for user ${userId} using processed content ${processingId}`,
-    );
-
-    // Create a temporary file object with pre-extracted content
-    const tempFile: Express.Multer.File = {
-      fieldname: 'resumeFile',
-      originalname: extractedContent.originalFileName,
-      encoding: '7bit',
-      mimetype: 'application/pdf',
-      buffer: Buffer.from(extractedContent.extractedText),
-      size: extractedContent.fileSize,
-      stream: null,
-      destination: '',
-      filename: '',
-      path: '',
-    };
-
-    // Use existing resume generation service
-    const result = await this.resumeService.generateTailoredResumeWithAtsScore(
-      generateDto.jobDescription,
-      generateDto.companyName,
-      tempFile,
-      generateDto.templateId,
-      {
-        userId: userId,
-        guestId: null,
-      },
-    );
-
-    const totalTime = Date.now() - startTime;
-    this.logger.log(
-      `Fast resume generation completed in ${totalTime}ms using pre-processed content`,
-    );
-
-    return result;
   }
 
   @Delete('processed-resumes/:processingId')
@@ -410,7 +315,7 @@ export class UserController {
       );
     }
 
-    const deleted = await this.queueService.deleteExtractedResume(
+    const deleted = await this.extractedResumeService.deleteExtractedResume(
       processingId,
       userId,
     );
@@ -455,9 +360,17 @@ export class UserController {
   }
 
   private async validateUploadResumeRequest(
-    resumeFile: Express.Multer.File,
+    resumeFile: Express.Multer.File | undefined,
     userId: string,
   ): Promise<void> {
+    // Validate file is provided
+    if (!resumeFile) {
+      throw new BadRequestException(
+        'Resume file is required for upload',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+
     // Validate file type
     if (resumeFile.mimetype !== String(MimeTypes.PDF)) {
       throw new BadRequestException(

@@ -18,7 +18,11 @@ import { ResumeService } from './services/resume.service';
 import { GenerateTailoredResumeDto } from './dtos/generate-tailored-resume.dto';
 import { FileValidationPipe } from './pipes/file-validation.pipe';
 import { ValidationLoggingInterceptor } from './interceptors/validation-logging.interceptor';
-import { NotFoundException } from '../../shared/exceptions/custom-http-exceptions';
+import {
+  NotFoundException,
+  BadRequestException,
+} from '../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { RateLimitFeature } from '../rate-limit/rate-limit.guard';
 import { FeatureType } from '../../database/entities/usage-tracking.entity';
 import { Public } from '../auth/decorators/public.decorator';
@@ -49,13 +53,22 @@ export class ResumeController {
   @UseInterceptors(FileInterceptor('resumeFile'), ValidationLoggingInterceptor)
   async downloadGeneratedResume(
     @Body() generateResumeDto: GenerateTailoredResumeDto,
-    @UploadedFile(FileValidationPipe) resumeFile: Express.Multer.File,
+    @UploadedFile(FileValidationPipe)
+    resumeFile: Express.Multer.File | undefined,
     @Req() request: RequestWithUserContext,
     @Res({ passthrough: false }) res: Response,
   ): Promise<void> {
     const startTime = Date.now();
 
     try {
+      // Validate required resume file
+      if (!resumeFile) {
+        throw new BadRequestException(
+          'Resume file is required for resume generation',
+          ERROR_CODES.BAD_REQUEST,
+        );
+      }
+
       const authContext = request.userContext;
 
       const templateExists = await this.validateTemplateForDownloadEndpoint(

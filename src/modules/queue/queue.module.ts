@@ -6,6 +6,7 @@ import { ExtractedResumeContent } from '../../database/entities/extracted-resume
 import { ResumeProcessingProcessor } from './resume-processing.processor';
 import { ResumeModule } from '../resume/resume.module';
 import { QueueService } from './queue.service';
+import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
 
 @Module({
   imports: [
@@ -29,7 +30,7 @@ import { QueueService } from './queue.service';
     // Use forwardRef to prevent circular dependency
     forwardRef(() => ResumeModule),
   ],
-  providers: [ResumeProcessingProcessor, QueueService],
+  providers: [ResumeProcessingProcessor, QueueService, ExtractedResumeService],
   exports: [QueueService, BullModule],
 })
 export class QueueModule {}

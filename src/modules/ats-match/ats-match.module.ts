@@ -10,11 +10,13 @@ import { ClaudeService } from '../../shared/modules/external/services/claude.ser
 import { ResumeModule } from '../resume/resume.module';
 import { S3Service } from '../../shared/modules/external/services/s3.service';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
+import { QueueModule } from '../queue/queue.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AtsMatchHistory } from '../../database/entities/ats-match-history.entity';
 import { ResumeGeneration } from '../../database/entities/resume-generations.entity';
-import { Resume, User } from '../../database/entities';
+import { Resume, User, ExtractedResumeContent } from '../../database/entities';
 import { AtsMatchHistoryService } from './ats-match-history.service';
+import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
 
 @Module({
   controllers: [AtsMatchController],
@@ -27,12 +29,20 @@ import { AtsMatchHistoryService } from './ats-match-history.service';
     ClaudeService,
     S3Service,
     AtsMatchHistoryService,
+    ExtractedResumeService,
   ],
   imports: [
     SharedModule,
     ResumeModule,
     RateLimitModule,
-    TypeOrmModule.forFeature([AtsMatchHistory, ResumeGeneration, Resume, User]),
+    QueueModule,
+    TypeOrmModule.forFeature([
+      AtsMatchHistory,
+      ResumeGeneration,
+      Resume,
+      User,
+      ExtractedResumeContent,
+    ]),
   ],
   exports: [AtsMatchService],
 })

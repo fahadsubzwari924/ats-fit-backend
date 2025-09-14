@@ -9,10 +9,10 @@ import {
   QueueMessagePriority,
 } from '../../database/entities/queue-message.entity';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
-import { TailoredContent } from '../resume/interfaces/resume-extracted-keywords.interface';
 import { ResumeProcessingJobData } from './resume-processing.processor';
-import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
+import { FileUtil } from '../../shared/utils/file.util';
+import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
 
 export interface CreateQueueJobOptions {
   queueName: string;
@@ -35,8 +35,7 @@ export class QueueService {
     private readonly resumeProcessingQueue: Queue<ResumeProcessingJobData>,
     @InjectRepository(QueueMessage)
     private readonly queueMessageRepository: Repository<QueueMessage>,
-    @InjectRepository(ExtractedResumeContent)
-    private readonly extractedResumeRepository: Repository<ExtractedResumeContent>,
+    private readonly extractedResumeService: ExtractedResumeService,
   ) {}
 
   /**
@@ -89,6 +88,7 @@ export class QueueService {
 
   /**
    * Add resume processing job with proper queue tracking
+   * Uses ExtractedResumeService for business logic separation
    */
   async addResumeProcessingJob(
     userId: string,
@@ -96,12 +96,14 @@ export class QueueService {
     fileBuffer: Buffer,
   ): Promise<ExtractedResumeContent> {
     const fileSize = fileBuffer.length;
-    const fileHash = this.generateFileHash(fileBuffer);
+    const fileHash = FileUtil.generateFileHash(fileBuffer);
 
-    // Check if this file has already been processed
-    const existingContent = await this.extractedResumeRepository.findOne({
-      where: { fileHash, userId },
-    });
+    // Check if this file has already been processed using ExtractedResumeService
+    const existingContent =
+      await this.extractedResumeService.findExistingByFileHash(
+        userId,
+        fileHash,
+      );
 
     if (existingContent) {
       this.logger.log(
@@ -120,7 +122,7 @@ export class QueueService {
         fileName,
         fileSize,
         fileHash,
-        fileBuffer: fileBuffer.toString('base64'), // Store as base64 for JSON compatibility
+        fileBuffer: FileUtil.bufferToBase64(fileBuffer), // Store as base64 for JSON compatibility
       },
       priority: 'normal',
       metadata: {
@@ -130,19 +132,15 @@ export class QueueService {
       },
     });
 
-    // Create business entity with reference to queue message
-    const newRecord = this.extractedResumeRepository.create({
-      userId,
-      queueMessageId: queueMessage.id,
-      originalFileName: fileName,
-      fileSize,
-      fileHash,
-      extractedText: '', // Will be populated by the processor
-      structuredContent: {} as TailoredContent, // Will be populated by the processor
-      usageCount: 0,
-    });
-
-    const savedRecord = await this.extractedResumeRepository.save(newRecord);
+    // Create business entity using ExtractedResumeService
+    const savedRecord =
+      await this.extractedResumeService.createExtractedResumeRecord({
+        userId,
+        queueMessageId: queueMessage.id,
+        originalFileName: fileName,
+        fileSize,
+        fileHash,
+      });
 
     // Update queue message with entity ID
     await this.queueMessageRepository.update(queueMessage.id, {
@@ -251,66 +249,6 @@ export class QueueService {
   }
 
   /**
-   * Get all extracted resumes for a user
-   */
-  async getUserExtractedResumes(
-    userId: string,
-  ): Promise<ExtractedResumeContent[]> {
-    return this.extractedResumeRepository.find({
-      where: { userId },
-      relations: ['queueMessage'],
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  /**
-   * Get a specific extracted resume by ID and user ID
-   */
-  async getUserExtractedResume(
-    resumeId: string,
-    userId: string,
-  ): Promise<ExtractedResumeContent | null> {
-    const resume = await this.extractedResumeRepository.findOne({
-      where: { id: resumeId, userId },
-      relations: ['queueMessage'],
-    });
-
-    if (resume) {
-      // Update usage statistics
-      resume.incrementUsageCount();
-      await this.extractedResumeRepository.save(resume);
-    }
-
-    return resume;
-  }
-
-  /**
-   * Delete an extracted resume and its queue message
-   */
-  async deleteExtractedResume(
-    resumeId: string,
-    userId: string,
-  ): Promise<boolean> {
-    const resume = await this.extractedResumeRepository.findOne({
-      where: { id: resumeId, userId },
-      relations: ['queueMessage'],
-    });
-
-    if (!resume) {
-      return false;
-    }
-
-    // Delete business entity (queue message will be cascade deleted or kept for audit)
-    await this.extractedResumeRepository.delete({ id: resumeId, userId });
-
-    this.logger.log(`Deleted extracted resume ${resumeId} for user ${userId}`, {
-      queueMessageId: resume.queueMessageId,
-    });
-
-    return true;
-  }
-
-  /**
    * Get comprehensive queue statistics
    */
   async getQueueStats() {
@@ -321,13 +259,6 @@ export class QueueService {
       bull: bullStats,
       database: dbStats,
     };
-  }
-
-  /**
-   * Generate file hash for deduplication
-   */
-  private generateFileHash(buffer: Buffer): string {
-    return crypto.createHash('sha256').update(buffer).digest('hex');
   }
 
   /**
