@@ -16,6 +16,7 @@ import { FileValidationPipe } from '../resume/pipes/file-validation.pipe';
 import { AtsScoreResponseDto } from './dto/ats-score-response.dto';
 import { AtsMatchService } from './ats-match.service';
 import { AtsScoreRequestDto } from './dto/ats-score-request.dto';
+
 import { Public } from '../auth/decorators/public.decorator';
 import { UsageTrackingInterceptor } from '../rate-limit/usage-tracking.interceptor';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
@@ -26,6 +27,7 @@ import { AtsMatchHistoryQueryDto } from './dto/ats-match-history-query.dto';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { UserPlan, UserType } from '../../database/entities/user.entity';
 import { HelperUtil } from '../../shared/utils/helper.util';
+import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
 import {
   BadRequestException,
   NotFoundException,
@@ -37,6 +39,7 @@ export class AtsMatchController {
     private readonly atsMatchService: AtsMatchService,
     private readonly atsMatchHistoryService: AtsMatchHistoryService,
     private readonly rateLimitService: RateLimitService,
+    private readonly extractedResumeService: ExtractedResumeService,
   ) {}
 
   @Post('score')
@@ -45,8 +48,9 @@ export class AtsMatchController {
   @UseInterceptors(FileInterceptor('resumeFile'), UsageTrackingInterceptor)
   async calculateAtsScore(
     @Body() dto: AtsScoreRequestDto,
-    @UploadedFile(FileValidationPipe) resumeFile: Express.Multer.File,
-    @Req() request: RequestWithUserContext,
+    @UploadedFile(FileValidationPipe)
+    resumeFile?: Express.Multer.File,
+    @Req() request?: RequestWithUserContext,
   ): Promise<AtsScoreResponseDto> {
     const userContext = request?.userContext;
 
@@ -56,6 +60,7 @@ export class AtsMatchController {
       {
         userId: userContext?.userId,
         guestId: userContext?.guestId,
+        userType: userContext?.userType || 'guest',
       },
       {
         companyName: dto.companyName,
@@ -64,6 +69,41 @@ export class AtsMatchController {
     );
 
     return atsScoreResponse;
+  }
+
+  /**
+   * Get user's processed resume information
+   * Note: Each user can only have one processed resume at a time
+   * Returns basic info about the single processed resume or null if none exists
+   */
+  @Get('available-resumes')
+  async getAvailableResumes(
+    @Req() request: RequestWithUserContext,
+  ): Promise<any> {
+    const userContext = request?.userContext;
+
+    if (!userContext?.userId) {
+      throw new BadRequestException(
+        'Authentication required to view available resumes',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+
+    // Check if user can use pre-processed resume feature
+    if (
+      !this.extractedResumeService.canUsePreProcessedResume(
+        userContext.userType as UserType,
+      )
+    ) {
+      throw new BadRequestException(
+        'Pre-processed resume feature is not available for your user type',
+        ERROR_CODES.FEATURE_NOT_AVAILABLE_FOR_GUEST_USERS,
+      );
+    }
+
+    return await this.extractedResumeService.getUserProcessedResumeInfo(
+      userContext.userId,
+    );
   }
 
   @Get('history/:userId')
