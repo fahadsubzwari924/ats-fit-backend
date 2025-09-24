@@ -13,6 +13,7 @@ export class ClaudeService {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly maxConcurrentRequests: number;
+  private readonly requestTimeout: number;
   private activeRequests = 0;
   private requestQueue: Array<{
     params: ClaudeRequestParams;
@@ -26,6 +27,11 @@ export class ClaudeService {
     this.maxConcurrentRequests = this.configService.get<number>(
       'CLAUDE_MAX_CONCURRENT',
       5,
+    );
+    // Configure timeout - default to 60 seconds for complex resume optimization
+    this.requestTimeout = this.configService.get<number>(
+      'CLAUDE_REQUEST_TIMEOUT',
+      60000, // 60 seconds
     );
 
     if (!this.apiKey) {
@@ -124,7 +130,10 @@ export class ClaudeService {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        this.requestTimeout,
+      );
 
       const response = await fetch(this.baseUrl, {
         method: 'POST',
@@ -190,8 +199,20 @@ export class ClaudeService {
         ],
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
+
+      // Provide specific error messages for different timeout scenarios
+      if (error instanceof Error && error.name === 'AbortError') {
+        this.logger.error(
+          `Claude API request timed out after ${processingTime}ms (limit: ${this.requestTimeout}ms)`,
+        );
+        throw new Error(
+          `Claude API request timed out after ${this.requestTimeout / 1000}s. Consider increasing CLAUDE_REQUEST_TIMEOUT or reducing request complexity.`,
+        );
+      }
+
       this.logger.error(
-        `Claude API request failed after ${Date.now() - startTime}ms`,
+        `Claude API request failed after ${processingTime}ms`,
         error,
       );
       throw error;

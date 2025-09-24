@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AIService } from '../resume/services/ai.service';
 import { ResumeService } from '../resume/services/resume.service';
 import { AtsMatchController } from './ats-match.controller';
@@ -16,7 +16,7 @@ import { AtsMatchHistory } from '../../database/entities/ats-match-history.entit
 import { ResumeGeneration } from '../../database/entities/resume-generations.entity';
 import { Resume, User, ExtractedResumeContent } from '../../database/entities';
 import { AtsMatchHistoryService } from './ats-match-history.service';
-import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
+import { ResumeSelectionService } from './services/resume-selection.service';
 
 @Module({
   controllers: [AtsMatchController],
@@ -29,13 +29,13 @@ import { ExtractedResumeService } from '../resume/services/extracted-resume.serv
     ClaudeService,
     S3Service,
     AtsMatchHistoryService,
-    ExtractedResumeService,
+    ResumeSelectionService,
   ],
   imports: [
     SharedModule,
-    ResumeModule,
-    RateLimitModule,
-    QueueModule,
+    forwardRef(() => ResumeModule),
+    forwardRef(() => RateLimitModule),
+    forwardRef(() => QueueModule),
     TypeOrmModule.forFeature([
       AtsMatchHistory,
       ResumeGeneration,
@@ -44,6 +44,6 @@ import { ExtractedResumeService } from '../resume/services/extracted-resume.serv
       ExtractedResumeContent,
     ]),
   ],
-  exports: [AtsMatchService],
+  exports: [AtsMatchService, ResumeSelectionService],
 })
 export class AtsMatchModule {}
