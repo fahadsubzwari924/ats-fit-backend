@@ -6,6 +6,7 @@ import {
   ClaudeResponse,
   ClaudeAtsEvaluationParams,
 } from '../interfaces';
+import { AIErrorUtil } from '../../../utils/ai-error.util';
 
 @Injectable()
 export class ClaudeService {
@@ -64,6 +65,17 @@ export class ClaudeService {
       } catch (error) {
         this.activeRequests--;
         this.processQueue();
+
+        // Check if it's an overload error - skip retries and fail fast
+        if (AIErrorUtil.isClaudeOverloadError(error)) {
+          this.logger.warn(
+            'Claude API overloaded (529), skipping retries and failing fast for immediate fallback',
+          );
+          throw new InternalServerErrorException(
+            'Claude API overloaded - immediate fallback required',
+          );
+        }
+
         attempt++;
         if (attempt === maxRetries) {
           this.logger.error(
@@ -244,7 +256,15 @@ export class ClaudeService {
     } catch (error) {
       this.logger.error('Claude ATS evaluation failed', error);
 
-      // Provide more specific error information
+      // Check if it's an overload error - re-throw as-is to preserve the error type
+      if (AIErrorUtil.isClaudeOverloadError(error)) {
+        this.logger.warn(
+          'Claude ATS evaluation failed due to overload - re-throwing for fallback handling',
+        );
+        throw error;
+      }
+
+      // Provide more specific error information for other errors
       if (error instanceof Error) {
         if (error.message.includes('response_format')) {
           throw new InternalServerErrorException(

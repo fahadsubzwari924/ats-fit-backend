@@ -9,6 +9,7 @@ import { ExternalModule } from './modules/external/external.module';
 import { AtsMatchHistory } from '../database/entities/ats-match-history.entity';
 import { UserContextTransformationService } from './services/user-context-transformation.service';
 import { GenericUserContextTransformer } from './transformers/generic-user-context.transformer';
+import { CacheService } from './services/cache.service';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { GenericUserContextTransformer } from './transformers/generic-user-conte
     AtsEvaluationService,
     UserContextTransformationService,
     GenericUserContextTransformer,
+    CacheService,
   ],
   exports: [
     BaseMapperService,
@@ -31,6 +33,7 @@ import { GenericUserContextTransformer } from './transformers/generic-user-conte
     ExternalModule,
     UserContextTransformationService,
     GenericUserContextTransformer,
+    CacheService,
   ],
 })
 export class SharedModule {}

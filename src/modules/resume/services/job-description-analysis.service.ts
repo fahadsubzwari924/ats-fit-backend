@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OpenAIService } from '../../../shared/modules/external/services/open_ai.service';
 import { PromptService } from '../../../shared/services/prompt.service';
+import { CacheService } from '../../../shared/services/cache.service';
 import { JobAnalysisResult } from '../interfaces/job-analysis.interface';
 import {
   InternalServerErrorException,
@@ -32,6 +33,7 @@ export class JobDescriptionAnalysisService {
   constructor(
     private readonly openAIService: OpenAIService,
     private readonly promptService: PromptService,
+    private readonly cacheService: CacheService,
   ) {}
 
   /**
@@ -48,6 +50,26 @@ export class JobDescriptionAnalysisService {
     companyName: string,
   ): Promise<JobAnalysisResult> {
     const startTime = Date.now();
+
+    // Use shared cache with job analysis namespace
+    const cacheKeyData = {
+      jobDescription: jobDescription.trim(),
+      jobPosition: jobPosition.trim(),
+      companyName: companyName.trim(),
+    };
+
+    // Try to get from cache first
+    const cached = this.cacheService.get<JobAnalysisResult>(
+      this.cacheService.generateKey(cacheKeyData),
+      'job-analysis',
+    );
+
+    if (cached) {
+      this.logger.debug(
+        `Cache hit for job analysis in ${Date.now() - startTime}ms`,
+      );
+      return cached;
+    }
 
     try {
       this.validateInputs(jobDescription, jobPosition, companyName);
@@ -66,27 +88,39 @@ export class JobDescriptionAnalysisService {
         model: 'gpt-4-turbo',
         messages: [{ role: 'user', content: analysisPrompt }],
         response_format: { type: 'json_object' },
-        temperature: 0.1, // Low temperature for consistent analysis
-        max_tokens: 4000, // Sufficient for comprehensive analysis
+        temperature: 0.05, // Lower temperature for faster processing
+        max_tokens: 3200, // Reduced for faster analysis while maintaining quality
       });
 
       const result = this.parseAnalysisResponse(response);
       this.logger.log(
         `Job description analysis response parsed successfully: ${JSON.stringify(result)}`,
       );
-      const processingTime = Date.now() - startTime;
 
-      this.logger.log(
-        `Job analysis completed in ${processingTime}ms. Extracted ${result.technical.mandatorySkills.length} mandatory skills and ${result.keywords.primary.length} primary keywords`,
-      );
-
-      return {
+      const finalResult = {
         ...result,
         metadata: {
           ...result.metadata,
           processedAt: new Date(),
         },
       };
+
+      // Cache the result using shared cache service
+      this.cacheService.set(
+        this.cacheService.generateKey(cacheKeyData),
+        finalResult,
+        {
+          ttl: 24 * 60 * 60 * 1000, // 24 hours
+          namespace: 'job-analysis',
+        },
+      );
+
+      const processingTime = Date.now() - startTime;
+      this.logger.log(
+        `Job analysis completed in ${processingTime}ms. Extracted ${result.technical.mandatorySkills.length} mandatory skills and ${result.keywords.primary.length} primary keywords`,
+      );
+
+      return finalResult;
     } catch (error) {
       const processingTime = Date.now() - startTime;
       this.logger.error(

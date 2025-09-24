@@ -24,8 +24,7 @@ export interface ResumeGenerationV2Input {
  */
 export interface ProcessingMetrics {
   validationTimeMs: number;
-  jobAnalysisTimeMs: number;
-  contentProcessingTimeMs: number;
+  parallelOperationsTimeMs: number; // Combined job analysis + content processing time
   optimizationTimeMs: number;
   pdfGenerationTimeMs: number;
   atsEvaluationTimeMs: number;
