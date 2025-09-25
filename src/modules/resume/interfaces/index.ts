@@ -1,5 +1,6 @@
 // V2 Resume Generation Interfaces
 export * from './resume-generation-v2.interface';
+export * from './v2-generation-metadata.interface';
 export * from './user-context.interface';
 export * from './job-analysis.interface';
 export * from './resume-optimization.interface';

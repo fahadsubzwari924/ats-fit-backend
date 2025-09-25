@@ -18,10 +18,7 @@ import { TailoredContent } from '../../modules/resume/interfaces/resume-extracte
  */
 @Entity('extracted_resume_contents')
 @Index(['userId'])
-@Index(['queueMessageId'])
-@Index(['originalFileName'])
 @Index(['fileHash'])
-@Index(['lastUsedAt'])
 export class ExtractedResumeContent {
   @PrimaryGeneratedColumn('uuid')
   id: string;

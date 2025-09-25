@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { V2GenerationMetadata } from '../interfaces/v2-generation-metadata.interface';
 
 export class GenerateTailoredResumeV2ResponseDto {
   @ApiProperty({
@@ -67,16 +68,5 @@ export class GenerateTailoredResumeV2ResponseDto {
       },
     },
   })
-  metadata: {
-    aiModelsUsed: {
-      jobAnalysis: string;
-      contentGeneration: string;
-      atsScoring: string;
-    };
-    optimizations: {
-      keywordsAdded: number;
-      sectionsOptimized: number;
-      achievementsQuantified: number;
-    };
-  };
+  metadata: V2GenerationMetadata;
 }

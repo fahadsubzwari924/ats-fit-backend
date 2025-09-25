@@ -12,6 +12,7 @@ import {
   ResumeGenerationV2Input,
   ResumeGenerationV2Result,
 } from '../interfaces/resume-generation-v2.interface';
+import { PremiumAtsEvaluation } from '../../ats-match/interfaces/ats-evaluation.interface';
 import {
   BadRequestException,
   InternalServerErrorException,
@@ -162,8 +163,7 @@ export class ResumeGenerationOrchestratorV2Service {
         optimizationResult.optimizedContent,
       );
 
-      // PERFORMANCE OPTIMIZATION: Start ATS evaluation in background
-      // This allows us to return the PDF immediately while ATS processing continues
+      // Calculating ats score of newly generated resume
       const atsEvaluationPromise =
         this.atsEvaluationService.performAtsEvaluation(
           input.jobDescription,
@@ -181,13 +181,7 @@ export class ResumeGenerationOrchestratorV2Service {
         );
 
       // For immediate response, use cached/estimated values if available
-      interface AtsEvaluationInterface {
-        overallScore: number;
-        confidence: number;
-        detailedBreakdown: any;
-      }
-
-      let atsEvaluation: AtsEvaluationInterface;
+      let atsEvaluation: PremiumAtsEvaluation;
       let atsMatchHistoryId: string;
       let atsEvaluationTime: number;
 
@@ -204,11 +198,7 @@ export class ResumeGenerationOrchestratorV2Service {
         ]);
 
         const result = quickResult as {
-          evaluation: {
-            overallScore: number;
-            confidence: number;
-            detailedBreakdown: any;
-          };
+          evaluation: PremiumAtsEvaluation;
           atsMatchHistoryId: string;
         };
 
