@@ -8,3 +8,5 @@ export * from './resume-generations.entity';
 export * from './resume-templates.entity';
 export * from './usage-tracking.entity';
 export * from './user.entity';
+export * from '../../modules/subscription/entities/subscription.entity';
+export * from '../../modules/subscription/entities/subscription-plan.entity';

@@ -13,9 +13,18 @@ import { AllExceptionsFilter } from './shared/modules/response/exception.filter'
 import { RequestIdMiddleware } from './shared/modules/response/request-id.middleware';
 import { Request, Response, NextFunction } from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { lemonSqueezySetup } from '@lemonsqueezy/lemonsqueezy.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Lemon Squeezy SDK setup
+  lemonSqueezySetup({ apiKey: process.env.LEMON_SQUEEZY_API_KEY });
+
+  
+  // Lemon Squeezy webhook raw body parser
+  // app.use('/api/webhooks/lemonsqueezy', bodyParser.raw({ type: 'application/json' }));
+
 
   // Enable CORS for all origins (adjust for production)
   app.enableCors({
