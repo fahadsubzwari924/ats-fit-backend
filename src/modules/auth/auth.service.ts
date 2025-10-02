@@ -26,9 +26,7 @@ export class AuthService {
     private readonly mapper: BaseMapperService,
   ) {}
 
-  async signUp(
-    signUpDto: SignUpDto,
-  ): Promise<{ user: User; access_token: string }> {
+  async signUp(signUpDto: SignUpDto): Promise<User> {
     const { email, password } = signUpDto;
 
     // Check if email already exists
@@ -51,11 +49,7 @@ export class AuthService {
     });
     await this.userRepository.save(user);
 
-    // Generate JWT
-    const payload = { sub: user.id, email: user.email };
-    const access_token = await this.jwtService.signAsync(payload);
-
-    return { user, access_token };
+    return user;
   }
 
   async signIn(signInDto: SignInDto): Promise<SignInResponse> {

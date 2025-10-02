@@ -10,12 +10,14 @@ import { AtsMatchHistory } from '../database/entities/ats-match-history.entity';
 import { UserContextTransformationService } from './services/user-context-transformation.service';
 import { GenericUserContextTransformer } from './transformers/generic-user-context.transformer';
 import { CacheService } from './services/cache.service';
+import { ValidationModule } from './modules/validation/validation.module';
 
 @Module({
   imports: [
     ResponseModule,
     DatabaseModule,
     ExternalModule,
+    ValidationModule,
     TypeOrmModule.forFeature([AtsMatchHistory]),
   ],
   providers: [
@@ -31,6 +33,7 @@ import { CacheService } from './services/cache.service';
     PromptService,
     AtsEvaluationService,
     ExternalModule,
+    ValidationModule,
     UserContextTransformationService,
     GenericUserContextTransformer,
     CacheService,

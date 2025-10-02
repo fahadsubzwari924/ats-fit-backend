@@ -220,7 +220,7 @@ export class ResumeController {
       // Prepare response object for headers (matching V1 structure)
       const responseForHeaders = {
         filename: result.filename,
-        resumeGenerationId: result.atsMatchHistoryId,
+        resumeGenerationId: result.resumeGenerationId,
         atsScore: result.atsScore,
       };
 
@@ -233,6 +233,7 @@ export class ResumeController {
       const totalTime = Date.now() - startTime;
       this.logger.log(
         `V2 resume generation completed in ${totalTime}ms. ` +
+          `Resume Generation ID: ${result.resumeGenerationId}, ` +
           `ATS Score: ${result.atsScore}%, Keywords Added: ${result.keywordsAdded}, ` +
           `Optimization Confidence: ${result.optimizationConfidence}%`,
       );

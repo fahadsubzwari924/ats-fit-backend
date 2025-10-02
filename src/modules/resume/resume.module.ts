@@ -24,7 +24,12 @@ import { AIResumeOptimizerService } from './services/ai-resume-optimizer.service
 import { PdfGenerationOrchestratorService } from './services/pdf-generation-orchestrator.service';
 import { ResumeGenerationOrchestratorV2Service } from './services/resume-generation-orchestrator-v2.service';
 import { ExtractedResumeService } from './services/extracted-resume.service';
-import { ResumeGenerationValidatorService } from './services/resume-generation-validator.service';
+import { ResumeValidationServiceV2 } from './services/resume-validation-v2.service';
+import { BasicInputValidationRule } from './validation/basic-input-validation.rule';
+import { UserContextValidationRule } from './validation/user-context-validation.rule';
+import { TemplateValidationRule } from './validation/template-validation.rule';
+import { FileValidationRule } from './validation/file-validation.rule';
+import { ResumeRequirementsValidationRule } from './validation/resume-requirements-validation.rule';
 import { TransformUserContextInterceptor } from '../../shared/interceptors/transform-user-context.interceptor';
 import { SharedModule } from '../../shared/shared.module';
 import { ExternalModule } from '../../shared/modules/external/external.module';
@@ -54,7 +59,13 @@ import { AtsMatchModule } from '../ats-match/ats-match.module';
     AIService,
     PromptService,
     ExtractedResumeService,
-    ResumeGenerationValidatorService,
+    // V2 Validation Services
+    ResumeValidationServiceV2,
+    BasicInputValidationRule,
+    UserContextValidationRule,
+    TemplateValidationRule,
+    FileValidationRule,
+    ResumeRequirementsValidationRule,
     // V2 Services
     JobDescriptionAnalysisService,
     ResumeContentProcessorService,
@@ -75,7 +86,8 @@ import { AtsMatchModule } from '../ats-match/ats-match.module';
     GeneratePdfService,
     AIService,
     ExtractedResumeService,
-    ResumeGenerationValidatorService,
+    // V2 Validation Services
+    ResumeValidationServiceV2,
     // V2 Services
     JobDescriptionAnalysisService,
     ResumeContentProcessorService,

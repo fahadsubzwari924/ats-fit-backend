@@ -12,9 +12,7 @@ export class AuthController {
 
   @Public()
   @Post('signup')
-  async signUp(
-    @Body(ValidationPipe) signUpDto: SignUpDto,
-  ): Promise<{ user: User; access_token: string }> {
+  async signUp(@Body(ValidationPipe) signUpDto: SignUpDto): Promise<User> {
     return this.authService.signUp(signUpDto);
   }
 

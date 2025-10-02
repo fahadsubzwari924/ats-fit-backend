@@ -1,12 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { JobDescriptionAnalysisService } from './job-description-analysis.service';
 import { ResumeContentProcessorService } from './resume-content-processor.service';
 import { AIResumeOptimizerService } from './ai-resume-optimizer.service';
 import { PdfGenerationOrchestratorService } from './pdf-generation-orchestrator.service';
-import { ResumeGenerationValidatorService } from './resume-generation-validator.service';
+import { ResumeValidationServiceV2 } from './resume-validation-v2.service';
 import { AtsEvaluationService } from '../../../shared/services/ats-evaluation.service';
 import { PromptService } from '../../../shared/services/prompt.service';
 import { AIService } from './ai.service';
+import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import {
   ResumeGenerationV2Input,
@@ -44,7 +47,7 @@ export class ResumeGenerationOrchestratorV2Service {
   );
 
   constructor(
-    private readonly validatorService: ResumeGenerationValidatorService,
+    private readonly validatorService: ResumeValidationServiceV2,
     private readonly jobDescriptionAnalysisService: JobDescriptionAnalysisService,
     private readonly resumeContentProcessorService: ResumeContentProcessorService,
     private readonly aiResumeOptimizerService: AIResumeOptimizerService,
@@ -52,6 +55,8 @@ export class ResumeGenerationOrchestratorV2Service {
     private readonly atsEvaluationService: AtsEvaluationService,
     private readonly promptService: PromptService,
     private readonly aiService: AIService,
+    @InjectRepository(ResumeGeneration)
+    private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
   ) {}
 
   /**
@@ -155,6 +160,27 @@ export class ResumeGenerationOrchestratorV2Service {
           `Generated ${pdfResult.generationMetadata.pdfSizeBytes} byte PDF.`,
       );
 
+      // Step 4.5: Save resume generation record (following V1 pattern)
+      const dbStart = Date.now();
+      const savedGeneration = await this.saveResumeGenerationRecord({
+        user_id: input.userContext.userId,
+        guest_id: input.userContext.guestId,
+        file_path:
+          input.resumeFile?.originalname ||
+          `resume-${input.resumeId || 'processed'}`,
+        original_content: resumeContent.originalText || '',
+        tailored_content: optimizationResult.optimizedContent,
+        template_id: input.templateId,
+        job_description: input.jobDescription,
+        company_name: input.companyName,
+        analysis: optimizationResult.optimizedContent,
+      });
+      const dbTime = Date.now() - dbStart;
+
+      this.logger.debug(
+        `Resume generation record saved in ${dbTime}ms with ID: ${savedGeneration.id}`,
+      );
+
       // Step 5: Start ATS evaluation in background (non-blocking)
       const atsEvaluationStart = Date.now();
 
@@ -237,7 +263,7 @@ export class ResumeGenerationOrchestratorV2Service {
       this.logger.log(
         `V2 resume generation completed successfully in ${totalProcessingTime}ms ` +
           `(Validation: ${validationTime}ms, Parallel Operations: ${parallelOperationsTime}ms, ` +
-          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, ATS: ${atsEvaluationTime}ms)`,
+          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, ATS: ${atsEvaluationTime}ms)`,
       );
 
       // Build comprehensive result
@@ -245,6 +271,9 @@ export class ResumeGenerationOrchestratorV2Service {
         // Primary outputs
         pdfContent: pdfResult.pdfContent,
         filename: pdfResult.filename,
+
+        // Generation tracking
+        resumeGenerationId: savedGeneration.id,
 
         // ATS evaluation results
         atsScore: atsEvaluation.overallScore,
@@ -266,6 +295,7 @@ export class ResumeGenerationOrchestratorV2Service {
           parallelOperationsTimeMs: parallelOperationsTime,
           optimizationTimeMs: optimizationTime,
           pdfGenerationTimeMs: pdfGenerationTime,
+          dbSaveTimeMs: dbTime,
           atsEvaluationTimeMs: atsEvaluationTime,
           totalProcessingTimeMs: totalProcessingTime,
         },
@@ -333,6 +363,36 @@ export class ResumeGenerationOrchestratorV2Service {
       // Handle any unexpected errors
       throw new InternalServerErrorException(
         'Resume generation failed due to an internal error. Please try again or contact support if the issue persists.',
+        ERROR_CODES.INTERNAL_SERVER,
+      );
+    }
+  }
+
+  /**
+   * Save resume generation record following V1 pattern
+   * This creates a database record to track the resume generation
+   */
+  private async saveResumeGenerationRecord(
+    payload: Partial<ResumeGeneration>,
+  ): Promise<ResumeGeneration> {
+    try {
+      const resumeGeneration = this.resumeGenerationRepository.create(payload);
+      return await this.resumeGenerationRepository.save(resumeGeneration);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown database error';
+      this.logger.error('Failed to save resume generation record', {
+        error: errorMessage,
+        payload: {
+          user_id: payload.user_id,
+          guest_id: payload.guest_id,
+          template_id: payload.template_id,
+          company_name: payload.company_name,
+        },
+      });
+
+      throw new InternalServerErrorException(
+        'Failed to save resume generation record. Please try again or contact support if the issue persists.',
         ERROR_CODES.INTERNAL_SERVER,
       );
     }

@@ -27,6 +27,7 @@ export interface ProcessingMetrics {
   parallelOperationsTimeMs: number; // Combined job analysis + content processing time
   optimizationTimeMs: number;
   pdfGenerationTimeMs: number;
+  dbSaveTimeMs: number;
   atsEvaluationTimeMs: number;
   totalProcessingTimeMs: number;
 }
@@ -41,6 +42,9 @@ export interface ResumeGenerationV2Result {
   // Primary outputs
   pdfContent: string; // base64 encoded PDF
   filename: string;
+
+  // Generation tracking
+  resumeGenerationId: string;
 
   // ATS evaluation results
   atsScore: number;
