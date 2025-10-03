@@ -1,6 +1,6 @@
 // resume.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { ResumeAnalysis } from '../../modules/resume/interfaces/resume-extracted-keywords.interface';
+import { ResumeAnalysis } from '../../modules/resume-tailoring/interfaces/resume-extracted-keywords.interface';
 import {
   BadRequestException,
   InternalServerErrorException,
@@ -653,6 +653,249 @@ ${resumeText}
 - Extract dates in the most specific format available in the resume
 - For skills, categorize them logically based on context
 - Include all additional sections that don't fit standard categories
+`;
+  }
+
+  /**
+   * Generate comprehensive job description analysis prompt for GPT-4 Turbo
+   * Extracts technical requirements, keywords, and context for resume optimization
+   *
+   * @param jobDescription - Raw job description text
+   * @param jobPosition - Job position title
+   * @param companyName - Company name
+   * @returns string - Formatted prompt for comprehensive job analysis
+   */
+  getJobDescriptionAnalysisPrompt(
+    jobDescription: string,
+    jobPosition: string,
+    companyName: string,
+  ): string {
+    return `
+You are an expert job market analyst and ATS optimization specialist. Analyze the following job description comprehensively and extract all relevant information for resume tailoring and ATS optimization.
+
+**Job Position:** ${jobPosition}
+**Company:** ${companyName}
+
+**Job Description:**
+${jobDescription}
+
+**Analysis Instructions:**
+1. **Position Analysis**: Determine job level, department, and work arrangement
+2. **Technical Requirements**: Categorize all technical skills by importance and type
+3. **Experience Requirements**: Extract years of experience and domain knowledge
+4. **Qualifications**: Separate required vs preferred education and certifications
+5. **Context Analysis**: Understand company stage, team dynamics, and success metrics
+6. **ATS Keywords**: Identify primary keywords most critical for ATS scoring
+7. **Synonyms**: Map technical terms to their common alternatives
+
+**Important Guidelines:**
+- Be comprehensive but avoid duplication
+- Prioritize explicit requirements over inferred ones
+- Consider both technical and soft skill requirements
+- Extract quantifiable metrics when mentioned
+- Identify industry-specific terminology
+- Consider modern vs legacy technology preferences
+
+**Return Format (JSON):**
+{
+  "position": {
+    "title": "string",
+    "level": "junior|mid|senior|lead|principal|director",
+    "department": "string",
+    "workType": "remote|hybrid|onsite|flexible"
+  },
+  "technical": {
+    "mandatorySkills": ["string"],
+    "preferredSkills": ["string"],
+    "programmingLanguages": ["string"],
+    "frameworks": ["string"],
+    "tools": ["string"],
+    "databases": ["string"],
+    "cloudPlatforms": ["string"],
+    "methodologies": ["string"]
+  },
+  "experience": {
+    "minimumYears": number,
+    "maximumYears": number,
+    "industryPreferences": ["string"],
+    "domainExperience": ["string"]
+  },
+  "qualifications": {
+    "education": {
+      "required": ["string"],
+      "preferred": ["string"]
+    },
+    "certifications": ["string"],
+    "softSkills": ["string"],
+    "leadership": ["string"]
+  },
+  "context": {
+    "companyStage": "string",
+    "teamSize": "string",
+    "reportingStructure": "string",
+    "keyResponsibilities": ["string"],
+    "successMetrics": ["string"]
+  },
+  "keywords": {
+    "primary": ["string"],
+    "secondary": ["string"],
+    "synonyms": {
+      "keyword": ["synonym1", "synonym2"]
+    }
+  },
+  "metadata": {
+    "complexity": "low|medium|high",
+    "competitiveness": "low|medium|high",
+    "confidenceScore": number
+  }
+}
+
+**Quality Standards:**
+- Ensure all arrays contain relevant, non-duplicate items
+- Confidence score should be 0-100 based on job description clarity
+- Complexity based on technical requirements and responsibilities
+- Competitiveness based on skill requirements and market demand
+`;
+  }
+
+  /**
+   * Generate comprehensive resume optimization prompt for Claude AI
+   * Transforms candidate resume content based on job analysis and requirements
+   *
+   * @param jobAnalysis - Comprehensive job analysis result
+   * @param candidateContent - Current resume content structure
+   * @param companyName - Target company name
+   * @param jobPosition - Target job position
+   * @returns string - Formatted prompt for AI resume optimization
+   */
+  getResumeOptimizationPrompt(
+    jobAnalysis: Record<string, any>,
+    candidateContent: Record<string, any>,
+    companyName: string,
+    jobPosition: string,
+  ): string {
+    // Safely extract values with proper type checking
+    const technical = (jobAnalysis.technical as Record<string, any>) || {};
+    const keywords = (jobAnalysis.keywords as Record<string, any>) || {};
+
+    return `
+You are an expert resume optimization specialist. Your task is to transform a candidate's resume into a tailored, quantifiable, and job-specific version. Your output MUST be valid JSON matching the specified structure.
+
+**CRITICAL WORK EXPERIENCE INSTRUCTION:**
+- Extract and include ALL work experiences from the candidate's resume
+- For the most recent job, include ALL bullet points (all responsibilities/achievements)
+- For each older job, include UP TO 3 of the most relevant bullet points
+- **Do NOT copy bullet points verbatim.** For each selected bullet point, tailor it to the job description and rewrite it as a quantifiable, measurable achievement
+- **MANDATORY DATE FIELDS:** Every experience entry MUST have valid startDate and endDate fields
+
+**TARGET JOB INFORMATION:**
+- Position: ${jobPosition}
+- Company: ${companyName}
+- Mandatory Skills: ${Array.isArray(technical.mandatorySkills) ? technical.mandatorySkills.join(', ') : 'None specified'}
+- Programming Languages: ${Array.isArray(technical.programmingLanguages) ? technical.programmingLanguages.join(', ') : 'None specified'}
+- Frameworks: ${Array.isArray(technical.frameworks) ? technical.frameworks.join(', ') : 'None specified'}
+- Primary Keywords: ${Array.isArray(keywords.primary) ? keywords.primary.join(', ') : 'None specified'}
+
+**CURRENT CANDIDATE RESUME:**
+${JSON.stringify(candidateContent, null, 2)}
+
+**OPTIMIZATION INSTRUCTIONS:**
+1. **Transform Responsibilities into Achievements:**
+   - Convert every responsibility into a quantifiable achievement using the CAR method (Context, Action, Result)
+   - Prioritize existing numbers in the resume; enhance with context
+   - For missing numbers, add realistic mid-range metrics (e.g., 25-50% improvement, $50K-$300K impact, 3-8 team members)
+   - Tailor content to match job description keywords and focus areas
+
+2. **Work Experience Requirements:**
+   - Latest job: Include all bullet points (all responsibilities/achievements)
+   - Older jobs: Include up to 3 of the most relevant bullet points
+   - **CRITICAL:** Every experience entry must have valid startDate and endDate fields in proper format
+
+3. **Date Format Requirements:**
+   - Use consistent date formats: "YYYY-MM-DD", "YYYY-MM", or "YYYY" 
+   - For current positions, use "Present" as endDate
+   - Never use "N/A" or invalid dates
+   - If original dates are unclear, derive reasonable dates from context
+
+4. **Skills and Summary:**
+   - Write a quantifiable summary highlighting years of experience and key achievements
+   - Categorize skills into languages, frameworks, tools, databases, and concepts
+   - Align skills with job description requirements
+
+**OUTPUT REQUIREMENTS:**
+Return valid JSON with the EXACT structure below. Ensure every achievement includes measurable metrics.
+
+{
+  "optimizedContent": {
+    "title": "string",
+    "contactInfo": {
+      "name": "string",
+      "email": "string", 
+      "phone": "string",
+      "location": "string",
+      "linkedin": "string",
+      "portfolio": "string",
+      "github": "string"
+    },
+    "summary": "string with quantifiable highlights",
+    "skills": {
+      "languages": ["string"],
+      "frameworks": ["string"],
+      "tools": ["string"],
+      "databases": ["string"],
+      "concepts": ["string"]
+    },
+    "experience": [{
+      "company": "string",
+      "position": "string",
+      "duration": "string",
+      "location": "string",
+      "responsibilities": ["quantifiable achievement"],
+      "achievements": ["quantifiable achievement"],
+      "startDate": "string - MUST BE VALID DATE",
+      "endDate": "string - MUST BE VALID DATE OR 'Present'",
+      "technologies": "string"
+    }],
+    "education": [{
+      "institution": "string",
+      "degree": "string",
+      "major": "string",
+      "startDate": "string - MUST BE VALID DATE",
+      "endDate": "string - MUST BE VALID DATE"
+    }],
+    "certifications": [{
+      "name": "string",
+      "issuer": "string",
+      "date": "string",
+      "expiryDate": "string",
+      "credentialId": "string"
+    }],
+    "additionalSections": [{
+      "title": "string",
+      "items": ["quantifiable item"]
+    }]
+  },
+  "optimizationMetrics": {
+    "keywordsAdded": 5,
+    "sectionsOptimized": 3,
+    "achievementsQuantified": 10,
+    "skillsAligned": 8,
+    "confidenceScore": 85
+  },
+  "optimizationStrategy": {
+    "primaryFocus": ["keyword integration", "achievement quantification"],
+    "improvementAreas": ["technical skills", "leadership experience"],
+    "atsOptimizations": ["keyword density", "format standardization"],
+    "recommendations": ["add specific metrics", "highlight relevant projects"]
+  }
+}
+
+**CRITICAL VALIDATION REQUIREMENTS:**
+- EVERY experience entry MUST have valid startDate and endDate fields
+- NEVER use "N/A", "Unknown", or invalid values for dates
+- Include ALL work experiences from candidate resume (don't skip any)
+- Ensure experience array is complete and properly formatted
+- Use realistic, mid-range estimates for metrics; avoid exaggeration
 `;
   }
 }

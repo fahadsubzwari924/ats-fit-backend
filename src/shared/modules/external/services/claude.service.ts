@@ -6,6 +6,7 @@ import {
   ClaudeResponse,
   ClaudeAtsEvaluationParams,
 } from '../interfaces';
+import { AIErrorUtil } from '../../../utils/ai-error.util';
 
 @Injectable()
 export class ClaudeService {
@@ -13,6 +14,7 @@ export class ClaudeService {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly maxConcurrentRequests: number;
+  private readonly requestTimeout: number;
   private activeRequests = 0;
   private requestQueue: Array<{
     params: ClaudeRequestParams;
@@ -26,6 +28,11 @@ export class ClaudeService {
     this.maxConcurrentRequests = this.configService.get<number>(
       'CLAUDE_MAX_CONCURRENT',
       5,
+    );
+    // Configure timeout - default to 60 seconds for complex resume optimization
+    this.requestTimeout = this.configService.get<number>(
+      'CLAUDE_REQUEST_TIMEOUT',
+      60000, // 60 seconds
     );
 
     if (!this.apiKey) {
@@ -58,6 +65,17 @@ export class ClaudeService {
       } catch (error) {
         this.activeRequests--;
         this.processQueue();
+
+        // Check if it's an overload error - skip retries and fail fast
+        if (AIErrorUtil.isClaudeOverloadError(error)) {
+          this.logger.warn(
+            'Claude API overloaded (529), skipping retries and failing fast for immediate fallback',
+          );
+          throw new InternalServerErrorException(
+            'Claude API overloaded - immediate fallback required',
+          );
+        }
+
         attempt++;
         if (attempt === maxRetries) {
           this.logger.error(
@@ -124,7 +142,10 @@ export class ClaudeService {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        this.requestTimeout,
+      );
 
       const response = await fetch(this.baseUrl, {
         method: 'POST',
@@ -190,8 +211,20 @@ export class ClaudeService {
         ],
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
+
+      // Provide specific error messages for different timeout scenarios
+      if (error instanceof Error && error.name === 'AbortError') {
+        this.logger.error(
+          `Claude API request timed out after ${processingTime}ms (limit: ${this.requestTimeout}ms)`,
+        );
+        throw new Error(
+          `Claude API request timed out after ${this.requestTimeout / 1000}s. Consider increasing CLAUDE_REQUEST_TIMEOUT or reducing request complexity.`,
+        );
+      }
+
       this.logger.error(
-        `Claude API request failed after ${Date.now() - startTime}ms`,
+        `Claude API request failed after ${processingTime}ms`,
         error,
       );
       throw error;
@@ -223,7 +256,15 @@ export class ClaudeService {
     } catch (error) {
       this.logger.error('Claude ATS evaluation failed', error);
 
-      // Provide more specific error information
+      // Check if it's an overload error - re-throw as-is to preserve the error type
+      if (AIErrorUtil.isClaudeOverloadError(error)) {
+        this.logger.warn(
+          'Claude ATS evaluation failed due to overload - re-throwing for fallback handling',
+        );
+        throw error;
+      }
+
+      // Provide more specific error information for other errors
       if (error instanceof Error) {
         if (error.message.includes('response_format')) {
           throw new InternalServerErrorException(

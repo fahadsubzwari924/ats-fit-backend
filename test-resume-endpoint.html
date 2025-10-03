@@ -233,9 +233,9 @@
                 showLoading(true);
                 hideResult();
 
-                console.log('Making request to:', `${API_BASE_URL}/resumes/generate`);
+                console.log('Making request to:', `${API_BASE_URL}/resume-tailoring/generate`);
 
-                const response = await fetch(`${API_BASE_URL}/resumes/generate`, {
+                const response = await fetch(`${API_BASE_URL}/resume-tailoring/generate`, {
                     method: 'POST',
                     body: formData
                 });
@@ -285,9 +285,9 @@
                 showLoading(true);
                 hideResult();
 
-                console.log('Making request to:', `${API_BASE_URL}/resumes/generate/download`);
+                console.log('Making request to:', `${API_BASE_URL}/resume-tailoring/generate/download`);
 
-                const response = await fetch(`${API_BASE_URL}/resumes/generate/download`, {
+                const response = await fetch(`${API_BASE_URL}/resume-tailoring/generate/download`, {
                     method: 'POST',
                     body: formData
                 });

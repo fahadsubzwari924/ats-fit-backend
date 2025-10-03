@@ -9,7 +9,7 @@ import {
   UnauthorizedException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
-import { ExtractedResumeService } from '../../resume/services/extracted-resume.service';
+import { ResumeContentService } from '../../resume-tailoring/services/resume-content.service';
 
 export interface ResumeSelectionOptions {
   resumeId?: string;
@@ -42,7 +42,7 @@ export class ResumeSelectionService {
   constructor(
     @InjectRepository(ExtractedResumeContent)
     private readonly extractedResumeRepository: Repository<ExtractedResumeContent>,
-    private readonly extractedResumeService: ExtractedResumeService,
+    private readonly resumeContentService: ResumeContentService,
   ) {}
 
   /**
@@ -99,7 +99,7 @@ export class ResumeSelectionService {
     resumeId: string,
     userId: string,
   ): Promise<ExtractedResumeContent> {
-    const resume = await this.extractedResumeService.getUserExtractedResumeById(
+    const resume = await this.resumeContentService.getUserExtractedResumeById(
       resumeId,
       userId,
     );

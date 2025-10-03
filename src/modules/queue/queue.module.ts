@@ -4,9 +4,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { QueueMessage } from '../../database/entities/queue-message.entity';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { ResumeProcessingProcessor } from './resume-processing.processor';
-import { ResumeModule } from '../resume/resume.module';
+import { ResumeTailoringModule } from '../resume-tailoring/resume-tailoring.module';
 import { QueueService } from './queue.service';
-import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
+import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
 
 @Module({
   imports: [
@@ -28,9 +28,9 @@ import { ExtractedResumeService } from '../resume/services/extracted-resume.serv
     TypeOrmModule.forFeature([QueueMessage, ExtractedResumeContent]),
 
     // Use forwardRef to prevent circular dependency
-    forwardRef(() => ResumeModule),
+    forwardRef(() => ResumeTailoringModule),
   ],
-  providers: [ResumeProcessingProcessor, QueueService, ExtractedResumeService],
+  providers: [ResumeProcessingProcessor, QueueService, ResumeContentService],
   exports: [QueueService, BullModule],
 })
 export class QueueModule {}

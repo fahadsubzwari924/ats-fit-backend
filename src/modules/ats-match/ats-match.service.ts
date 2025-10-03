@@ -5,12 +5,12 @@ import {
   InternalServerErrorException,
 } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
-import { ResumeService } from '../resume/services/resume.service';
-import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
+import { ResumeService } from '../resume-tailoring/services/resume.service';
+import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
 import { PremiumAtsEvaluation } from './interfaces';
-import { PromptService } from '../resume/services';
+import { PromptService } from '../resume-tailoring/services';
 import { AtsEvaluationService } from '../../shared/services/ats-evaluation.service';
-import { AIService } from '../resume/services/ai.service';
+import { AIContentService } from '../../shared/services/ai-content.service';
 import { ResumeInputData } from '../../shared/interfaces/resume-input.interface';
 import {
   ResumeSourceStrategy,
@@ -25,8 +25,8 @@ export class AtsMatchService {
     private readonly resumeService: ResumeService,
     private readonly promptService: PromptService,
     private readonly atsEvaluationService: AtsEvaluationService,
-    private readonly aiService: AIService,
-    private readonly extractedResumeService: ExtractedResumeService,
+    private readonly aiContentService: AIContentService,
+    private readonly resumeContentService: ResumeContentService,
   ) {}
 
   /**
@@ -45,9 +45,7 @@ export class AtsMatchService {
     // For registered users, check if they have processed resume and are trying to upload file
     if (userContext?.userId && userContext.userType !== 'guest') {
       const hasProcessedResume =
-        await this.extractedResumeService.hasProcessedResume(
-          userContext.userId,
-        );
+        await this.resumeContentService.hasProcessedResume(userContext.userId);
 
       if (hasProcessedResume && hasFileUpload) {
         throw new BadRequestException(
@@ -79,9 +77,7 @@ export class AtsMatchService {
     // Registered users without processed resume require file upload
     if (userContext?.userId && userContext.userType !== 'guest') {
       const hasProcessedResume =
-        await this.extractedResumeService.hasProcessedResume(
-          userContext.userId,
-        );
+        await this.resumeContentService.hasProcessedResume(userContext.userId);
 
       if (!hasProcessedResume && !hasFileUpload) {
         throw new BadRequestException(
@@ -113,9 +109,7 @@ export class AtsMatchService {
     // Registered users - check for existing processed resume
     if (userContext?.userId) {
       const hasProcessedResume =
-        await this.extractedResumeService.hasProcessedResume(
-          userContext.userId,
-        );
+        await this.resumeContentService.hasProcessedResume(userContext.userId);
 
       if (hasProcessedResume) {
         // Use existing processed resume (validation already handled)
@@ -184,7 +178,7 @@ export class AtsMatchService {
       case ResumeSourceStrategy.REGISTERED_USE_EXISTING: {
         // Use existing processed resume
         const userResume =
-          await this.extractedResumeService.getUserProcessedResume(
+          await this.resumeContentService.getUserProcessedResume(
             userContext.userId,
           );
 
@@ -252,7 +246,7 @@ export class AtsMatchService {
           jobDescription,
           resumeInput.text,
           this.promptService,
-          this.aiService,
+          this.aiContentService,
           userContext,
           additionalData,
         );
