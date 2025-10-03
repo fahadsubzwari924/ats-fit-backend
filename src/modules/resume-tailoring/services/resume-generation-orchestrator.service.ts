@@ -1,20 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JobDescriptionAnalysisService } from './job-description-analysis.service';
+import { JobAnalysisService } from './job-analysis.service';
 import { ResumeContentProcessorService } from './resume-content-processor.service';
-import { AIResumeOptimizerService } from './ai-resume-optimizer.service';
+import { ResumeOptimizerService } from './resume-optimizer.service';
 import { PdfGenerationOrchestratorService } from './pdf-generation-orchestrator.service';
-import { ResumeValidationServiceV2 } from './resume-validation-v2.service';
+import { ResumeValidationService } from './resume-validation.service';
 import { AtsEvaluationService } from '../../../shared/services/ats-evaluation.service';
 import { PromptService } from '../../../shared/services/prompt.service';
-import { AIService } from './ai.service';
+import { AIContentService } from '../../../shared/services/ai-content.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import {
-  ResumeGenerationV2Input,
-  ResumeGenerationV2Result,
-} from '../interfaces/resume-generation-v2.interface';
+  ResumeGenerationInput,
+  ResumeGenerationResult,
+} from '../interfaces/resume-generation.interface';
 import { PremiumAtsEvaluation } from '../../ats-match/interfaces/ats-evaluation.interface';
 import {
   BadRequestException,
@@ -24,52 +24,45 @@ import {
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 
 /**
- * Resume Generation Orchestrator V2 Service
+ * Resume Generation Orchestrator Service
  *
- * This service orchestrates the complex multi-step process of generating
- * an AI-optimized, ATS-scored resume. It coordinates between multiple
- * specialized services while providing comprehensive metrics and error handling.
+ * This service orchestrates the complete AI-powered resume generation pipeline
+ * using improved architecture, validation, and performance optimizations.
  *
  * Key Responsibilities:
- * - Orchestrate the complete V2 resume generation pipeline
- * - Handle timing and performance metrics for each step
- * - Provide detailed error handling and recovery strategies
- * - Convert between different data formats as needed
- * - Ensure proper sequencing and data flow between services
- *
- * This service removes the orchestration complexity from the controller,
- * allowing the controller to focus solely on HTTP concerns.
+ * - Comprehensive input validation using the validation framework
+ * - Orchestrate the complete resume generation pipeline
  */
 @Injectable()
-export class ResumeGenerationOrchestratorV2Service {
+export class ResumeGenerationOrchestratorService {
   private readonly logger = new Logger(
-    ResumeGenerationOrchestratorV2Service.name,
+    ResumeGenerationOrchestratorService.name,
   );
 
   constructor(
-    private readonly validatorService: ResumeValidationServiceV2,
-    private readonly jobDescriptionAnalysisService: JobDescriptionAnalysisService,
+    private readonly validatorService: ResumeValidationService,
+    private readonly jobAnalysisService: JobAnalysisService,
     private readonly resumeContentProcessorService: ResumeContentProcessorService,
-    private readonly aiResumeOptimizerService: AIResumeOptimizerService,
+    private readonly resumeOptimizerService: ResumeOptimizerService,
     private readonly pdfGenerationOrchestratorService: PdfGenerationOrchestratorService,
     private readonly atsEvaluationService: AtsEvaluationService,
     private readonly promptService: PromptService,
-    private readonly aiService: AIService,
+    private readonly aiContentService: AIContentService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
   ) {}
 
   /**
-   * Execute the complete V2 resume generation pipeline
+   * Execute the complete resume generation pipeline
    */
   async generateOptimizedResume(
-    input: ResumeGenerationV2Input,
-  ): Promise<ResumeGenerationV2Result> {
+    input: ResumeGenerationInput,
+  ): Promise<ResumeGenerationResult> {
     const startTime = Date.now();
 
     try {
       this.logger.log(
-        `Starting V2 resume generation for ${input.jobPosition} at ${input.companyName}`,
+        `Starting resume generation for ${input.jobPosition} at ${input.companyName}`,
       );
 
       // STEP 0: Comprehensive upfront validation (FAIL FAST)
@@ -106,7 +99,7 @@ export class ResumeGenerationOrchestratorV2Service {
       // Execute job analysis and resume content processing in parallel
       const [jobAnalysis, resumeContent] = await Promise.all([
         // Step 1: Analyze job description using GPT-4 Turbo
-        this.jobDescriptionAnalysisService.analyzeJobDescription(
+        this.jobAnalysisService.analyzeJobDescription(
           input.jobDescription,
           input.jobPosition,
           input.companyName,
@@ -130,7 +123,7 @@ export class ResumeGenerationOrchestratorV2Service {
       // Step 3: Optimize resume content using Claude 3.5 Sonnet
       const optimizationStart = Date.now();
       const optimizationResult =
-        await this.aiResumeOptimizerService.optimizeResumeContent(
+        await this.resumeOptimizerService.optimizeResumeContent(
           jobAnalysis,
           resumeContent.content as TailoredContent,
           input.companyName,
@@ -195,7 +188,7 @@ export class ResumeGenerationOrchestratorV2Service {
           input.jobDescription,
           resumeTextForAts,
           this.promptService,
-          this.aiService,
+          this.aiContentService,
           {
             userId: input.userContext.userId,
             guestId: input.userContext.guestId,
@@ -261,7 +254,7 @@ export class ResumeGenerationOrchestratorV2Service {
       const totalProcessingTime = Date.now() - startTime;
 
       this.logger.log(
-        `V2 resume generation completed successfully in ${totalProcessingTime}ms ` +
+        `Resume generation completed successfully in ${totalProcessingTime}ms ` +
           `(Validation: ${validationTime}ms, Parallel Operations: ${parallelOperationsTime}ms, ` +
           `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, ATS: ${atsEvaluationTime}ms)`,
       );
@@ -312,7 +305,7 @@ export class ResumeGenerationOrchestratorV2Service {
     } catch (error) {
       const processingTime = Date.now() - startTime;
       this.logger.error(
-        `V2 resume generation failed after ${processingTime}ms`,
+        `Resume generation failed after ${processingTime}ms`,
         error,
       );
 

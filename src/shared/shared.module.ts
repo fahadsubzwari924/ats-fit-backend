@@ -11,6 +11,8 @@ import { UserContextTransformationService } from './services/user-context-transf
 import { GenericUserContextTransformer } from './transformers/generic-user-context.transformer';
 import { CacheService } from './services/cache.service';
 import { ValidationModule } from './modules/validation/validation.module';
+import { AIContentService } from './services/ai-content.service';
+import { FileValidationPipe } from './pipes/file-validation.pipe';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { ValidationModule } from './modules/validation/validation.module';
     UserContextTransformationService,
     GenericUserContextTransformer,
     CacheService,
+    AIContentService,
+    FileValidationPipe,
   ],
   exports: [
     BaseMapperService,
@@ -37,6 +41,8 @@ import { ValidationModule } from './modules/validation/validation.module';
     UserContextTransformationService,
     GenericUserContextTransformer,
     CacheService,
+    AIContentService,
+    FileValidationPipe,
   ],
 })
 export class SharedModule {}

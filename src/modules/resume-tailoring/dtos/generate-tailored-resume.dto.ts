@@ -9,7 +9,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
-export class GenerateTailoredResumeV2Dto {
+export class GenerateTailoredResumeDto {
   @ApiProperty({
     description: 'Job position title/name',
     example: 'Senior Full Stack Developer',

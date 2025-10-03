@@ -1,5 +1,5 @@
 // TailoredContent type commented out due to type complexity
-// import { TailoredContent } from '../../resume/interfaces/resume-extracted-keywords.interface';
+// import { TailoredContent } from '../../resume-tailoring/interfaces/resume-extracted-keywords.interface';
 
 /**
  * Input interface for ATS score calculation

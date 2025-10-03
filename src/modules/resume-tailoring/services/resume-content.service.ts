@@ -3,14 +3,20 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExtractedResumeContent } from '../../../database/entities/extracted-resume-content.entity';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
+import { IResumeContentProvider } from '../../../shared/interfaces/resume-content-provider.interface';
 
 /**
- * Service responsible for managing extracted resume content operations
- * Follows Single Responsibility Principle - only handles extracted resume content
+ * Resume Content Service
+ *
+ * Service responsible for managing resume content operations throughout its lifecycle.
+ * Handles content extraction, processing, storage, and retrieval with comprehensive
+ * metadata tracking and usage analytics.
+ *
+ * Follows Single Responsibility Principle - manages all resume content operations
  */
 @Injectable()
-export class ExtractedResumeService {
-  private readonly logger = new Logger(ExtractedResumeService.name);
+export class ResumeContentService implements IResumeContentProvider {
+  private readonly logger = new Logger(ResumeContentService.name);
 
   constructor(
     @InjectRepository(ExtractedResumeContent)

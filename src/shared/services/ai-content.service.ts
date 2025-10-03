@@ -1,213 +1,34 @@
 // ai.service.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EmbeddingService } from '../../../shared/modules/external/services/embedding.service';
-import { OpenAIService } from '../../../shared/modules/external/services/open_ai.service';
+import { EmbeddingService } from '../modules/external/services/embedding.service';
+import { OpenAIService } from '../modules/external/services/open_ai.service';
 import {
-  AnalysisResult,
   ResumeAnalysis,
   ResumeExtractedKeywords,
   TailoredContent,
-} from '../interfaces/resume-extracted-keywords.interface';
+} from '../../modules/resume-tailoring/interfaces/resume-extracted-keywords.interface';
 import { get, head, isEmpty } from 'lodash';
 import {
   ChatCompletionChoice,
   ChatCompletionResponse,
-} from '../../../shared/modules/external/interfaces/open-ai-chat.interface';
-import { PromptService } from '../../../shared/services/prompt.service';
+} from '../modules/external/interfaces/open-ai-chat.interface';
+import { PromptService } from './prompt.service';
 import {
   ResumeExtractedKeywordsSchema,
   TailoredContentSchema,
-} from '../schemas/resume-tailored-content.schema';
-import { InternalServerErrorException } from '../../../shared/exceptions/custom-http-exceptions';
-import { ERROR_CODES } from '../../../shared/constants/error-codes';
+} from '../../modules/resume-tailoring/schemas/resume-tailored-content.schema';
+import { InternalServerErrorException } from '../exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../constants/error-codes';
 
 @Injectable()
-export class AIService {
+export class AIContentService {
   constructor(
     private openAIService: OpenAIService,
     private embeddingService: EmbeddingService,
     private promptService: PromptService,
     private configService: ConfigService,
   ) {}
-
-  async analyzeResumeAndJobDescription(
-    resumeText: string,
-    jobDescription: string,
-    companyName?: string,
-  ): Promise<AnalysisResult> {
-    // Get performance configuration
-    const maxSkillsForEmbedding = this.configService.get<number>(
-      'performance.maxSkillsForEmbedding',
-      10,
-    );
-    const maxMissingSkills = this.configService.get<number>(
-      'performance.maxMissingSkills',
-      5,
-    );
-
-    // Parallel execution of independent operations
-    const [extractedData, resumeEmbedding] = await Promise.all([
-      this.extractKeywordsFromJD(jobDescription),
-      this.embeddingService.getEmbedding(resumeText),
-    ]);
-
-    const requiredSkills = [
-      ...extractedData.hardSkills,
-      ...extractedData.softSkills,
-      ...extractedData.qualifications,
-    ];
-
-    // Limit skills to configured maximum to reduce embedding calls
-    const limitedSkills = requiredSkills.slice(0, maxSkillsForEmbedding);
-
-    // Get embeddings for skills in parallel
-    const skillEmbeddings = await Promise.all(
-      limitedSkills.map((skill: string) =>
-        this.embeddingService.getEmbedding(skill),
-      ),
-    );
-
-    // Calculate similarity scores
-    const similarityScores = skillEmbeddings.map((embedding: number[]) =>
-      this.embeddingService.cosineSimilarity(resumeEmbedding, embedding),
-    );
-
-    // Calculate match score (average of top 5 scores)
-    const sortedScores = [...similarityScores].sort(
-      (a: number, b: number) => b - a,
-    );
-    const topScores = sortedScores.slice(0, Math.min(5, sortedScores.length));
-    const averageScore =
-      topScores.reduce((a: number, b: number) => a + b, 0) / topScores.length;
-
-    // Identify missing skills (scores below threshold)
-    const missingSkills = limitedSkills.filter(
-      (_: string, index: number) => similarityScores[index] < 0.5,
-    );
-
-    // Prioritize missing skills by similarity score
-    const prioritizedMissing = missingSkills
-      .map((skill) => ({
-        skill,
-        score: similarityScores[limitedSkills.indexOf(skill)],
-      }))
-      .sort((a, b) => b.score - a.score)
-      .map((item) => item.skill)
-      .slice(0, maxMissingSkills);
-
-    const resumeAnalysis: ResumeAnalysis = {
-      skillMatchScore: averageScore,
-      missingKeywords: prioritizedMissing,
-      resumeEmbedding,
-    };
-
-    // Generate tailored content
-    const tailoredContent = await this.generateTailoredContent(
-      resumeAnalysis,
-      jobDescription,
-      resumeText,
-      companyName,
-    );
-
-    return {
-      ...tailoredContent,
-      metadata: {
-        skillMatchScore: resumeAnalysis.skillMatchScore,
-        missingKeywords: resumeAnalysis.missingKeywords,
-      },
-    };
-  }
-
-  async analyzeResumeForAtsScore(
-    resumeText: string,
-    jobDescription: string,
-  ): Promise<{ skillMatchScore: number; missingKeywords: string[] }> {
-    // Get performance configuration for ATS scoring
-    const maxSkillsForEmbedding = this.configService.get<number>(
-      'performance.maxSkillsForEmbedding',
-      15, // Increased for ATS scoring
-    );
-    const maxMissingSkills = this.configService.get<number>(
-      'performance.maxMissingSkills',
-      5,
-    );
-
-    // Parallel execution of independent operations
-    const [extractedData, resumeEmbedding] = await Promise.all([
-      this.extractKeywordsFromJDForAts(jobDescription),
-      this.embeddingService.getEmbedding(resumeText),
-    ]);
-
-    const requiredSkills = [
-      ...extractedData.hardSkills,
-      ...extractedData.softSkills,
-      ...extractedData.qualifications,
-    ];
-
-    // Limit skills to configured maximum to reduce embedding calls
-    const limitedSkills = requiredSkills.slice(0, maxSkillsForEmbedding);
-
-    // Get embeddings for skills in parallel
-    const skillEmbeddings = await Promise.all(
-      limitedSkills.map((skill: string) =>
-        this.embeddingService.getEmbedding(skill),
-      ),
-    );
-
-    // Calculate similarity scores
-    const similarityScores = skillEmbeddings.map((embedding: number[]) =>
-      this.embeddingService.cosineSimilarity(resumeEmbedding, embedding),
-    );
-
-    // Calculate weighted match score (improved algorithm for ATS)
-    const skillScores = limitedSkills.map((skill, index) => ({
-      skill,
-      score: similarityScores[index],
-    }));
-
-    // Sort by score and apply weighted scoring
-    const sortedSkillScores = skillScores.sort((a, b) => b.score - a.score);
-
-    // Weight top skills more heavily (top 3 get higher weight)
-    const weightedScores = sortedSkillScores.map((item, index) => {
-      let weight = 1;
-      if (index < 3)
-        weight = 1.5; // Top 3 skills get 50% more weight
-      else if (index < 7) weight = 1.2; // Next 4 skills get 20% more weight
-      return item.score * weight;
-    });
-
-    // Calculate weighted average
-    const totalWeight = weightedScores.reduce((sum, _, index) => {
-      if (index < 3) return sum + 1.5;
-      else if (index < 7) return sum + 1.2;
-      return sum + 1;
-    }, 0);
-
-    const averageScore =
-      weightedScores.reduce((sum, score) => sum + score, 0) / totalWeight;
-
-    // Identify missing skills with improved threshold for ATS
-    const missingSkills = limitedSkills.filter(
-      (_: string, index: number) => similarityScores[index] < 0.4, // Lowered threshold for ATS
-    );
-
-    // Prioritize missing skills by similarity score
-    const prioritizedMissing = missingSkills
-      .map((skill) => ({
-        skill,
-        score: similarityScores[limitedSkills.indexOf(skill)],
-      }))
-      .sort((a, b) => b.score - a.score)
-      .map((item) => item.skill)
-      .slice(0, maxMissingSkills);
-
-    return {
-      skillMatchScore: averageScore,
-      missingKeywords: prioritizedMissing,
-    };
-  }
 
   async extractKeywordsFromJD(jd: string): Promise<ResumeExtractedKeywords> {
     const prompt =

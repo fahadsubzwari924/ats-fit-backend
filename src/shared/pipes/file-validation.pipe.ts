@@ -1,5 +1,5 @@
 import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
-import { ERROR_CODES } from '../../../shared/constants/error-codes';
+import { ERROR_CODES } from '../constants/error-codes';
 
 @Injectable()
 export class FileValidationPipe implements PipeTransform {

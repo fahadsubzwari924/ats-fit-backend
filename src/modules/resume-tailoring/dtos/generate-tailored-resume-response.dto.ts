@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { V2GenerationMetadata } from '../interfaces/v2-generation-metadata.interface';
+import { GenerationMetadata } from '../interfaces/generation-metadata.interface';
 
-export class GenerateTailoredResumeV2ResponseDto {
+export class GenerateTailoredResumeResponseDto {
   @ApiProperty({
     description: 'Base64 encoded PDF content of the generated resume',
     example: 'JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwo...',
@@ -68,5 +68,5 @@ export class GenerateTailoredResumeV2ResponseDto {
       },
     },
   })
-  metadata: V2GenerationMetadata;
+  metadata: GenerationMetadata;
 }

@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { User } from './user.entity';
 import { QueueMessage } from './queue-message.entity';
-import { TailoredContent } from '../../modules/resume/interfaces/resume-extracted-keywords.interface';
+import { TailoredContent } from '../../modules/resume-tailoring/interfaces/resume-extracted-keywords.interface';
 
 /**
  * Business entity for successfully processed resume content

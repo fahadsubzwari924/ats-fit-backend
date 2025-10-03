@@ -6,8 +6,8 @@ import { QueueMessage } from '../../database/entities/queue-message.entity';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
-import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
-import { ResumeModule } from '../resume/resume.module';
+import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
+import { ResumeTailoringModule } from '../resume-tailoring/resume-tailoring.module';
 import { AuthModule } from '../auth/auth.module';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { QueueModule } from '../queue/queue.module';
@@ -20,13 +20,13 @@ import { QueueModule } from '../queue/queue.module';
       QueueMessage,
       ExtractedResumeContent,
     ]),
-    forwardRef(() => ResumeModule),
+    forwardRef(() => ResumeTailoringModule),
     forwardRef(() => AuthModule),
     forwardRef(() => RateLimitModule),
     QueueModule,
   ],
   controllers: [UserController],
-  providers: [UserService, ExtractedResumeService],
+  providers: [UserService, ResumeContentService],
   exports: [UserService],
 })
 export class UserModule {}

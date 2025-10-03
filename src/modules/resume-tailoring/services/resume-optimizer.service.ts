@@ -37,8 +37,8 @@ import { get, head } from 'lodash';
  * - Strong performance on structured output generation
  */
 @Injectable()
-export class AIResumeOptimizerService {
-  private readonly logger = new Logger(AIResumeOptimizerService.name);
+export class ResumeOptimizerService {
+  private readonly logger = new Logger(ResumeOptimizerService.name);
 
   constructor(
     private readonly claudeService: ClaudeService,

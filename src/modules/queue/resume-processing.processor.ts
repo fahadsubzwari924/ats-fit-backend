@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { QueueMessage } from '../../database/entities/queue-message.entity';
-import { ResumeService } from '../resume/services/resume.service';
+import { ResumeService } from '../resume-tailoring/services/resume.service';
 import * as crypto from 'crypto';
 
 export interface ResumeProcessingJobData {

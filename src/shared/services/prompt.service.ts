@@ -1,6 +1,6 @@
 // resume.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { ResumeAnalysis } from '../../modules/resume/interfaces/resume-extracted-keywords.interface';
+import { ResumeAnalysis } from '../../modules/resume-tailoring/interfaces/resume-extracted-keywords.interface';
 import {
   BadRequestException,
   InternalServerErrorException,

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ResumeSelectionService } from '../../ats-match/services/resume-selection.service';
-import { AIService } from './ai.service';
+import { AIContentService } from '../../../shared/services/ai-content.service';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import {
   UserContext,
@@ -37,7 +37,7 @@ export class ResumeContentProcessorService {
 
   constructor(
     private readonly resumeSelectionService: ResumeSelectionService,
-    private readonly aiService: AIService,
+    private readonly aiContentService: AIContentService,
     private readonly resumeService: ResumeService,
   ) {}
 
@@ -114,7 +114,7 @@ export class ResumeContentProcessorService {
 
       // Use AI to extract structured content
       const structuredContent =
-        await this.aiService.extractResumeContent(resumeText);
+        await this.aiContentService.extractResumeContent(resumeText);
 
       const processingTime = Date.now() - startTime;
 
@@ -201,7 +201,7 @@ export class ResumeContentProcessorService {
     try {
       const resumeText = await this.extractTextFromFile(resumeFile);
       const structuredContent =
-        await this.aiService.extractResumeContent(resumeText);
+        await this.aiContentService.extractResumeContent(resumeText);
 
       const processingTime = Date.now() - startTime;
 
@@ -271,9 +271,10 @@ export class ResumeContentProcessorService {
       }
 
       // If no structured content, extract from raw text using AI
-      const structuredContent = await this.aiService.extractResumeContent(
-        selectionResult.extractedText,
-      );
+      const structuredContent =
+        await this.aiContentService.extractResumeContent(
+          selectionResult.extractedText,
+        );
 
       const processingTime = Date.now() - startTime;
 

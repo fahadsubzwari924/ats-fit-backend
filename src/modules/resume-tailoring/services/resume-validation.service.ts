@@ -6,7 +6,7 @@ import { UserContextValidationRule } from '../validation/user-context-validation
 import { TemplateValidationRule } from '../validation/template-validation.rule';
 import { FileValidationRule } from '../validation/file-validation.rule';
 import { ResumeRequirementsValidationRule } from '../validation/resume-requirements-validation.rule';
-import { ResumeGenerationV2Input } from '../interfaces/resume-generation-v2.interface';
+import { ResumeGenerationInput } from '../interfaces/resume-generation.interface';
 import { StructuredValidationException } from '../exceptions/structured-validation.exception';
 
 /**
@@ -24,8 +24,8 @@ import { StructuredValidationException } from '../exceptions/structured-validati
  * - Built-in performance monitoring and logging
  */
 @Injectable()
-export class ResumeValidationServiceV2 {
-  private readonly logger = new Logger(ResumeValidationServiceV2.name);
+export class ResumeValidationService {
+  private readonly logger = new Logger(ResumeValidationService.name);
   private readonly validationService: GenericValidationService<ResumeValidationContext>;
 
   constructor(
@@ -51,7 +51,7 @@ export class ResumeValidationServiceV2 {
   /**
    * Validate resume generation input (compatible with old interface)
    */
-  async validateGenerationRequest(input: ResumeGenerationV2Input): Promise<{
+  async validateGenerationRequest(input: ResumeGenerationInput): Promise<{
     isValid: boolean;
     requiresFileUpload: boolean;
     hasExistingResumes: boolean;
@@ -127,7 +127,7 @@ export class ResumeValidationServiceV2 {
   /**
    * Validate resume generation input (new interface)
    */
-  async validateResumeGeneration(input: ResumeGenerationV2Input): Promise<{
+  async validateResumeGeneration(input: ResumeGenerationInput): Promise<{
     isValid: boolean;
     errors: string[];
     warnings: string[];

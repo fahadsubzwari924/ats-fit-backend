@@ -15,20 +15,21 @@ import {
 } from '../../../shared/modules/external/interfaces/open-ai-chat.interface';
 
 /**
- * Job Description Analysis Service V2
+ * Job Analysis Service
  *
- * Uses GPT-4 Turbo for comprehensive job description analysis and keyword extraction.
+ * Uses GPT-4 Turbo for comprehensive job analysis and keyword extraction.
  * This service focuses solely on understanding job requirements without any resume comparison.
  *
- * Key improvements over V1:
- * - More comprehensive job analysis
- * - Better keyword categorization for ATS optimization
- * - Context awareness for tailoring strategy
+ * Key features:
+ * - Comprehensive job analysis and requirements extraction
+ * - Intelligent keyword categorization for ATS optimization
+ * - Context-aware analysis for tailoring strategies
  * - Enhanced error handling and validation
+ * - Performance-optimized caching for repeated analyses
  */
 @Injectable()
-export class JobDescriptionAnalysisService {
-  private readonly logger = new Logger(JobDescriptionAnalysisService.name);
+export class JobAnalysisService {
+  private readonly logger = new Logger(JobAnalysisService.name);
 
   constructor(
     private readonly openAIService: OpenAIService,

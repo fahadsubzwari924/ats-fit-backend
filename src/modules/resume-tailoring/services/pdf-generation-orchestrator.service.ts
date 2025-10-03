@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ResumeTemplateService } from './resume-templates.service';
-import { GeneratePdfService } from './generate-pdf.service';
+import { PdfGenerationService } from './pdf-generation.service';
 import {
   TailoredContent,
   AnalysisResult,
@@ -32,7 +32,7 @@ import { ERROR_CODES } from '../../../shared/constants/error-codes';
  *
  * Integration points:
  * - ResumeTemplateService: For HTML template generation
- * - GeneratePdfService: For PDF conversion with Puppeteer
+ * - PdfGenerationService: For PDF conversion with configurable optimization
  * - Existing template system: Reuses proven template logic
  */
 @Injectable()
@@ -41,7 +41,7 @@ export class PdfGenerationOrchestratorService {
 
   constructor(
     private readonly resumeTemplateService: ResumeTemplateService,
-    private readonly generatePdfService: GeneratePdfService,
+    private readonly pdfGenerationService: PdfGenerationService,
   ) {}
 
   /**
@@ -88,8 +88,11 @@ export class PdfGenerationOrchestratorService {
 
       // Step 3: Convert HTML to PDF
       const pdfGenerationStart = Date.now();
-      const pdfBuffer =
-        await this.generatePdfService.generatePdfFromHtml(htmlContent);
+      const pdfResult = await this.pdfGenerationService.generatePdfFromHtml(
+        htmlContent,
+        { optimizationMode: 'optimized' }, // Use optimized mode for better performance
+      );
+      const pdfBuffer = pdfResult.buffer;
       const pdfGenerationTime = Date.now() - pdfGenerationStart;
 
       this.logger.debug(`PDF generation completed in ${pdfGenerationTime}ms`);
