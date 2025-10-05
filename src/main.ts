@@ -17,6 +17,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Enable graceful shutdown for Cloud Run
+  app.enableShutdownHooks();
+
   // Enable CORS for all origins (adjust for production)
   app.enableCors({
     origin: true, // Allow all origins for development
@@ -93,7 +96,11 @@ async function bootstrap() {
     defaultVersion: '1',
   });
 
-  await app.listen(3000);
+  // Cloud Run expects app to listen on PORT environment variable
+  const port = process.env.PORT || 3000;
+  await app.listen(port, '0.0.0.0');
+
+  console.log(`🚀 Application is running on port ${port}`);
 }
 
 void bootstrap();

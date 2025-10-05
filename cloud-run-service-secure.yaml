@@ -1,0 +1,186 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ats-fit-backend-secure
+  labels:
+    cloud.googleapis.com/location: asia-south1
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      labels:
+        version: v1
+      annotations:
+        autoscaling.knative.dev/maxScale: '10'
+        autoscaling.knative.dev/minScale: '0'
+        run.googleapis.com/memory: '2Gi'
+        run.googleapis.com/cpu: '2000m'
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cloudsql-instances: ats-fit-backend:asia-south1:ats-fit-postgres
+
+    spec:
+      timeoutSeconds: 300
+      containerConcurrency: 100
+
+      containers:
+        - name: ats-fit-app
+          image: gcr.io/ats-fit-backend/ats-fit-backend:latest
+
+          ports:
+            - name: http1
+              containerPort: 8080
+
+          env:
+            # Application environment
+            - name: NODE_ENV
+              value: 'production'
+            - name: PORT
+              value: '8080'
+
+            # Database configuration
+            - name: DATABASE_HOST
+              value: '/cloudsql/ats-fit-backend:asia-south1:ats-fit-postgres'
+            - name: DATABASE_NAME
+              value: 'ats_fit'
+            - name: DATABASE_PORT
+              value: '5432'
+            - name: DATABASE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: database-username
+                  key: latest
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: database-password
+                  key: latest
+
+            # Redis configuration
+            - name: REDIS_HOST
+              value: '10.70.241.139' # Replace with actual Redis IP
+            - name: REDIS_PORT
+              value: '6379'
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-password
+                  key: latest
+
+            # JWT configuration
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: latest
+            - name: JWT_EXPIRES_IN
+              value: '24h'
+
+            # OpenAI configuration
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-api-key
+                  key: latest
+            - name: OPENAI_MAX_RETRIES
+              value: '3'
+            - name: OPENAI_RETRY_DELAY
+              value: '1000'
+
+            # Anthropic/Claude configuration
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: anthropic-api-key
+                  key: latest
+            - name: CLAUDE_MAX_RETRIES
+              value: '3'
+            - name: CLAUDE_RETRY_DELAY
+              value: '1000'
+            - name: CLAUDE_CHAT_API_ENDPOINT
+              value: 'https://api.anthropic.com/v1/messages'
+
+            # Cache configuration
+            - name: CACHE_TTL
+              value: '1800000'
+            - name: MAX_CACHE_SIZE
+              value: '1000'
+
+            # AWS configuration
+            - name: AWS_REGION
+              value: 'ap-south-1'
+            - name: AWS_BUCKET_REGION
+              value: 'ap-south-1'
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-access-key-id
+                  key: latest
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-secret-access-key
+                  key: latest
+            - name: AWS_S3_BUCKET
+              value: 'resume-tailor-dev-bucket'
+            - name: AWS_S3_RESUME_TEMPLATES_BUCKET
+              value: 'ats-friend-resume-templates-2025'
+            - name: AWS_S3_CANDIDATES_RESUMES_BUCKET
+              value: 'af-candidates-resumes'
+
+            # Performance configuration
+            - name: TEMPLATE_CACHE_TTL
+              value: '600000'
+            - name: RESUME_SERVICE_CACHE_TTL
+              value: '300000'
+            - name: MAX_SKILLS_FOR_EMBEDDING
+              value: '10'
+            - name: MAX_MISSING_SKILLS
+              value: '5'
+
+            # PDF configuration
+            - name: PDF_TIMEOUT
+              value: '15000'
+            - name: PDF_PAGE_TIMEOUT
+              value: '10000'
+
+            # File configuration
+            - name: MAX_FILE_SIZE
+              value: '5242880'
+
+            # LLM configuration
+            - name: LOCAL_LLM_MODEL_NAME
+              value: 'llama3'
+
+          resources:
+            limits:
+              cpu: '2000m'
+              memory: '2Gi'
+            requests:
+              cpu: '1000m'
+              memory: '1Gi'
+
+          # Health checks
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+      serviceAccountName: ats-fit-service-account@ats-fit-backend.iam.gserviceaccount.com
+
+  traffic:
+    - percent: 100
+      latestRevision: true
