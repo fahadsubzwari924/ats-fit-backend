@@ -60,7 +60,8 @@
     "dev:metrics": "scripts/utilities/dev-utils.sh view-metrics",
     "dev:logs": "scripts/utilities/dev-utils.sh debug-logs",
     "dev:cleanup": "scripts/utilities/dev-utils.sh cleanup",
-    "dev:validate": "scripts/utilities/dev-utils.sh validate"
+    "dev:validate": "scripts/utilities/dev-utils.sh validate",
+    "db:proxy": "./start-proxy.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.835.0",

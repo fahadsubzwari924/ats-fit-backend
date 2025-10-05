@@ -157,3 +157,12 @@ restore-db: ## Restore database from backup (usage: make restore-db FILE=backup.
 	@echo "📥 Restoring database from $(FILE)..."
 	docker exec -i ats-fit-postgres-dev psql -U postgres -d ats_fit < $(FILE)
 	@echo "✅ Database restore complete!"
+
+proxy: ## Start Cloud SQL Proxy for production database access
+	@echo "🔗 Starting Cloud SQL Proxy for production database..."
+	./start-proxy.sh
+
+proxy-stop: ## Stop Cloud SQL Proxy
+	@echo "🛑 Stopping Cloud SQL Proxy..."
+	pkill cloud-sql-proxy || echo "No proxy process found"
+	@echo "✅ Proxy stopped!"
