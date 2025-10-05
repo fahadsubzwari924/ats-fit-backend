@@ -218,12 +218,12 @@ make restore-db FILE=backup.sql
 
 ## 📊 **Service URLs**
 
-| Service             | URL                   | Credentials               |
-| ------------------- | --------------------- | ------------------------- |
-| **NestJS App**      | http://localhost:3000 | -                         |
-| **pgAdmin**         | http://localhost:5050 | admin@admin.com / admin   |
-| **Redis Commander** | http://localhost:8081 | -                         |
-| **PostgreSQL**      | localhost:5433        | postgres / Jumpshare\_\_1 |
+| Service             | URL                   | Credentials                     |
+| ------------------- | --------------------- | ------------------------------- |
+| **NestJS App**      | http://localhost:3000 | -                               |
+| **pgAdmin**         | http://localhost:5050 | admin@admin.com / admin         |
+| **Redis Commander** | http://localhost:8081 | -                               |
+| **PostgreSQL**      | localhost:5433        | postgres / PLACEHOLDER_PASSWORD |
 
 ## 🐳 **Docker Services**
 

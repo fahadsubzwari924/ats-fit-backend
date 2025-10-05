@@ -2,12 +2,21 @@ import { ConfigModule } from '@nestjs/config';
 
 import { validationSchema } from './validation.schema';
 
+const getEnvFilePath = () => {
+  switch (process.env.NODE_ENV) {
+    case 'production':
+      return 'src/config/.env.prod';
+    case 'staging':
+      return 'src/config/.env.staging';
+    case 'development':
+    default:
+      return 'src/config/.env.dev';
+  }
+};
+
 export const configModule = ConfigModule.forRoot({
   isGlobal: true,
-  envFilePath:
-    process.env.NODE_ENV === 'production'
-      ? 'config/.env.prod'
-      : 'config/.env.dev',
+  envFilePath: getEnvFilePath(),
   validationSchema,
   validationOptions: {
     abortEarly: false,

@@ -63,3 +63,69 @@ backups/
 # Docker volumes and data
 docker-data/
 postgres-data/
+
+# =================================
+# DEPLOYMENT & SECURITY FILES
+# =================================
+
+# Backup deployment files (contains sensitive data)
+*.yaml.backup
+*.yml.backup
+cloudbuild.yaml.backup
+migration-job.yaml
+
+# Cloud SQL Proxy binary
+cloud-sql-proxy*
+
+# Environment files for database operations
+.env.db
+.env.migration
+.env.production
+.env.local
+
+# =================================
+# CLOUD & INFRASTRUCTURE FILES
+# =================================
+
+# Google Cloud credentials and keys
+gcloud-service-key.json
+service-account-key.json
+*.json.backup
+
+# Terraform state files (if using Terraform)
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# =================================
+# SCRIPTS & TEMPORARY FILES
+# =================================
+
+# Script backup files
+*.bak
+*.backup
+*.old
+
+# Temporary SQL dumps
+*.sql.backup
+database_dump_*.sql
+
+# Log files from deployment scripts
+deployment.log
+migration.log
+
+# =================================
+# SENSITIVE CONFIGURATION
+# =================================
+
+# Any file containing secrets or API keys
+*secret*
+*key*
+*password*
+!scripts/**/create-secrets.sh
+!**/package-lock.json
+
+# Configuration files with sensitive data
+config/production.json
+config/secrets.json
