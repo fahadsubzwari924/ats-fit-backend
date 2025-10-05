@@ -13,6 +13,9 @@ import {
   QueueMessage,
   ExtractedResumeContent,
 } from './entities';
+import { SubscriptionPlan } from '../modules/subscription/entities/subscription-plan.entity';
+import { Subscription } from '../modules/subscription/entities/subscription.entity';
+import { PaymentHistory } from '../modules/webhooks/entities/payment-history.entity';
 
 @Module({
   imports: [
@@ -36,6 +39,9 @@ import {
           JobApplication,
           QueueMessage,
           ExtractedResumeContent,
+          SubscriptionPlan,
+          Subscription,
+          PaymentHistory,
         ],
         synchronize: process.env.NODE_ENV !== 'production',
         logging: process.env.NODE_ENV !== 'production',

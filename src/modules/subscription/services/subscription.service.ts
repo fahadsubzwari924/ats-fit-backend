@@ -2,22 +2,22 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Subscription } from '../entities/subscription.entity';
+import { SubscriptionStatus } from '../enums/subscription-status.enum';
 
 export interface CreateSubscriptionData {
   lemonSqueezyId: string;
-  planId: string;
+  subscriptionPlanId: string;
   userId: string;
-  status: string;
+  status: SubscriptionStatus;
   amount: number;
   currency: string;
   startsAt: Date;
   endsAt: Date;
-  trialEndsAt?: Date;
   metadata?: Record<string, any>;
 }
 
 export interface UpdateSubscriptionData {
-  status?: string;
+  status?: SubscriptionStatus;
   isActive?: boolean;
   isCancelled?: boolean;
   endsAt?: Date;
@@ -33,15 +33,44 @@ export class SubscriptionService {
 
   async create(data: CreateSubscriptionData): Promise<Subscription> {
     try {
+      console.log('🔥 DEBUG: SubscriptionService.create() called with data:', data);
+      
       const subscription = this.subscriptionRepository.create({
-        ...data,
-        isActive: data.status === 'active',
+        lemonSqueezyId: data.lemonSqueezyId,
+        subscriptionPlanId: data.subscriptionPlanId,
+        userId: data.userId,
+        status: data.status,
+        amount: data.amount,
+        currency: data.currency,
+        startsAt: data.startsAt,
+        endsAt: data.endsAt,
+        metadata: data.metadata,
+        isActive: data.status === SubscriptionStatus.ACTIVE,
         isCancelled: false,
       });
       
-      return await this.subscriptionRepository.save(subscription);
+      console.log('🔥 DEBUG: Created subscription entity:', subscription);
+      console.log('🔥 DEBUG: About to save to database...');
+      
+      const savedSubscription = await this.subscriptionRepository.save(subscription);
+      
+      console.log('✅ SUCCESS: Subscription saved to database:', savedSubscription);
+      console.log('✅ SUCCESS: Subscription ID:', savedSubscription.id);
+      
+      return savedSubscription;
     } catch (error) {
-      throw new BadRequestException('Failed to create subscription');
+      console.error('❌ CRITICAL: Failed to create subscription in database:', error);
+      console.error('❌ Error details:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      
+      if (error.code) {
+        console.error('❌ Database error code:', error.code);
+      }
+      if (error.detail) {
+        console.error('❌ Database error detail:', error.detail);
+      }
+      
+      throw new BadRequestException(`Failed to create subscription: ${error.message}`);
     }
   }
 
@@ -103,7 +132,7 @@ export class SubscriptionService {
 
   async cancel(id: string): Promise<Subscription> {
     return await this.update(id, {
-      status: 'cancelled',
+      status: SubscriptionStatus.CANCELLED,
       isActive: false,
       isCancelled: true,
     });
@@ -111,7 +140,7 @@ export class SubscriptionService {
 
   async activate(id: string): Promise<Subscription> {
     return await this.update(id, {
-      status: 'active',
+      status: SubscriptionStatus.ACTIVE,
       isActive: true,
       isCancelled: false,
     });

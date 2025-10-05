@@ -20,7 +20,7 @@ export class CreateSubscriptionDto {
   })
   @IsOptional()
   @IsObject()
-  metadata?: Record<string, any>;
+  metaData?: Record<string, any>;
 }
 
 export class UpdateSubscriptionDto {

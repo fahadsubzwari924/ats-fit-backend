@@ -2,13 +2,12 @@ import { Controller, Post, Body, Get, UseGuards, Param, Delete, Req, BadRequestE
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { SubscriptionService } from '../services/subscription.service';
 import { SubscriptionPlanService } from '../services/subscription-plan.service';
+import { PaymentService } from '../../../shared/services/payment.service';
 import { CreateSubscriptionDto, UpdateSubscriptionDto } from '../dtos/subscription.dto';
 import { CreateSubscriptionPlanDto, UpdateSubscriptionPlanDto, SubscriptionPlanResponseDto } from '../dtos/subscription-plan.dto';
 import { CheckoutResponseDto, SubscriptionStatusDto } from '../dtos/checkout-response.dto';
 import { JwtAuthGuard } from '../../auth/jwt.guard';
 import { RequestWithUserContext } from '../../../shared/interfaces/request-user.interface';
-import { LemonSqueezyService } from '../../../shared/modules/external/services/lemon_squeezy.service';
-
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -18,7 +17,7 @@ export class SubscriptionController {
   constructor(
     private readonly subscriptionService: SubscriptionService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
-    private readonly lemonSqueezyService: LemonSqueezyService,
+    private readonly paymentService: PaymentService, // ✅ Abstract payment interface
   ) {}
 
   @Post('checkout')
@@ -34,13 +33,28 @@ export class SubscriptionController {
     @Req() request: RequestWithUserContext,
   ) {
     try {
-      const checkoutSession = await this.lemonSqueezyService.createCheckoutSession(
-        request?.userContext?.userId, 
-        createSubscriptionDto.planId,
-        createSubscriptionDto.metadata?.email
-      );
+      // Find the subscription plan by planId from the database
+      const subscriptionPlan = await this.subscriptionPlanService.findById(createSubscriptionDto.planId);
       
-      return checkoutSession;
+      if (!subscriptionPlan) {
+        throw new BadRequestException(`Subscription plan with ID ${createSubscriptionDto.planId} not found`);
+      }
+
+      if (!subscriptionPlan.isActive) {
+        throw new BadRequestException(`Subscription plan with ID ${createSubscriptionDto.planId} is not active`);
+      }
+
+      const checkoutResponse = await this.paymentService.createCheckout({
+        variantId: subscriptionPlan.lemonSqueezyVariantId,
+        email: createSubscriptionDto.metaData?.email,
+        customData: {
+          userId: request?.userContext?.userId,
+          planId: subscriptionPlan.id,
+          email: createSubscriptionDto.metaData?.email
+        }
+      });
+      
+      return checkoutResponse;
     } catch (error) {
       console.error('Checkout creation error:', error);
       throw new BadRequestException(
@@ -64,29 +78,32 @@ export class SubscriptionController {
     return await this.subscriptionService.findById(subscriptionId);
   }
 
-  @Get('subscriptions/lemonsqueezy/:lemonSqueezyId')
-  @ApiOperation({ summary: 'Get subscription details from LemonSqueezy API' })
+  @Get('subscriptions/external/:subscriptionId')
+  @ApiOperation({ summary: 'Get subscription details from payment provider API' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Returns the subscription details from LemonSqueezy'
+    description: 'Returns the subscription details from payment provider'
   })
   @ApiResponse({ status: 404, description: 'Subscription not found' })
-  async getLemonSqueezySubscription(
-    @Param('lemonSqueezyId') lemonSqueezyId: string,
+  async getExternalSubscription(
+    @Param('subscriptionId') subscriptionId: string,
     @Req() request: RequestWithUserContext
   ) {
     try {
-      const subscriptionData = await this.lemonSqueezyService.getSubscriptionDetails(lemonSqueezyId);
+      const subscriptionData = await this.paymentService.getSubscription(subscriptionId);
       return {
-        id: lemonSqueezyId,
+        id: subscriptionData.id,
         status: subscriptionData.status,
-        planId: subscriptionData.variant_id,
-        fullData: subscriptionData,
+        planId: subscriptionData.planId,
+        provider: this.paymentService.getProviderName(),
+        amount: subscriptionData.amount,
+        currency: subscriptionData.currency,
+        currentPeriodEnd: subscriptionData.currentPeriodEnd,
         success: true
       };
     } catch (error) {
       throw new BadRequestException(
-        error.message || 'Failed to get subscription details from LemonSqueezy'
+        error.message || `Failed to get subscription details from ${this.paymentService.getProviderName()}`
       );
     }
   }
@@ -104,15 +121,18 @@ export class SubscriptionController {
   }
 
   @Delete('subscriptions/cancel/:subscriptionId')
-  @ApiOperation({ summary: 'Cancel a subscription via LemonSqueezy API' })
-  @ApiResponse({ status: 200, description: 'Subscription cancelled successfully via LemonSqueezy' })
+  @ApiOperation({ summary: 'Cancel a subscription via payment provider API' })
+  @ApiResponse({ status: 200, description: 'Subscription cancelled successfully via payment provider' })
   @ApiResponse({ status: 404, description: 'Subscription not found' })
-  async cancelLemonSqueezySubscription(
+  async cancelExternalSubscription(
     @Param('subscriptionId') subscriptionId: string,
     @Req() request: RequestWithUserContext,
   ) {
     try {
-      const cancelResult = await this.lemonSqueezyService.cancelSubscription(subscriptionId);
+      const cancelResult = await this.paymentService.cancelSubscription({
+        subscriptionId,
+        reason: 'User requested cancellation'
+      });
 
       // Also update in database if exists
       const dbSubscription = await this.subscriptionService.findByLemonSqueezyId(subscriptionId);
@@ -121,11 +141,13 @@ export class SubscriptionController {
       }
       
       return {
-        id: subscriptionId,
-        status: 'cancelled',
+        id: cancelResult.subscriptionId,
+        status: cancelResult.status,
+        provider: this.paymentService.getProviderName(),
+        cancelledAt: cancelResult.cancelledAt,
+        endsAt: cancelResult.endsAt,
         message: 'Subscription cancelled successfully',
-        success: true,
-        data: cancelResult
+        success: true
       };
     } catch (error) {
       throw new BadRequestException(
@@ -142,9 +164,15 @@ export class SubscriptionController {
     @Req() request: RequestWithUserContext
   ) {
     try {
-      const portalUrl = await this.lemonSqueezyService.getCustomerPortalUrl(customerId);
+      const portalResponse = await this.paymentService.createCustomerPortal({
+        customerId,
+        returnUrl: request.headers['referer'] || undefined
+      });
+      
       return {
-        portalUrl,
+        portalUrl: portalResponse.portalUrl,
+        provider: this.paymentService.getProviderName(),
+        expiresAt: portalResponse.expiresAt,
         message: 'Redirect user to portalUrl to manage subscription',
         success: true
       };

@@ -14,12 +14,15 @@ import { RequestIdMiddleware } from './shared/modules/response/request-id.middle
 import { Request, Response, NextFunction } from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { lemonSqueezySetup } from '@lemonsqueezy/lemonsqueezy.js';
+import { authtoken, forward } from '@ngrok/ngrok';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Lemon Squeezy SDK setup
   lemonSqueezySetup({ apiKey: process.env.LEMON_SQUEEZY_API_KEY });
+
+  // await Ngrok.setAuthToken('20oaobEEaZl6I7SK8k7rSVAv6cu_7rmeSUurFKwCPXP4MtBtL');
 
   
   // Lemon Squeezy webhook raw body parser
@@ -103,6 +106,12 @@ async function bootstrap() {
   });
 
   await app.listen(3000);
+
+  await authtoken('20oaobEEaZl6I7SK8k7rSVAv6cu_7rmeSUurFKwCPXP4MtBtL');
+  const tunnel = await forward({ addr: 3000 });
+  console.log(`Public ngrok URL: ${tunnel.url()}`);
+
+
 }
 
 void bootstrap();

@@ -17,8 +17,24 @@ export class UserContextMiddleware implements NestMiddleware {
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
+    // Skip user context middleware for webhook endpoints
+    const fullPath = req.originalUrl || req.url;
+    console.log('🔍 Checking path:', fullPath, 'baseUrl:', req.baseUrl, 'path:', req.path);
+    
+    if (fullPath.includes('/webhooks') || req.path.includes('/webhooks')) {
+      console.log('✅ Skipping user context middleware for webhook:', fullPath);
+      return next();
+    }
+
     const authHeader = req.headers['authorization'];
     let userContext: UserContext | null = null;
+
+    console.log('-----------------------------------------------------');
+    console.log('req.baseUrl:', req.baseUrl);
+    console.log('req body JSON:', JSON.stringify(req.body));
+    console.log('req body:', req.body);
+
+    console.log('-----------------------------------------------------');
 
     try {
       if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -67,6 +83,13 @@ export class UserContextMiddleware implements NestMiddleware {
       next();
     } catch (error) {
       this.logger.error('Failed to build user context:', error);
+      
+      // For webhook routes, continue without user context rather than failing
+      if (req.path.startsWith('/api/webhooks')) {
+        this.logger.warn('User context failed for webhook, continuing without context');
+        return next();
+      }
+      
       next(error);
     }
   }

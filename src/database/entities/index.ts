@@ -10,3 +10,4 @@ export * from './usage-tracking.entity';
 export * from './user.entity';
 export * from '../../modules/subscription/entities/subscription.entity';
 export * from '../../modules/subscription/entities/subscription-plan.entity';
+export * from '../../modules/webhooks/entities/payment-history.entity';

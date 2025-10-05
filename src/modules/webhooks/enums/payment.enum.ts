@@ -1,0 +1,14 @@
+export enum PaymentStatus {
+  PENDING = 'pending',
+  SUCCESS = 'success',
+  FAILED = 'failed',
+  CANCELLED = 'cancelled',
+  REFUNDED = 'refunded',
+  EXPIRED = 'expired',
+}
+
+export enum PaymentType {
+  SUBSCRIPTION = 'subscription',
+  ONE_TIME = 'one_time',
+  REFUND = 'refund',
+}

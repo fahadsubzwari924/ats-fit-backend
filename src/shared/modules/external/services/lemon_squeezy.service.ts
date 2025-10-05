@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { cancelSubscription, createCheckout, getCustomer, getSubscription, lemonSqueezySetup, NewCheckout } from '@lemonsqueezy/lemonsqueezy.js';
+import { CreateCheckoutRequest } from 'src/shared/modules/external/interfaces/payment-gateway.interface';
+
 
 @Injectable()
 export class LemonSqueezyService {
@@ -27,7 +29,7 @@ export class LemonSqueezyService {
     LemonSqueezyService.isSetup = true;
   }
 
-  async  createCheckoutSession(userId: string, variantId: string, userEmail: string) {
+  async  createCheckoutSession(request: CreateCheckoutRequest) {
     this.setupLemonSqueezy();
 
     const storeId = process.env.LEMON_SQUEEZY_STORE_ID;
@@ -35,11 +37,14 @@ export class LemonSqueezyService {
       throw new Error('Missing LEMON_SQUEEZY_STORE_ID in .env');
     }
 
+    
+
     const attributes: NewCheckout = {
+
         checkoutData: {
-            email: userEmail,
+            email: request.email,
             name: 'Ahsan Alam', // Optional: add real name if available
-            custom: { user_id: userId }, // For webhook linking
+            custom: request.customData, // For webhook linking
         },
         productOptions: {
             redirectUrl: 'https://your-app.com/dashboard?payment=success', // Adjust to your success page
@@ -50,13 +55,13 @@ export class LemonSqueezyService {
 
     };
 
-    const response = await createCheckout(storeId, variantId, attributes);
+    const response = await createCheckout(storeId, request.variantId, attributes);
 
     if (response.error) {
       throw new Error(`Checkout creation failed: ${response.error}`);
     }
 
-    return response?.data; // URL to redirect user to complete payment
+    return response; // URL to redirect user to complete payment
   }
 
   async getSubscriptionDetails(subscriptionId: string) {
