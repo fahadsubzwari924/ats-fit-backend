@@ -3,6 +3,13 @@ import {
   ApplicationSource,
   JobApplication,
 } from '../../../database/entities/job-application.entity';
+import { AtsAnalysis } from './ats-analysis.interface';
+
+export interface IJobApplicationMetadata {
+  skills_matched?: string[];
+  skills_missing?: string[];
+  [key: string]: any;
+}
 
 export interface IJobApplicationAnalysis {
   ats_score: number;
@@ -24,7 +31,7 @@ export interface ICreateJobApplication {
   ats_match_history_id?: string;
   resume_generation_id?: string;
   ats_score?: number;
-  ats_analysis?: any;
+  ats_analysis?: AtsAnalysis;
   resume_content?: string;
   job_url?: string;
   job_location?: string;
@@ -34,7 +41,7 @@ export interface ICreateJobApplication {
   cover_letter?: string;
   notes?: string;
   contact_phone?: string;
-  metadata?: any;
+  metadata?: IJobApplicationMetadata;
 }
 
 export interface IUpdateJobApplication {
@@ -47,7 +54,7 @@ export interface IUpdateJobApplication {
   interview_notes?: string;
   follow_up_date?: Date;
   rejection_reason?: string;
-  metadata?: any;
+  metadata?: IJobApplicationMetadata;
 }
 
 export interface IJobApplicationQuery {

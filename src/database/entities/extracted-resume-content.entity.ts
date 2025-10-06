@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { User } from './user.entity';
 import { QueueMessage } from './queue-message.entity';
-import { TailoredContent } from '../../modules/resume/interfaces/resume-extracted-keywords.interface';
+import { TailoredContent } from '../../modules/resume-tailoring/interfaces/resume-extracted-keywords.interface';
 
 /**
  * Business entity for successfully processed resume content
@@ -18,10 +18,7 @@ import { TailoredContent } from '../../modules/resume/interfaces/resume-extracte
  */
 @Entity('extracted_resume_contents')
 @Index(['userId'])
-@Index(['queueMessageId'])
-@Index(['originalFileName'])
 @Index(['fileHash'])
-@Index(['lastUsedAt'])
 export class ExtractedResumeContent {
   @PrimaryGeneratedColumn('uuid')
   id: string;

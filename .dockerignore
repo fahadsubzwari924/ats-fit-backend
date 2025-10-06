@@ -71,9 +71,9 @@ temp/
 .parcel-cache
 
 # Package manager
-package-lock.json
 yarn.lock
 .pnpm-store
+# Note: package-lock.json is needed for npm ci
 
 # Scripts
 scripts/seed/
@@ -82,8 +82,7 @@ scripts/seed/
 .eslintrc.js
 .prettierrc
 jest.config.js
-tsconfig.json
-tsconfig.build.json
+# Note: tsconfig files are needed for build
 
 # Backup files
 *.bak

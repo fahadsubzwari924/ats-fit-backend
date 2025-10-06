@@ -4,7 +4,7 @@ import { BullModule } from '@nestjs/bull';
 import { DatabaseModule } from './database/database.module';
 import { validationSchema } from './config/validation.schema';
 import { AuthModule } from './modules/auth/auth.module';
-import { ResumeModule } from './modules/resume/resume.module';
+import { ResumeTailoringModule } from './modules/resume-tailoring/resume-tailoring.module';
 import { APP_GUARD, Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './modules/auth/jwt.guard';
 import { SharedModule } from './shared/shared.module';
@@ -54,7 +54,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     }),
     DatabaseModule,
     AuthModule,
-    ResumeModule,
+    ResumeTailoringModule,
     SharedModule,
     AtsMatchModule,
     UserModule,

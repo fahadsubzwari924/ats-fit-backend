@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ClaudeService } from '../modules/external/services/claude.service';
+import { OpenAIService } from '../modules/external/services/open_ai.service';
+import { AIErrorUtil } from '../utils/ai-error.util';
 import {
   PremiumAtsEvaluation,
   StandardAtsEvaluation,
@@ -53,6 +55,7 @@ export class AtsEvaluationService {
 
   constructor(
     private readonly claudeService: ClaudeService,
+    private readonly openAIService: OpenAIService,
 
     @InjectRepository(AtsMatchHistory)
     private readonly atsMatchHistoryRepository: Repository<AtsMatchHistory>,
@@ -431,16 +434,50 @@ export class AtsEvaluationService {
     );
 
     try {
-      const evaluation = (await this.claudeService.evaluateAtsMatch({
-        resumeText,
-        jobDescription,
-        prompt,
-      })) as PremiumAtsEvaluation;
+      // Try Claude first, fallback to OpenAI on overload
+      let evaluation: PremiumAtsEvaluation;
+
+      try {
+        evaluation = (await this.claudeService.evaluateAtsMatch({
+          resumeText,
+          jobDescription,
+          prompt,
+        })) as PremiumAtsEvaluation;
+
+        this.logger.log('Successfully used Claude for ATS evaluation');
+      } catch (claudeError) {
+        this.logger.error('Claude ATS evaluation failed', claudeError);
+
+        if (AIErrorUtil.isClaudeOverloadError(claudeError)) {
+          this.logger.warn(
+            'Claude API overloaded, falling back to OpenAI for ATS evaluation',
+          );
+
+          try {
+            evaluation = await this.performAtsEvaluationWithOpenAI(
+              resumeText,
+              jobDescription,
+              prompt,
+            );
+            this.logger.log(
+              'Successfully used OpenAI fallback for ATS evaluation',
+            );
+          } catch (openAIError) {
+            this.logger.error('OpenAI ATS evaluation also failed', openAIError);
+            throw new InternalServerErrorException(
+              'Both Claude and OpenAI ATS evaluation failed. Please try again later.',
+            );
+          }
+        } else {
+          // Re-throw non-overload errors
+          throw claudeError;
+        }
+      }
 
       // Validate the evaluation
       this.validatePremiumAtsEvaluation(evaluation);
 
-      this.logger.log(`Premium ATS Evaluation completed with Claude 3.5 Sonnet:
+      this.logger.log(`Premium ATS Evaluation completed successfully:
         - Overall Score: ${evaluation.overallScore}%
         - Technical Skills: ${evaluation.technicalSkillsScore}%
         - Experience Alignment: ${evaluation.experienceAlignmentScore}%
@@ -453,7 +490,7 @@ export class AtsEvaluationService {
       return evaluation;
     } catch (error) {
       this.logger.error(
-        'Claude ATS evaluation failed, falling back to standard evaluation',
+        'Premium ATS evaluation failed (both Claude and OpenAI), falling back to standard evaluation',
         error,
       );
 
@@ -622,5 +659,40 @@ export class AtsEvaluationService {
     const savedRecord =
       await this.atsMatchHistoryRepository.save(atsMatchHistory);
     return savedRecord;
+  }
+
+  /**
+   * Perform ATS evaluation using OpenAI as fallback
+   */
+  private async performAtsEvaluationWithOpenAI(
+    resumeText: string,
+    jobDescription: string,
+    prompt: string,
+  ): Promise<PremiumAtsEvaluation> {
+    try {
+      const response = await this.openAIService.chatCompletion({
+        model: 'gpt-4-turbo',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        max_tokens: 3000,
+      });
+
+      const content = response?.choices?.[0]?.message?.content;
+      if (!content || typeof content !== 'string') {
+        throw new InternalServerErrorException(
+          'Empty response from OpenAI for ATS evaluation',
+        );
+      }
+
+      const evaluation = JSON.parse(content) as PremiumAtsEvaluation;
+
+      return evaluation;
+    } catch (error) {
+      this.logger.error('OpenAI ATS evaluation failed', error);
+      throw new InternalServerErrorException(
+        'Failed to evaluate ATS match with OpenAI',
+      );
+    }
   }
 }

@@ -20,14 +20,14 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { PremiumUserGuard } from '../auth/guards/premium-user.guard';
-import { FileValidationPipe } from '../resume/pipes/file-validation.pipe';
+import { FileValidationPipe } from '../../shared/pipes/file-validation.pipe';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
 import { MimeTypes } from '../../shared/constants/mime-types.enum';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
-import { ResumeService } from '../resume/services/resume.service';
+import { ResumeService } from '../resume-tailoring/services/resume.service';
 import { UserService } from './user.service';
 import { QueueService } from '../queue/queue.service';
-import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
+import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
 
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { IFeatureUsage } from '../../shared/interfaces';
@@ -47,7 +47,7 @@ export class UserController {
     private readonly resumeService: ResumeService,
     private readonly userService: UserService,
     private readonly queueService: QueueService,
-    private readonly extractedResumeService: ExtractedResumeService,
+    private readonly resumeContentService: ResumeContentService,
   ) {}
 
   @Get('feature-usage')
@@ -238,7 +238,7 @@ export class UserController {
     }
 
     this.logger.log(`Fetching processed resumes for user ${userId}`);
-    return await this.extractedResumeService.getUserExtractedResumes(userId);
+    return await this.resumeContentService.getUserExtractedResumes(userId);
   }
 
   @Get('processed-resumes/:processingId/status')
@@ -268,7 +268,7 @@ export class UserController {
     }
 
     const processedResume =
-      await this.extractedResumeService.getUserExtractedResumeById(
+      await this.resumeContentService.getUserExtractedResumeById(
         processingId,
         userId,
       );
@@ -315,7 +315,7 @@ export class UserController {
       );
     }
 
-    const deleted = await this.extractedResumeService.deleteExtractedResume(
+    const deleted = await this.resumeContentService.deleteExtractedResume(
       processingId,
       userId,
     );

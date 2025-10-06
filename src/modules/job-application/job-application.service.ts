@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 import {
   Injectable,
   NotFoundException,
@@ -23,7 +20,9 @@ import {
   IJobApplicationQuery,
   IJobApplicationStats,
   IJobApplicationWithRelations,
+  IJobApplicationMetadata,
 } from './interfaces/job-application.interface';
+import { AtsAnalysis } from './interfaces/ats-analysis.interface';
 import { AtsMatchService } from '../ats-match/ats-match.service';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { FieldSelectionService } from '../../shared/services/field-selection.service';
@@ -81,11 +80,10 @@ export class JobApplicationService {
         cover_letter: data.cover_letter,
         notes: data.notes,
         contact_phone: data.contact_phone,
-        metadata: {
-          ...data.metadata,
-          skills_matched: data.ats_analysis?.matched?.hardSkills || [],
-          skills_missing: data.ats_analysis?.missingKeywords || [],
-        },
+        metadata: this.buildJobApplicationMetadata(
+          data.metadata,
+          data.ats_analysis,
+        ),
         status: ApplicationStatus.APPLIED,
       });
 
@@ -470,33 +468,98 @@ export class JobApplicationService {
   }
 
   /**
+   * Build job application metadata with type safety
+   */
+  private buildJobApplicationMetadata(
+    existingMetadata?: IJobApplicationMetadata,
+    atsAnalysis?: AtsAnalysis,
+  ): IJobApplicationMetadata {
+    return {
+      ...existingMetadata,
+      skills_matched: this.extractSkillsMatched(atsAnalysis),
+      skills_missing: this.extractMissingSkills(atsAnalysis),
+    };
+  }
+
+  /**
+   * Extract matched skills from ATS analysis
+   */
+  private extractSkillsMatched(atsAnalysis?: AtsAnalysis): string[] {
+    if (!atsAnalysis) return [];
+
+    // Check for skills in matched.hardSkills (new format)
+    const hardSkills =
+      atsAnalysis.matched?.hardSkills ||
+      atsAnalysis.details?.matched?.hardSkills;
+    if (Array.isArray(hardSkills)) {
+      return hardSkills;
+    }
+
+    return [];
+  }
+
+  /**
+   * Extract missing skills from ATS analysis
+   */
+  private extractMissingSkills(atsAnalysis?: AtsAnalysis): string[] {
+    if (!atsAnalysis) return [];
+
+    // Check for missing keywords (legacy format) or details.missingKeywords (new format)
+    const missingKeywords =
+      atsAnalysis.missingKeywords || atsAnalysis.details?.missingKeywords;
+    if (Array.isArray(missingKeywords)) {
+      return missingKeywords;
+    }
+
+    return [];
+  }
+
+  /**
    * Generate suggestions based on ATS analysis
    */
-  private generateSuggestions(atsAnalysis: any): string[] {
+  private generateSuggestions(atsAnalysis?: AtsAnalysis): string[] {
     const suggestions: string[] = [];
 
-    if (atsAnalysis?.missingKeywords?.length > 0) {
+    if (!atsAnalysis) return suggestions;
+
+    // Check for missing keywords
+    const missingKeywords = this.extractMissingSkills(atsAnalysis);
+    if (missingKeywords.length > 0) {
       suggestions.push(
-        `Consider adding these missing keywords: ${atsAnalysis.missingKeywords.slice(0, 5).join(', ')}`,
+        `Consider adding these missing keywords: ${missingKeywords.slice(0, 5).join(', ')}`,
       );
     }
 
-    if (atsAnalysis?.skillMatchScore < 70) {
+    // Check skill match score
+    const skillMatchScore =
+      atsAnalysis.skillMatchScore || atsAnalysis.details?.skillMatchScore;
+    if (typeof skillMatchScore === 'number' && skillMatchScore < 70) {
       suggestions.push(
         'Your skill match score is low. Consider highlighting more relevant technical skills.',
       );
     }
 
-    if (atsAnalysis?.sectionScores?.contactInfo < 80) {
-      suggestions.push(
-        'Ensure your contact information is complete and professional.',
-      );
-    }
+    // Check section scores
+    const sectionScores =
+      atsAnalysis.sectionScores || atsAnalysis.details?.sectionScores;
+    if (sectionScores) {
+      if (
+        typeof sectionScores.contactInfo === 'number' &&
+        sectionScores.contactInfo < 80
+      ) {
+        suggestions.push(
+          'Ensure your contact information is complete and professional.',
+        );
+      }
 
-    if (atsAnalysis?.sectionScores?.structure < 70) {
-      suggestions.push(
-        'Consider improving your resume structure and formatting.',
-      );
+      if (
+        typeof sectionScores.structure === 'number' &&
+        sectionScores.structure < 70
+      ) {
+        suggestions.push(
+          'Consider improving your resume structure and formatting.',
+        );
+      }
     }
 
     return suggestions;

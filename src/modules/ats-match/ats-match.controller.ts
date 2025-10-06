@@ -12,7 +12,7 @@ import {
 import { RateLimitFeature } from '../rate-limit/rate-limit.guard';
 import { FeatureType } from '../../database/entities/usage-tracking.entity';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { FileValidationPipe } from '../resume/pipes/file-validation.pipe';
+import { FileValidationPipe } from '../../shared/pipes/file-validation.pipe';
 import { AtsScoreResponseDto } from './dto/ats-score-response.dto';
 import { AtsMatchService } from './ats-match.service';
 import { AtsScoreRequestDto } from './dto/ats-score-request.dto';
@@ -27,7 +27,9 @@ import { AtsMatchHistoryQueryDto } from './dto/ats-match-history-query.dto';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { UserPlan, UserType } from '../../database/entities/user.entity';
 import { HelperUtil } from '../../shared/utils/helper.util';
-import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
+import { IResumeContentProvider } from '../../shared/interfaces/resume-content-provider.interface';
+import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-provider.token';
+import { Inject } from '@nestjs/common';
 import {
   BadRequestException,
   NotFoundException,
@@ -39,7 +41,8 @@ export class AtsMatchController {
     private readonly atsMatchService: AtsMatchService,
     private readonly atsMatchHistoryService: AtsMatchHistoryService,
     private readonly rateLimitService: RateLimitService,
-    private readonly extractedResumeService: ExtractedResumeService,
+    @Inject(RESUME_CONTENT_PROVIDER)
+    private readonly resumeContentService: IResumeContentProvider,
   ) {}
 
   @Post('score')
@@ -91,7 +94,7 @@ export class AtsMatchController {
 
     // Check if user can use pre-processed resume feature
     if (
-      !this.extractedResumeService.canUsePreProcessedResume(
+      !this.resumeContentService.canUsePreProcessedResume(
         userContext.userType as UserType,
       )
     ) {
@@ -101,7 +104,7 @@ export class AtsMatchController {
       );
     }
 
-    return await this.extractedResumeService.getUserProcessedResumeInfo(
+    return await this.resumeContentService.getUserProcessedResumeInfo(
       userContext.userId,
     );
   }

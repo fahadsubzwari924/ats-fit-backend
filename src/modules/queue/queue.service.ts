@@ -12,7 +12,7 @@ import { ExtractedResumeContent } from '../../database/entities/extracted-resume
 import { ResumeProcessingJobData } from './resume-processing.processor';
 import { v4 as uuidv4 } from 'uuid';
 import { FileUtil } from '../../shared/utils/file.util';
-import { ExtractedResumeService } from '../resume/services/extracted-resume.service';
+import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
 
 export interface CreateQueueJobOptions {
   queueName: string;
@@ -35,7 +35,7 @@ export class QueueService {
     private readonly resumeProcessingQueue: Queue<ResumeProcessingJobData>,
     @InjectRepository(QueueMessage)
     private readonly queueMessageRepository: Repository<QueueMessage>,
-    private readonly extractedResumeService: ExtractedResumeService,
+    private readonly resumeContentService: ResumeContentService,
   ) {}
 
   /**
@@ -88,7 +88,7 @@ export class QueueService {
 
   /**
    * Add resume processing job with proper queue tracking
-   * Uses ExtractedResumeService for business logic separation
+   * Uses ResumeContentService for business logic separation
    */
   async addResumeProcessingJob(
     userId: string,
@@ -98,9 +98,9 @@ export class QueueService {
     const fileSize = fileBuffer.length;
     const fileHash = FileUtil.generateFileHash(fileBuffer);
 
-    // Check if this file has already been processed using ExtractedResumeService
+    // Check if this file has already been processed using ResumeContentService
     const existingContent =
-      await this.extractedResumeService.findExistingByFileHash(
+      await this.resumeContentService.findExistingByFileHash(
         userId,
         fileHash,
       );
@@ -132,9 +132,9 @@ export class QueueService {
       },
     });
 
-    // Create business entity using ExtractedResumeService
+    // Create business entity using ResumeContentService
     const savedRecord =
-      await this.extractedResumeService.createExtractedResumeRecord({
+      await this.resumeContentService.createExtractedResumeRecord({
         userId,
         queueMessageId: queueMessage.id,
         originalFileName: fileName,
