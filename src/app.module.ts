@@ -18,7 +18,6 @@ import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
 import { UserContextMiddleware } from './shared/middlewares/user-context.middleware';
 import { HealthModule } from './health/health.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
-import { WebhooksModule } from './modules/webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -63,7 +62,6 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     QueueModule,
     HealthModule,
     SubscriptionModule,
-    WebhooksModule,
   ],
   providers: [
     {

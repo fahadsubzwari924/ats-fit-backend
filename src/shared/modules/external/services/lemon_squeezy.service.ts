@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { cancelSubscription, createCheckout, getCustomer, getSubscription, lemonSqueezySetup, NewCheckout } from '@lemonsqueezy/lemonsqueezy.js';
 import { CreateCheckoutRequest } from 'src/shared/modules/external/interfaces/payment-gateway.interface';
 
 
 @Injectable()
 export class LemonSqueezyService {
-
+    private readonly logger = new Logger(LemonSqueezyService.name);
     private static isSetup = false;
 
     constructor() {}
@@ -21,7 +21,7 @@ export class LemonSqueezyService {
     lemonSqueezySetup({
       apiKey,
       onError: (error) => {
-        console.error('Lemon Squeezy SDK Error:', error);
+        this.logger.error('Lemon Squeezy SDK Error:', error);
         // Optionally throw or handle
       },
     });

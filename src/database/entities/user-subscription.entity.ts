@@ -1,20 +1,19 @@
-import { User } from '../../../database/entities/user.entity';
+import { User } from './user.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
-import { SubscriptionPlan } from './subscription-plan.entity';
 import { Optional } from '@nestjs/common';
-import { SubscriptionStatus } from '../enums/subscription-status.enum';
+import { SubscriptionStatus } from '../../modules/subscription/enums/subscription-status.enum';
+import { SubscriptionPlan } from './subscription-plan.entity';
 
 
-
-@Entity('subscriptions')
-@Index(['lemonSqueezyId'])
-@Index(['userId', 'status'])
-export class Subscription {
+@Entity('user_subscriptions')
+@Index(['external_subscription_id'])
+@Index(['user_id', 'status'])
+export class UserSubscription {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'lemon_squeezy_id' })
-  lemonSqueezyId: string;
+  @Column({ name: 'external_subscription_id' })
+  external_subscription_id: string;
 
   @Column({
     type: 'enum',
@@ -31,20 +30,20 @@ export class Subscription {
   currency: string;
 
   @Column({ name: 'starts_at', type: 'timestamp', nullable: true, default: () => 'NOW()' })
-  startsAt: Date;
+  starts_at: Date;
 
   @Column({ name: 'ends_at', type: 'timestamp', nullable: true })
-  endsAt: Date;
+  ends_at: Date;
 
   @Column({ name: 'is_active', type: 'boolean', default: false })
-  isActive: boolean;
+  is_active: boolean;
 
   @Column({ name: 'is_cancelled', type: 'boolean', default: false })
-  isCancelled: boolean;
+  is_cancelled: boolean;
 
   // User relationship
   @Column({ name: 'user_id' })
-  userId: string;
+  user_id: string;
 
   @ManyToOne(() => User, { eager: false })
   @JoinColumn({ name: 'user_id' })
@@ -52,31 +51,31 @@ export class Subscription {
 
   // Subscription Plan relationship
   @Column({ name: 'subscription_plan_id' })
-  subscriptionPlanId: string;
+  subscription_plan_id: string;
 
   @ManyToOne(() => SubscriptionPlan, plan => plan.subscriptions, { eager: false })
   @JoinColumn({ name: 'subscription_plan_id' })
-  subscriptionPlan: SubscriptionPlan;
+  subscription_plan: SubscriptionPlan;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
 
   @CreateDateColumn({ name: 'created_at', default: () => 'NOW()' })
-  createdAt: Date;
+  created_at: Date;
 
   @UpdateDateColumn({ name: 'updated_at', default: () => 'NOW()' })
-  updatedAt: Date;
+  updated_at: Date;
 
   // Helper methods
   isActiveSubscription(): boolean {
-    return this.status === SubscriptionStatus.ACTIVE && this.isActive;
+    return this.status === SubscriptionStatus.ACTIVE && this.is_active;
   }
 
   isCancelledSubscription(): boolean {
-    return this.status === SubscriptionStatus.CANCELLED || this.isCancelled;
+    return this.status === SubscriptionStatus.CANCELLED || this.is_cancelled;
   }
 
   isExpired(): boolean {
-    return this.status === SubscriptionStatus.EXPIRED || new Date() > this.endsAt;
+    return this.status === SubscriptionStatus.EXPIRED || new Date() > this.ends_at;
   }
 }

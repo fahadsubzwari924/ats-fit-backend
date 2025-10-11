@@ -1,28 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { SubscriptionPlan } from '../../../database/entities/subscription-plan.entity';
 import { Repository } from 'typeorm';
-import { SubscriptionPlan } from '../entities/subscription-plan.entity';
+import { BillingCycle } from '../enums';
+import { ICreateSubscriptionPlanData, IUpdateSubscriptionPlanData } from '../interfaces/subscription.interface';
 
-export interface CreateSubscriptionPlanData {
-  planName: string;
-  description: string;
-  price: number;
-  currency?: string;
-  lemonSqueezyVariantId: string;
-  features?: string[];
-  billingCycle?: string;
-}
-
-export interface UpdateSubscriptionPlanData {
-  planName?: string;
-  description?: string;
-  price?: number;
-  currency?: string;
-  lemonSqueezyVariantId?: string;
-  features?: string[];
-  billingCycle?: string;
-  isActive?: boolean;
-}
 
 @Injectable()
 export class SubscriptionPlanService {
@@ -31,12 +13,12 @@ export class SubscriptionPlanService {
     private readonly subscriptionPlanRepository: Repository<SubscriptionPlan>,
   ) {}
 
-  async create(data: CreateSubscriptionPlanData): Promise<SubscriptionPlan> {
+  async create(data: ICreateSubscriptionPlanData): Promise<SubscriptionPlan> {
     try {
       const subscriptionPlan = this.subscriptionPlanRepository.create({
         ...data,
         currency: data.currency || 'USD',
-        billingCycle: data.billingCycle || 'monthly',
+        billing_cycle: data.billing_cycle || BillingCycle.MONTHLY,
       });
       
       return await this.subscriptionPlanRepository.save(subscriptionPlan);
@@ -47,7 +29,7 @@ export class SubscriptionPlanService {
 
   async findAll(): Promise<SubscriptionPlan[]> {
     return await this.subscriptionPlanRepository.find({
-      where: { isActive: true },
+      where: { is_active: true },
       order: { price: 'ASC' },
     });
   }
@@ -70,13 +52,13 @@ export class SubscriptionPlanService {
     return plan;
   }
 
-  async findByLemonSqueezyVariantId(variantId: string): Promise<SubscriptionPlan | null> {
+  async findByExternalVariantId(variantId: string): Promise<SubscriptionPlan | null> {
     return await this.subscriptionPlanRepository.findOne({
-      where: { lemonSqueezyVariantId: variantId },
+      where: { external_variant_id: variantId },
     });
   }
 
-  async update(id: string, data: UpdateSubscriptionPlanData): Promise<SubscriptionPlan> {
+  async update(id: string, data: IUpdateSubscriptionPlanData): Promise<SubscriptionPlan> {
     const plan = await this.findById(id);
     
     Object.assign(plan, data);
@@ -85,11 +67,11 @@ export class SubscriptionPlanService {
   }
 
   async activate(id: string): Promise<SubscriptionPlan> {
-    return await this.update(id, { isActive: true });
+    return await this.update(id, { is_active: true });
   }
 
   async deactivate(id: string): Promise<SubscriptionPlan> {
-    return await this.update(id, { isActive: false });
+    return await this.update(id, { is_active: false });
   }
 
   async delete(id: string): Promise<void> {
@@ -100,11 +82,11 @@ export class SubscriptionPlanService {
     }
   }
 
-  async findByBillingCycle(billingCycle: string): Promise<SubscriptionPlan[]> {
+  async findByBillingCycle(billingCycle: BillingCycle): Promise<SubscriptionPlan[]> {
     return await this.subscriptionPlanRepository.find({
       where: { 
-        billingCycle,
-        isActive: true 
+        billing_cycle: billingCycle,
+        is_active: true 
       },
       order: { price: 'ASC' },
     });

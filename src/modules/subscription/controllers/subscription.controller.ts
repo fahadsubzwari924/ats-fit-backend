@@ -1,19 +1,26 @@
-import { Controller, Post, Body, Get, UseGuards, Param, Delete, Req, BadRequestException, Put } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Param, Req, Logger, Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { SubscriptionService } from '../services/subscription.service';
 import { SubscriptionPlanService } from '../services/subscription-plan.service';
 import { PaymentService } from '../../../shared/services/payment.service';
-import { CreateSubscriptionDto, UpdateSubscriptionDto } from '../dtos/subscription.dto';
-import { CreateSubscriptionPlanDto, UpdateSubscriptionPlanDto, SubscriptionPlanResponseDto } from '../dtos/subscription-plan.dto';
-import { CheckoutResponseDto, SubscriptionStatusDto } from '../dtos/checkout-response.dto';
+import { CreateSubscriptionDto } from '../dtos/subscription.dto';
+import { SubscriptionPlanResponseDto } from '../dtos/subscription-plan.dto';
+import { CheckoutResponseDto } from '../dtos/checkout-response.dto';
 import { JwtAuthGuard } from '../../auth/jwt.guard';
 import { RequestWithUserContext } from '../../../shared/interfaces/request-user.interface';
+import { BadRequestException, NotFoundException } from '../../../shared/exceptions/custom-http-exceptions';
+import { MESSAGES } from '../../../shared/constants/messages';
+import { ERROR_CODES } from 'src/shared/constants/error-codes';
+import { Public } from '../../auth/decorators/public.decorator';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class SubscriptionController {
+
+  private readonly logger = new Logger(SubscriptionController.name);
+
   constructor(
     private readonly subscriptionService: SubscriptionService,
     private readonly subscriptionPlanService: SubscriptionPlanService,
@@ -27,38 +34,61 @@ export class SubscriptionController {
     description: 'Checkout session created successfully',
     type: CheckoutResponseDto
   })
-  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 400, description: 'Bad request - Invalid plan, inactive plan, or user already has active subscription' })
+  @ApiResponse({ status: 404, description: 'Subscription plan not found' })
   async createCheckoutSession(
     @Body() createSubscriptionDto: CreateSubscriptionDto,
     @Req() request: RequestWithUserContext,
   ) {
     try {
-      // Find the subscription plan by planId from the database
-      const subscriptionPlan = await this.subscriptionPlanService.findById(createSubscriptionDto.planId);
+      // Find the subscription plan by plan_id from the database
+      const subscriptionPlan = await this.subscriptionPlanService.findById(createSubscriptionDto.plan_id);
       
       if (!subscriptionPlan) {
-        throw new BadRequestException(`Subscription plan with ID ${createSubscriptionDto.planId} not found`);
+        throw new NotFoundException(
+          MESSAGES.SUBSCRIPTION_NOT_FOUND,
+          ERROR_CODES.SUBSCRIPTION_NOT_FOUND
+        );
       }
 
-      if (!subscriptionPlan.isActive) {
-        throw new BadRequestException(`Subscription plan with ID ${createSubscriptionDto.planId} is not active`);
+      if (!subscriptionPlan.is_active) {
+        throw new BadRequestException(
+          MESSAGES.SUBSCRIPTION_PLAN_IS_NOT_ACTIVE,
+          ERROR_CODES.IN_ACTIVE_SUBSCRIPTION_PLAN
+        );
+      }
+
+      // Check if user already has a valid/active subscription
+      const existingSubscriptions = await this.subscriptionService.findByUserId(request?.userContext?.userId);
+      const activeSubscription = existingSubscriptions.find(sub => sub.is_active && !sub.is_cancelled);
+      
+      if (activeSubscription) {
+        this.logger.warn(`User ${request?.userContext?.userId} attempted to create checkout with existing active subscription: ${activeSubscription.id}`);
+        throw new BadRequestException(
+          MESSAGES.ACTIVE_SUBSCRIPTION_EXISTS,
+          ERROR_CODES.ACTIVE_SUBSCRIPTION_EXISTS
+        );
       }
 
       const checkoutResponse = await this.paymentService.createCheckout({
-        variantId: subscriptionPlan.lemonSqueezyVariantId,
-        email: createSubscriptionDto.metaData?.email,
+        variantId: subscriptionPlan.external_variant_id,
+        email: createSubscriptionDto.metadata?.email,
         customData: {
           userId: request?.userContext?.userId,
           planId: subscriptionPlan.id,
-          email: createSubscriptionDto.metaData?.email
+          email: createSubscriptionDto.metadata?.email
         }
       });
       
       return checkoutResponse;
     } catch (error) {
-      console.error('Checkout creation error:', error);
+      this.logger.error('createCheckoutSession -> Checkout creation error:', {
+        error,
+        request
+      });
       throw new BadRequestException(
-        error.message || 'Failed to create checkout session'
+        error.message || MESSAGES.FAILED_TO_CREATE_CHECKOUT_SESSION,
+        ERROR_CODES.CHECKOUT_SESSION_CREATION_FAILED
       );
     }
   }
@@ -70,117 +100,12 @@ export class SubscriptionController {
     description: 'Returns the subscription details from database'
   })
   @ApiResponse({ status: 404, description: 'Subscription not found' })
-  async getSubscription(
+  async getSubscriptionById(
     @Param('id') subscriptionId: string,
     @Req() request: RequestWithUserContext
   ) {
     // Get subscription from database
     return await this.subscriptionService.findById(subscriptionId);
-  }
-
-  @Get('subscriptions/external/:subscriptionId')
-  @ApiOperation({ summary: 'Get subscription details from payment provider API' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Returns the subscription details from payment provider'
-  })
-  @ApiResponse({ status: 404, description: 'Subscription not found' })
-  async getExternalSubscription(
-    @Param('subscriptionId') subscriptionId: string,
-    @Req() request: RequestWithUserContext
-  ) {
-    try {
-      const subscriptionData = await this.paymentService.getSubscription(subscriptionId);
-      return {
-        id: subscriptionData.id,
-        status: subscriptionData.status,
-        planId: subscriptionData.planId,
-        provider: this.paymentService.getProviderName(),
-        amount: subscriptionData.amount,
-        currency: subscriptionData.currency,
-        currentPeriodEnd: subscriptionData.currentPeriodEnd,
-        success: true
-      };
-    } catch (error) {
-      throw new BadRequestException(
-        error.message || `Failed to get subscription details from ${this.paymentService.getProviderName()}`
-      );
-    }
-  }
-
-  @Delete('subscriptions/:id/cancel')
-  @ApiOperation({ summary: 'Cancel a subscription in database' })
-  @ApiResponse({ status: 200, description: 'Subscription cancelled successfully in database' })
-  @ApiResponse({ status: 404, description: 'Subscription not found' })
-  async cancelSubscriptionInDatabase(
-    @Param('id') subscriptionId: string,
-    @Req() request: RequestWithUserContext,
-  ) {
-    // Cancel subscription in database only
-    return await this.subscriptionService.cancel(subscriptionId);
-  }
-
-  @Delete('subscriptions/cancel/:subscriptionId')
-  @ApiOperation({ summary: 'Cancel a subscription via payment provider API' })
-  @ApiResponse({ status: 200, description: 'Subscription cancelled successfully via payment provider' })
-  @ApiResponse({ status: 404, description: 'Subscription not found' })
-  async cancelExternalSubscription(
-    @Param('subscriptionId') subscriptionId: string,
-    @Req() request: RequestWithUserContext,
-  ) {
-    try {
-      const cancelResult = await this.paymentService.cancelSubscription({
-        subscriptionId,
-        reason: 'User requested cancellation'
-      });
-
-      // Also update in database if exists
-      const dbSubscription = await this.subscriptionService.findByLemonSqueezyId(subscriptionId);
-      if (dbSubscription) {
-        await this.subscriptionService.cancel(dbSubscription.id);
-      }
-      
-      return {
-        id: cancelResult.subscriptionId,
-        status: cancelResult.status,
-        provider: this.paymentService.getProviderName(),
-        cancelledAt: cancelResult.cancelledAt,
-        endsAt: cancelResult.endsAt,
-        message: 'Subscription cancelled successfully',
-        success: true
-      };
-    } catch (error) {
-      throw new BadRequestException(
-        error.message || 'Failed to cancel subscription'
-      );
-    }
-  }
-
-  @Get('customer/:customerId/portal')
-  @ApiOperation({ summary: 'Get customer portal URL for managing subscription' })
-  @ApiResponse({ status: 200, description: 'Returns the customer portal URL' })
-  async getCustomerPortal(
-    @Param('customerId') customerId: string,
-    @Req() request: RequestWithUserContext
-  ) {
-    try {
-      const portalResponse = await this.paymentService.createCustomerPortal({
-        customerId,
-        returnUrl: request.headers['referer'] || undefined
-      });
-      
-      return {
-        portalUrl: portalResponse.portalUrl,
-        provider: this.paymentService.getProviderName(),
-        expiresAt: portalResponse.expiresAt,
-        message: 'Redirect user to portalUrl to manage subscription',
-        success: true
-      };
-    } catch (error) {
-      throw new BadRequestException(
-        error.message || 'Failed to get customer portal URL'
-      );
-    }
   }
 
   @Get('user/:userId/subscriptions')
@@ -193,15 +118,6 @@ export class SubscriptionController {
     return await this.subscriptionService.findByUserId(userId);
   }
 
-  @Get('user/:userId/active-subscription')
-  @ApiOperation({ summary: 'Get active subscription for a user from database' })
-  @ApiResponse({ status: 200, description: 'Returns active subscription from database' })
-  async getUserActiveSubscription(
-    @Param('userId') userId: string,
-    @Req() request: RequestWithUserContext
-  ) {
-    return await this.subscriptionService.findActiveByUserId(userId);
-  }
 
   // Subscription Plan Endpoints
 
@@ -216,17 +132,6 @@ export class SubscriptionController {
     return await this.subscriptionPlanService.findAll();
   }
 
-  @Get('plans/all')
-  @ApiOperation({ summary: 'Get all subscription plans including inactive ones' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Returns all subscription plans including inactive ones',
-    type: [SubscriptionPlanResponseDto]
-  })
-  async getAllSubscriptionPlans() {
-    return await this.subscriptionPlanService.findAllIncludeInactive();
-  }
-
   @Get('plans/:id')
   @ApiOperation({ summary: 'Get subscription plan by ID' })
   @ApiResponse({ 
@@ -235,108 +140,83 @@ export class SubscriptionController {
     type: SubscriptionPlanResponseDto
   })
   @ApiResponse({ status: 404, description: 'Subscription plan not found' })
-  async getSubscriptionPlan(
+  async getSubscriptionPlanbyId(
     @Param('id') planId: string
   ) {
     return await this.subscriptionPlanService.findById(planId);
   }
 
-  @Get('plans/variant/:variantId')
-  @ApiOperation({ summary: 'Get subscription plan by LemonSqueezy variant ID' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Returns the subscription plan',
-    type: SubscriptionPlanResponseDto
-  })
-  @ApiResponse({ status: 404, description: 'Subscription plan not found' })
-  async getSubscriptionPlanByVariant(
-    @Param('variantId') variantId: string
+  // Payment Gateway Callback - Business Context: Subscription Payment Notification
+  @Public()
+  @Post('payment-callback')
+  @ApiOperation({ summary: 'Handle subscription payment notifications from payment gateway' })
+  @ApiResponse({ status: 200, description: 'Payment notification processed successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid payment notification payload' })
+  async handlePaymentCallback(
+    @Headers('x-signature') signature: string,
+    @Body() payload: any,
   ) {
-    const plan = await this.subscriptionPlanService.findByLemonSqueezyVariantId(variantId);
-    if (!plan) {
-      throw new BadRequestException(`Subscription plan with variant ID ${variantId} not found`);
+    this.logger.log('🔔 Subscription payment notification received');
+    this.logger.log(`Payment Event: ${payload.meta?.event_name}`);
+    this.logger.log(`Entity ID: ${payload.data?.id}`);
+
+    // Process payment notification for subscription updates
+    const result = await this.subscriptionService.processPaymentNotification(signature, payload);
+    
+    this.logger.log(`✅ Subscription payment notification processed:`, {
+      eventType: payload.meta?.event_name,
+      entityId: payload.data?.id,
+      success: result?.success || false
+    });
+
+    // Log subscription operations
+    if (result?.data?.subscriptionCreated || result?.data?.subscription) {
+      this.logger.log(`🎯 Subscription operation completed:`, {
+        subscriptionId: result.data.subscription?.subscriptionId,
+        status: result.data.subscription?.status,
+        isActive: result.data.subscription?.isActive,
+        userId: result.data.subscription?.userId,
+        planId: result.data.subscription?.subscriptionPlanId,
+        eventType: payload.meta?.event_name
+      });
     }
-    return plan;
+    
+    return result;
   }
 
-  @Get('plans/billing/:billingCycle')
-  @ApiOperation({ summary: 'Get subscription plans by billing cycle' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Returns subscription plans for the specified billing cycle',
-    type: [SubscriptionPlanResponseDto]
-  })
-  async getSubscriptionPlansByBilling(
-    @Param('billingCycle') billingCycle: string
-  ) {
-    return await this.subscriptionPlanService.findByBillingCycle(billingCycle);
-  }
 
-  @Post('plans')
-  @ApiOperation({ summary: 'Create a new subscription plan' })
-  @ApiResponse({ 
-    status: 201, 
-    description: 'Subscription plan created successfully',
-    type: SubscriptionPlanResponseDto
-  })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  async createSubscriptionPlan(
-    @Body() createPlanDto: CreateSubscriptionPlanDto
-  ) {
-    return await this.subscriptionPlanService.create(createPlanDto);
-  }
+  //#region Webhook Controllers
 
-  @Put('plans/:id')
-  @ApiOperation({ summary: 'Update a subscription plan' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Subscription plan updated successfully',
-    type: SubscriptionPlanResponseDto
-  })
-  @ApiResponse({ status: 404, description: 'Subscription plan not found' })
-  async updateSubscriptionPlan(
-    @Param('id') planId: string,
-    @Body() updatePlanDto: UpdateSubscriptionPlanDto
+  @Public()
+  @Post('payment-confirmation')
+  @ApiOperation({ summary: 'Handle payment confirmation webhook events' })
+  @ApiResponse({ status: 200, description: 'Payment Confirmation processed successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid Payment request' })
+  async paymentConfirmation(
+    @Headers('x-signature') signature: string,
+    @Body() payload: any,
   ) {
-    return await this.subscriptionPlanService.update(planId, updatePlanDto);
-  }
 
-  @Put('plans/:id/activate')
-  @ApiOperation({ summary: 'Activate a subscription plan' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Subscription plan activated successfully',
-    type: SubscriptionPlanResponseDto
-  })
-  @ApiResponse({ status: 404, description: 'Subscription plan not found' })
-  async activateSubscriptionPlan(
-    @Param('id') planId: string
-  ) {
-    return await this.subscriptionPlanService.activate(planId);
-  }
+    this.logger.log('🔔 Payment gateway "payment-confirmation" webhook endpoint reached successfully!');
+    this.logger.log(`🔥 DEBUG: Received "payment-confirmation" webhook payload:`, payload);
+    
+    // Process webhook through service layer
+    this.logger.log(`🔥 DEBUG: About to call webhookService.handleWebhook...`);
+    const result = await this.subscriptionService.paymentConfirmation(signature, payload);
+    this.logger.log(`🔥 DEBUG: Webhook service returned:`, result);
 
-  @Put('plans/:id/deactivate')
-  @ApiOperation({ summary: 'Deactivate a subscription plan' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Subscription plan deactivated successfully',
-    type: SubscriptionPlanResponseDto
-  })
-  @ApiResponse({ status: 404, description: 'Subscription plan not found' })
-  async deactivateSubscriptionPlan(
-    @Param('id') planId: string
-  ) {
-    return await this.subscriptionPlanService.deactivate(planId);
+    // Log processing results
+    this.logger.log(`🎯 NEW Subscription created in database:`, {
+        subscriptionId: result?.data?.subscription?.subscriptionId,
+        status: result?.data?.subscription?.status,
+        isActive: result?.data?.subscription?.isActive,
+        userId: result?.data?.subscription?.userId,
+        planId: result?.data?.subscription?.subscriptionPlanId,
+        payload: payload
+      });
+    
+    return result;
   }
+  //#endregion
 
-  @Delete('plans/:id')
-  @ApiOperation({ summary: 'Delete a subscription plan' })
-  @ApiResponse({ status: 200, description: 'Subscription plan deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Subscription plan not found' })
-  async deleteSubscriptionPlan(
-    @Param('id') planId: string
-  ) {
-    await this.subscriptionPlanService.delete(planId);
-    return { message: 'Subscription plan deleted successfully', success: true };
-  }
 }

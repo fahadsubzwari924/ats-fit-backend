@@ -1,19 +1,19 @@
-import { User } from '../../../database/entities/user.entity';
+import { User } from './user.entity';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
-import { SubscriptionPlan } from '../../subscription/entities/subscription-plan.entity';
-import { PaymentStatus, PaymentType } from '../enums/payment.enum';
+import { PaymentStatus, PaymentType } from '../../modules/subscription/enums';
+import { SubscriptionPlan } from './subscription-plan.entity';
 
 
 @Entity('payment_history')
-@Index(['lemonSqueezyId'])
-@Index(['userId', 'status'])
-@Index(['subscriptionPlanId', 'createdAt'])
+@Index(['external_payment_id'])
+@Index(['user_id', 'status'])
+@Index(['subscription_plan_id', 'created_at'])
 export class PaymentHistory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'lemon_squeezy_id'})
-  lemonSqueezyId: string;
+  @Column({ name: 'external_payment_id'})
+  external_payment_id: string;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   amount: number;
@@ -33,11 +33,11 @@ export class PaymentHistory {
     enum: PaymentType,
     name: 'payment_type',
   })
-  paymentType: PaymentType;
+  payment_type: PaymentType;
 
   // User relationship
   @Column({ name: 'user_id' })
-  userId: string;
+  user_id: string;
 
   @ManyToOne(() => User, { eager: false })
   @JoinColumn({ name: 'user_id' })
@@ -45,64 +45,64 @@ export class PaymentHistory {
 
   // Subscription Plan relationship
   @Column({ name: 'subscription_plan_id', nullable: true })
-  subscriptionPlanId: string;
+  subscription_plan_id: string;
 
-  @ManyToOne(() => SubscriptionPlan, plan => plan.paymentHistory, { eager: false })
+  @ManyToOne(() => SubscriptionPlan, plan => plan.payment_history, { eager: false })
   @JoinColumn({ name: 'subscription_plan_id' })
-  subscriptionPlan: SubscriptionPlan;
+  subscription_plan: SubscriptionPlan;
 
-  // Complete LemonSqueezy response payload
-  @Column({ type: 'jsonb', name: 'lemon_squeezy_payload' })
-  lemonSqueezyPayload: Record<string, any>;
+  // Complete payment gateway response data
+  @Column({ type: 'jsonb', name: 'payment_gateway_response' })
+  payment_gateway_response: Record<string, any>;
 
   // Additional fields for webhook processing
   @Column({ name: 'customer_email', nullable: true })
-  customerEmail: string;
+  customer_email: string;
 
   @Column({ name: 'is_test_mode', default: false })
-  isTestMode: boolean;
+  is_test_mode: boolean;
 
   @Column({ name: 'processed_at', type: 'timestamp', nullable: true })
-  processedAt: Date;
+  processed_at: Date;
 
   // Error handling
   @Column({ name: 'retry_count', default: 0 })
-  retryCount: number;
+  retry_count: number;
 
   @Column({ name: 'last_retry_at', type: 'timestamp', nullable: true })
-  lastRetryAt: Date;
+  last_retry_at: Date;
 
   @Column({ name: 'processing_error', type: 'text', nullable: true })
-  processingError: string;
+  processing_error: string;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  created_at: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updated_at: Date;
 
-  // Computed properties from LemonSqueezy payload
-  get productName(): string | null {
-    return this.lemonSqueezyPayload?.data?.attributes?.product_name || null;
+  // Computed properties from payment gateway response
+  get product_name(): string | null {
+    return this.payment_gateway_response?.data?.attributes?.product_name || null;
   }
 
-  get variantName(): string | null {
-    return this.lemonSqueezyPayload?.data?.attributes?.variant_name || null;
+  get variant_name(): string | null {
+    return this.payment_gateway_response?.data?.attributes?.variant_name || null;
   }
 
-  get productId(): string | null {
-    return this.lemonSqueezyPayload?.data?.attributes?.product_id?.toString() || null;
+  get product_id(): string | null {
+    return this.payment_gateway_response?.data?.attributes?.product_id?.toString() || null;
   }
 
-  get variantId(): string | null {
-    return this.lemonSqueezyPayload?.data?.attributes?.variant_id?.toString() || null;
+  get variant_id(): string | null {
+    return this.payment_gateway_response?.data?.attributes?.variant_id?.toString() || null;
   }
 
-  get orderId(): string | null {
-    return this.lemonSqueezyPayload?.data?.attributes?.order_id?.toString() || null;
+  get order_id(): string | null {
+    return this.payment_gateway_response?.data?.attributes?.order_id?.toString() || null;
   }
 
   // Helper methods
@@ -115,25 +115,25 @@ export class PaymentHistory {
   }
 
   canRetry(): boolean {
-    return this.retryCount < 5 && this.status === PaymentStatus.FAILED;
+    return this.retry_count < 5 && this.status === PaymentStatus.FAILED;
   }
 
   markAsProcessed(): void {
-    this.processedAt = new Date();
+    this.processed_at = new Date();
   }
 
   markAsFailed(error: string): void {
     this.status = PaymentStatus.FAILED;
-    this.processingError = error;
-    this.retryCount += 1;
-    this.lastRetryAt = new Date();
+    this.processing_error = error;
+    this.retry_count += 1;
+    this.last_retry_at = new Date();
   }
 
   /**
-   * Extract any field from the LemonSqueezy payload
+   * Extract any field from the payment gateway response
    */
-  getPayloadField(path: string): any {
-    return this.getNestedValue(this.lemonSqueezyPayload, path);
+  getResponseField(path: string): any {
+    return this.getNestedValue(this.payment_gateway_response, path);
   }
 
   /**

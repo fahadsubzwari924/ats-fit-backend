@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 import { ResumeGeneration } from './resume-generations.entity';
 import { Resume } from './resume.entity';
-// import { Subscription } from '../../modules/subscription/entities/subscription.entity';
+import { UserSubscription } from './user-subscription.entity';
 
 export enum UserPlan {
   FREEMIUM = 'freemium',
@@ -72,6 +72,6 @@ export class User {
   @OneToMany(() => Resume, (resume) => resume.user, { cascade: true })
   uploadedResumes: Resume[];
 
-  // @OneToMany(() => Subscription, (subscription) => subscription.user)
-  // subscriptions: Subscription[];
+  @OneToMany(() => UserSubscription, (subscription) => subscription.user)
+  subscriptions: UserSubscription[];
 }

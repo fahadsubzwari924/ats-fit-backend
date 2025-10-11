@@ -12,10 +12,10 @@ import {
   JobApplication,
   QueueMessage,
   ExtractedResumeContent,
+  SubscriptionPlan,
+  UserSubscription,
+  PaymentHistory
 } from './entities';
-import { SubscriptionPlan } from '../modules/subscription/entities/subscription-plan.entity';
-import { Subscription } from '../modules/subscription/entities/subscription.entity';
-import { PaymentHistory } from '../modules/webhooks/entities/payment-history.entity';
 
 @Module({
   imports: [
@@ -40,10 +40,10 @@ import { PaymentHistory } from '../modules/webhooks/entities/payment-history.ent
           QueueMessage,
           ExtractedResumeContent,
           SubscriptionPlan,
-          Subscription,
+          UserSubscription,
           PaymentHistory,
         ],
-        synchronize: process.env.NODE_ENV !== 'production',
+        synchronize: false, // Disabled to use migrations instead
         logging: process.env.NODE_ENV !== 'production',
         migrations: [__dirname + '/migrations/*.ts'],
         migrationsTableName: 'migrations',

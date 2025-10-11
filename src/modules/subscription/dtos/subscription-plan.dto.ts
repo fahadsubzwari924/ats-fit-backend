@@ -1,10 +1,11 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, IsArray, IsIn } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsBoolean, IsArray, IsIn, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { BillingCycle } from '../enums';
 
 export class CreateSubscriptionPlanDto {
   @ApiProperty({ description: 'Name of the subscription plan' })
   @IsString()
-  planName: string;
+  plan_name: string;
 
   @ApiProperty({ description: 'Description of what the plan includes' })
   @IsString()
@@ -19,9 +20,9 @@ export class CreateSubscriptionPlanDto {
   @IsString()
   currency?: string;
 
-  @ApiProperty({ description: 'LemonSqueezy variant ID for this plan' })
+  @ApiProperty({ description: 'External payment gateway variant ID for this plan' })
   @IsString()
-  lemonSqueezyVariantId: string;
+  external_variant_id: string;
 
   @ApiPropertyOptional({ description: 'List of features included in the plan' })
   @IsOptional()
@@ -36,14 +37,14 @@ export class CreateSubscriptionPlanDto {
   @IsOptional()
   @IsString()
   @IsIn(['monthly', 'yearly', 'one-time'])
-  billingCycle?: string;
+  billing_cycle?: string;
 }
 
 export class UpdateSubscriptionPlanDto {
   @ApiPropertyOptional({ description: 'Name of the subscription plan' })
   @IsOptional()
   @IsString()
-  planName?: string;
+  plan_name?: string;
 
   @ApiPropertyOptional({ description: 'Description of what the plan includes' })
   @IsOptional()
@@ -60,10 +61,10 @@ export class UpdateSubscriptionPlanDto {
   @IsString()
   currency?: string;
 
-  @ApiPropertyOptional({ description: 'LemonSqueezy variant ID for this plan' })
+  @ApiPropertyOptional({ description: 'External payment gateway variant ID for this plan' })
   @IsOptional()
   @IsString()
-  lemonSqueezyVariantId?: string;
+  external_variant_id?: string;
 
   @ApiPropertyOptional({ description: 'List of features included in the plan' })
   @IsOptional()
@@ -73,17 +74,16 @@ export class UpdateSubscriptionPlanDto {
 
   @ApiPropertyOptional({ 
     description: 'Billing cycle for the plan',
-    enum: ['monthly', 'yearly', 'one-time']
+    enum: BillingCycle
   })
   @IsOptional()
-  @IsString()
-  @IsIn(['monthly', 'yearly', 'one-time'])
-  billingCycle?: string;
+  @IsEnum(BillingCycle)
+  billing_cycle?: BillingCycle;
 
   @ApiPropertyOptional({ description: 'Whether the plan is active' })
   @IsOptional()
   @IsBoolean()
-  isActive?: boolean;
+  is_active?: boolean;
 }
 
 export class SubscriptionPlanResponseDto {
@@ -91,7 +91,7 @@ export class SubscriptionPlanResponseDto {
   id: string;
 
   @ApiProperty()
-  planName: string;
+  plan_name: string;
 
   @ApiProperty()
   description: string;
@@ -103,20 +103,20 @@ export class SubscriptionPlanResponseDto {
   currency: string;
 
   @ApiProperty()
-  lemonSqueezyVariantId: string;
+  external_variant_id: string;
 
   @ApiProperty()
-  isActive: boolean;
+  is_active: boolean;
 
   @ApiProperty({ type: [String] })
   features: string[];
 
-  @ApiProperty()
-  billingCycle: string;
+  @ApiProperty({ enum: BillingCycle })
+  billing_cycle: BillingCycle;
 
   @ApiProperty()
-  createdAt: Date;
+  created_at: Date;
 
   @ApiProperty()
-  updatedAt: Date;
+  updated_at: Date;
 }

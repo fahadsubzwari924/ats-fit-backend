@@ -3,12 +3,12 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateSubscriptionDto {
   @ApiProperty({
-    description: 'The ID of the subscription plan (LemonSqueezy variant ID)',
+    description: 'The ID of the subscription plan (External variant ID)',
     example: 'variant_12345'
   })
   @IsNotEmpty()
   @IsString()
-  planId: string;
+  plan_id: string;
 
   @ApiProperty({
     description: 'Additional metadata for the subscription',
@@ -20,7 +20,7 @@ export class CreateSubscriptionDto {
   })
   @IsOptional()
   @IsObject()
-  metaData?: Record<string, any>;
+  metadata?: Record<string, any>;
 }
 
 export class UpdateSubscriptionDto {
@@ -30,7 +30,7 @@ export class UpdateSubscriptionDto {
   })
   @IsNotEmpty()
   @IsUUID()
-  subscriptionId: string;
+  subscription_id: string;
 
   @ApiProperty({
     description: 'Additional metadata for the subscription',

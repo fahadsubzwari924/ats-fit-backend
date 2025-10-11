@@ -14,7 +14,6 @@ export const AppDataSource = new DataSource({
   database: process.env.DATABASE_NAME || 'ats_fit',
   entities: [
     __dirname + '/entities/*.entity.{js,ts}',
-    __dirname + '/../modules/subscription/entities/*.entity.{js,ts}',
   ],
   migrations: [__dirname + '/migrations/*.{js,ts}'],
   migrationsTableName: 'migrations',

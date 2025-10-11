@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PaymentHistory } from '../entities/payment-history.entity';
+import { PaymentHistory } from '../../../database/entities/payment-history.entity';
 import { UserService } from '../../user/user.service';
-import { SubscriptionPlanService } from '../../subscription/services/subscription-plan.service';
-import { WebhookEventDto } from '../dtos/webhook.dto';
+import { SubscriptionPlanService } from './subscription-plan.service';
 import { PaymentStatus, PaymentType } from '../enums/payment.enum';
+import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
 
 @Injectable()
 export class PaymentHistoryService {
@@ -22,10 +22,10 @@ export class PaymentHistoryService {
    * Create payment history record from LemonSqueezy webhook
    */
 //   WebhookEventDto
-  async createFromWebhook(webhookData: any): Promise<PaymentHistory> {
+  async paymentConfirmation(webhookData: any): Promise<PaymentHistory> {
     try {
-      this.logger.log(`Creating payment history from webhook: ${webhookData.meta?.event_name}`);
-      this.logger.log(`Webhook data preview:`, {
+      this.logger.log(`payment-history.service -> paymentConfirmation -> Creating payment history from webhook: ${webhookData.meta?.event_name}`);
+      this.logger.log(`payment-history.service -> paymentConfirmation -> Webhook data preview:`, {
         event: webhookData.meta?.event_name,
         lemonSqueezyId: webhookData.data?.id,
         hasCustomData: !!webhookData.data?.attributes?.custom_data,
@@ -34,7 +34,7 @@ export class PaymentHistoryService {
 
       // Check if already exists
       const existingPayment = await this.paymentHistoryRepository.findOne({
-        where: { lemonSqueezyId: webhookData.data?.id }
+        where: { external_payment_id: webhookData.data?.id }
       });
 
       if (existingPayment) {
@@ -44,15 +44,15 @@ export class PaymentHistoryService {
 
       const paymentHistory = new PaymentHistory();
       
-      // Store complete LemonSqueezy response
-      paymentHistory.lemonSqueezyPayload = webhookData as any;
+      // Store complete payment gateway response
+      paymentHistory.payment_gateway_response = webhookData as any;
 
       // Extract basic information
-      paymentHistory.lemonSqueezyId = webhookData.data?.id;
+      paymentHistory.external_payment_id = webhookData.data?.id;
       paymentHistory.status = this.mapWebhookStatus(webhookData.data?.attributes?.status);
-      paymentHistory.paymentType = this.determinePaymentType(webhookData.meta?.event_name);
-      paymentHistory.isTestMode = webhookData.meta?.test_mode || false;
-      paymentHistory.customerEmail = webhookData.data.attributes.user_email;
+      paymentHistory.payment_type = this.determinePaymentType(webhookData.meta?.event_name);
+      paymentHistory.is_test_mode = webhookData.meta?.test_mode || false;
+      paymentHistory.customer_email = webhookData.data.attributes.user_email;
 
       // Extract custom data from various possible locations in LemonSqueezy webhook
       const customData = this.extractCustomData(webhookData);
@@ -65,7 +65,7 @@ export class PaymentHistoryService {
         try {
           const user = await this.userService.getUserById(customData?.user_id);
           if (user) {
-            paymentHistory.userId = user.id;
+            paymentHistory.user_id = user.id;
           }
         } catch (error) {
           this.logger.warn(`User not found for user id: ${webhookData?.meta?.custom_data?.user_id}`);
@@ -74,17 +74,17 @@ export class PaymentHistoryService {
 
       
       // Extract custom user ID if provided
-      if (customData?.user_id && !paymentHistory.userId) {
-        paymentHistory.userId = customData.user_id;
+      if (customData?.user_id && !paymentHistory.user_id) {
+        paymentHistory.user_id = customData.user_id;
         this.logger.log(`Found user ID in custom data: ${customData.user_id}`);
       }
       
       // Extract plan ID if provided in custom data
-      if (customData?.plan_id && !paymentHistory.subscriptionPlanId) {
+      if (customData?.plan_id && !paymentHistory.subscription_plan_id) {
         try {
           const subscriptionPlan = await this.subscriptionPlanService.findById(customData.plan_id);
           if (subscriptionPlan) {
-            paymentHistory.subscriptionPlanId = subscriptionPlan.id;
+            paymentHistory.subscription_plan_id = subscriptionPlan.id;
             this.logger.log(`Linked payment to subscription plan via custom data: ${subscriptionPlan.id}`);
           }
         } catch (error) {
@@ -115,9 +115,9 @@ export class PaymentHistoryService {
       const variantId = webhookData.data?.attributes?.first_order_item?.variant_id;
       if (variantId) {
         try {
-          const subscriptionPlan = await this.subscriptionPlanService.findByLemonSqueezyVariantId(variantId.toString());
+          const subscriptionPlan = await this.subscriptionPlanService.findByExternalVariantId(variantId.toString());
           if (subscriptionPlan) {
-            paymentHistory.subscriptionPlanId = subscriptionPlan.id;
+            paymentHistory.subscription_plan_id = subscriptionPlan.id;
             this.logger.log(`Linked payment to subscription plan: ${subscriptionPlan.id}`);
           }
         } catch (error) {
@@ -137,11 +137,11 @@ export class PaymentHistoryService {
   }
 
   /**
-   * Find payment history by LemonSqueezy ID
+   * Find payment history by External Payment ID
    */
-  async findByLemonSqueezyId(lemonSqueezyId: string): Promise<PaymentHistory | null> {
+  async findByExternalPaymentId(externalPaymentId: string): Promise<PaymentHistory | null> {
     return await this.paymentHistoryRepository.findOne({
-      where: { lemonSqueezyId },
+      where: { external_payment_id: externalPaymentId },
       relations: ['user', 'subscriptionPlan']
     });
   }
@@ -151,9 +151,9 @@ export class PaymentHistoryService {
    */
   async findByUserId(userId: string): Promise<PaymentHistory[]> {
     return await this.paymentHistoryRepository.find({
-      where: { userId },
+      where: { user_id: userId },
       relations: ['subscriptionPlan'],
-      order: { createdAt: 'DESC' }
+      order: { created_at: 'DESC' }
     });
   }
 
@@ -162,9 +162,9 @@ export class PaymentHistoryService {
    */
   async findBySubscriptionPlan(subscriptionPlanId: string): Promise<PaymentHistory[]> {
     return await this.paymentHistoryRepository.find({
-      where: { subscriptionPlanId },
+      where: { subscription_plan_id: subscriptionPlanId },
       relations: ['user'],
-      order: { createdAt: 'DESC' }
+      order: { created_at: 'DESC' }
     });
   }
 
@@ -200,7 +200,7 @@ export class PaymentHistoryService {
    * Get payment statistics
    */
   async getPaymentStats(userId?: string) {
-    const whereCondition = userId ? { userId } : {};
+    const whereCondition = userId ? { user_id: userId } : {};
     
     const [totalPayments, successfulPayments, totalRevenue] = await Promise.all([
       this.paymentHistoryRepository.count({ where: whereCondition }),
@@ -211,7 +211,7 @@ export class PaymentHistoryService {
         .createQueryBuilder('payment')
         .select('SUM(payment.amount)', 'sum')
         .where('payment.status = :status', { status: PaymentStatus.SUCCESS })
-        .andWhere(userId ? 'payment.userId = :userId' : '1=1', { userId })
+        .andWhere(userId ? 'payment.user_id = :userId' : '1=1', { userId })
         .getRawOne()
     ]);
 
@@ -262,7 +262,7 @@ export class PaymentHistoryService {
    * Extract custom data from LemonSqueezy webhook payload
    * LemonSqueezy returns custom data in different locations depending on the event type
    */
-  private extractCustomData(webhookData: WebhookEventDto): Record<string, any> | null {
+  private extractCustomData(webhookData: PaymentConfirmationDto): Record<string, any> | null {
     try {
       // Cast to any to access dynamic properties that might not be in the DTO interface
       const payload = webhookData as any;

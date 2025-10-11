@@ -22,12 +22,6 @@ async function bootstrap() {
   // Lemon Squeezy SDK setup
   lemonSqueezySetup({ apiKey: process.env.LEMON_SQUEEZY_API_KEY });
 
-  // await Ngrok.setAuthToken('20oaobEEaZl6I7SK8k7rSVAv6cu_7rmeSUurFKwCPXP4MtBtL');
-
-  
-  // Lemon Squeezy webhook raw body parser
-  // app.use('/api/webhooks/lemonsqueezy', bodyParser.raw({ type: 'application/json' }));
-
   // Enable graceful shutdown for Cloud Run
   app.enableShutdownHooks();
 
@@ -111,15 +105,13 @@ async function bootstrap() {
   // Cloud Run expects app to listen on PORT environment variable
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
+  console.log(`🚀 Application is running on port ${port}`);
 
   // Ngrok setup for local development
-  await authtoken('20oaobEEaZl6I7SK8k7rSVAv6cu_7rmeSUurFKwCPXP4MtBtL');
+  await authtoken(process.env.NGROK_AUTH_TOKEN);
   const tunnel = await forward({ addr: port });
   console.log(`Public ngrok URL: ${tunnel.url()}`);
 
-
-
-  console.log(`🚀 Application is running on port ${port}`);
 }
 
 void bootstrap();

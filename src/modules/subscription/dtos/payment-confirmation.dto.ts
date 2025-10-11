@@ -1,7 +1,7 @@
 import { IsOptional, IsString, IsObject, IsNumber, IsBoolean } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class WebhookMetaDto {
+export class PaymentConfirmationMetaDto {
   @ApiPropertyOptional({ description: 'Whether the webhook is in test mode' })
   @IsOptional()
   @IsBoolean()
@@ -23,7 +23,7 @@ export class WebhookMetaDto {
   webhook_id?: string;
 }
 
-export class WebhookAttributesDto {
+export class PaymentionConfirmationAttributesDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
@@ -184,7 +184,7 @@ export class WebhookAttributesDto {
   checkout_data?: Record<string, any>;
 }
 
-export class WebhookDataDto {
+export class PaymentConfirmationDataDto {
   @ApiPropertyOptional({ description: 'The type of the resource' })
   @IsOptional()
   @IsString()
@@ -198,7 +198,7 @@ export class WebhookDataDto {
   @ApiPropertyOptional({ description: 'The attributes of the resource' })
   @IsOptional()
   @IsObject()
-  attributes?: WebhookAttributesDto;
+  attributes?: PaymentionConfirmationAttributesDto;
 
   @ApiPropertyOptional({ description: 'The relationships of the resource' })
   @IsOptional()
@@ -211,14 +211,14 @@ export class WebhookDataDto {
   links?: Record<string, any>;
 }
 
-export class WebhookEventDto {
+export class PaymentConfirmationDto {
   @ApiPropertyOptional({ description: 'The metadata of the webhook event' })
   @IsOptional()
   @IsObject()
-  meta?: WebhookMetaDto;
+  meta?: PaymentConfirmationMetaDto;
 
   @ApiPropertyOptional({ description: 'The data payload of the webhook event' })
   @IsOptional()
   @IsObject()
-  data?: WebhookDataDto;
+  data?: PaymentConfirmationDataDto;
 }
