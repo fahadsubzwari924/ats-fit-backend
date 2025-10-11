@@ -254,37 +254,6 @@ export class SubscriptionService {
     return !!activeSubscription;
   }
 
-  /**
-   * Process payment notification from payment gateway
-   * Business Context: Handle subscription payment confirmations and updates
-   */
-  async processPaymentNotification(signature: string, payload: any): Promise<any> {
-    try {
-      this.logger.log('Processing subscription payment notification');
-      
-      // TODO: Move webhook processing logic from webhook service to here
-      // This will be implemented as part of the migration from webhook module
-      
-      // For now, delegate to existing webhook service but this should be refactored
-      // to be part of subscription domain logic
-      
-      return {
-        success: true,
-        message: 'Payment notification processed successfully',
-        data: {
-          eventType: payload.meta?.event_name,
-          entityId: payload.data?.id
-        }
-      };
-    } catch (error) {
-      this.logger.error('Failed to process payment notification:', error);
-      throw new BadRequestException(
-        `Failed to process payment notification: ${error.message}`,
-        ERROR_CODES.BAD_REQUEST
-      );
-    }
-  }
-
 
   //#region Webhook Functions
 

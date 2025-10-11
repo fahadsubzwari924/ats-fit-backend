@@ -146,45 +146,6 @@ export class SubscriptionController {
     return await this.subscriptionPlanService.findById(planId);
   }
 
-  // Payment Gateway Callback - Business Context: Subscription Payment Notification
-  @Public()
-  @Post('payment-callback')
-  @ApiOperation({ summary: 'Handle subscription payment notifications from payment gateway' })
-  @ApiResponse({ status: 200, description: 'Payment notification processed successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid payment notification payload' })
-  async handlePaymentCallback(
-    @Headers('x-signature') signature: string,
-    @Body() payload: any,
-  ) {
-    this.logger.log('🔔 Subscription payment notification received');
-    this.logger.log(`Payment Event: ${payload.meta?.event_name}`);
-    this.logger.log(`Entity ID: ${payload.data?.id}`);
-
-    // Process payment notification for subscription updates
-    const result = await this.subscriptionService.processPaymentNotification(signature, payload);
-    
-    this.logger.log(`✅ Subscription payment notification processed:`, {
-      eventType: payload.meta?.event_name,
-      entityId: payload.data?.id,
-      success: result?.success || false
-    });
-
-    // Log subscription operations
-    if (result?.data?.subscriptionCreated || result?.data?.subscription) {
-      this.logger.log(`🎯 Subscription operation completed:`, {
-        subscriptionId: result.data.subscription?.subscriptionId,
-        status: result.data.subscription?.status,
-        isActive: result.data.subscription?.isActive,
-        userId: result.data.subscription?.userId,
-        planId: result.data.subscription?.subscriptionPlanId,
-        eventType: payload.meta?.event_name
-      });
-    }
-    
-    return result;
-  }
-
-
   //#region Webhook Controllers
 
   @Public()
