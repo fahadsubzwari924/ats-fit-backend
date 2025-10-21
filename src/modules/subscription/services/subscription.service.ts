@@ -8,7 +8,7 @@ import { ICreateSubscriptionData, IUpdateSubscriptionData } from '../interfaces/
 import { BadRequestException, NotFoundException } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { PaymentHistoryService } from 'src/modules/subscription/services/payment-history.service';
-import { LemonSqueezyEvent } from 'src/shared/modules/external/enums';
+import { ExternalPaymentGatewayEvents } from 'src/shared/modules/external/enums';
 import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -29,7 +29,7 @@ export class SubscriptionService {
       this.logger.debug('SubscriptionService.create() called with data:', data);
       
       const subscription = this.subscriptionRepository.create({
-        external_subscription_id: data.external_subscription_id,
+        external_payment_gateway_subscription_id: data.external_payment_gateway_subscription_id,
         subscription_plan_id: data.subscription_plan_id,
         user_id: data.user_id,
         status: data.status,
@@ -49,7 +49,7 @@ export class SubscriptionService {
       
       this.logger.log('Subscription saved to database successfully', { 
         subscriptionId: savedSubscription.id,
-        externalSubscriptionId: savedSubscription.external_subscription_id,
+        externalSubscriptionId: savedSubscription.external_payment_gateway_subscription_id,
         userId: savedSubscription.user_id
       });
       
@@ -87,7 +87,7 @@ export class SubscriptionService {
 
   async findByExternalId(externalId: string): Promise<UserSubscription | null> {
     return await this.subscriptionRepository.findOne({
-      where: { external_subscription_id: externalId },
+      where: { external_payment_gateway_subscription_id: externalId },
     });
   }
 
@@ -165,7 +165,7 @@ export class SubscriptionService {
     
     // Use TypeORM's update method for partial updates
     const updateResult = await this.subscriptionRepository.update(
-      { external_subscription_id: externalId }, 
+      { external_payment_gateway_subscription_id: externalId }, 
       data
     );
     
@@ -178,14 +178,6 @@ export class SubscriptionService {
 
     // Return the updated entity
     return await this.findByExternalId(externalId);
-  }
-
-  async cancel(id: string): Promise<UserSubscription> {
-    return await this.update(id, {
-      status: SubscriptionStatus.CANCELLED,
-      is_active: false,
-      is_cancelled: true,
-    });
   }
 
   async activate(id: string): Promise<UserSubscription> {
@@ -254,7 +246,6 @@ export class SubscriptionService {
     return !!activeSubscription;
   }
 
-
   //#region Webhook Functions
 
   async paymentConfirmation(signature: string, payload: any): Promise<{ success: boolean; message: string; data: any }> {
@@ -276,13 +267,14 @@ export class SubscriptionService {
 
       // Mark event as processed
       await this.paymentHistoryService.markAsProcessed(paymentHistory.id);
+      
 
       this.logger.log(`Webhook processed successfully: ${paymentHistory.id}`);
       
       // Check if subscription was created/updated for subscription events
       let subscriptionInfo = null;
       const eventType = payload.meta?.event_name;
-      if (eventType === LemonSqueezyEvent.SUBSCRIPTION_CREATED || eventType === LemonSqueezyEvent.SUBSCRIPTION_PAYMENT_SUCCESS) {
+      if (eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED || eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS) {
         try {
           const subscription = await this.findByExternalId(payload.data?.id);
           if (subscription) {
@@ -367,7 +359,7 @@ export class SubscriptionService {
       this.logger.log(`🔥 DEBUG: Starting subscription creation process...`);
       
       const subscriptionData: ICreateSubscriptionData = {
-        external_subscription_id: payload?.data?.id,
+        external_payment_gateway_subscription_id: payload?.data?.id,
         subscription_plan_id: payload?.meta?.custom_data?.plan_id,
         user_id: payload?.meta?.custom_data?.user_id,
         status: this.mapLemonSqueezyStatusToSubscriptionStatus(payload?.data?.attributes?.status),

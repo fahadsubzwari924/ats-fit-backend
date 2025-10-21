@@ -1,12 +1,12 @@
 /**
- * LemonSqueezy Webhook Event Types
+ * External Payment Gateway Webhook Event Types
  * 
- * This enum defines all possible webhook events that can be received from LemonSqueezy.
- * These events are sent when various actions occur in your LemonSqueezy store.
+ * This enum defines all possible webhook events that can be received from external payment gateways.
+ * These events are sent when various actions occur in your payment gateway store.
  * 
  * @see https://docs.lemonsqueezy.com/api/webhooks
  */
-export enum LemonSqueezyEvent {
+export enum ExternalPaymentGatewayEvents {
   // Affiliate Events
   AFFILIATE_ACTIVATED = 'affiliate_activated',
 
@@ -38,9 +38,9 @@ export enum LemonSqueezyEvent {
 }
 
 /**
- * Helper class to work with LemonSqueezy events
+ * Helper class to work with external payment gateway events
  */
-export class LemonSqueezyEventHelper {
+export class ExternalPaymentGatewayEventHelper {
   /**
    * Check if an event is subscription-related
    */
@@ -52,7 +52,7 @@ export class LemonSqueezyEventHelper {
    * Check if an event is payment-related
    */
   static isPaymentEvent(event: string): boolean {
-    return event?.includes('payment_') || event === LemonSqueezyEvent.ORDER_CREATED || false;
+    return event?.includes('payment_') || event === ExternalPaymentGatewayEvents.ORDER_CREATED || false;
   }
 
   /**
@@ -74,12 +74,12 @@ export class LemonSqueezyEventHelper {
    */
   static shouldCreateOrUpdateSubscription(event: string): boolean {
     const creationEvents = [
-      LemonSqueezyEvent.SUBSCRIPTION_CREATED,
-      LemonSqueezyEvent.SUBSCRIPTION_PAYMENT_SUCCESS,
-      LemonSqueezyEvent.SUBSCRIPTION_RESUMED,
-      LemonSqueezyEvent.SUBSCRIPTION_UNPAUSED,
+      ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED,
+      ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS,
+      ExternalPaymentGatewayEvents.SUBSCRIPTION_RESUMED,
+      ExternalPaymentGatewayEvents.SUBSCRIPTION_UNPAUSED,
     ];
-    return creationEvents.includes(event as LemonSqueezyEvent);
+    return creationEvents.includes(event as ExternalPaymentGatewayEvents);
   }
 
   /**
@@ -87,24 +87,24 @@ export class LemonSqueezyEventHelper {
    */
   static shouldDeactivateSubscription(event: string): boolean {
     const deactivationEvents = [
-      LemonSqueezyEvent.SUBSCRIPTION_CANCELLED,
-      LemonSqueezyEvent.SUBSCRIPTION_EXPIRED,
-      LemonSqueezyEvent.SUBSCRIPTION_PAUSED,
+      ExternalPaymentGatewayEvents.SUBSCRIPTION_CANCELLED,
+      ExternalPaymentGatewayEvents.SUBSCRIPTION_EXPIRED,
+      ExternalPaymentGatewayEvents.SUBSCRIPTION_PAUSED,
     ];
-    return deactivationEvents.includes(event as LemonSqueezyEvent);
+    return deactivationEvents.includes(event as ExternalPaymentGatewayEvents);
   }
 
   /**
    * Get all event values as array
    */
   static getAllEvents(): string[] {
-    return Object.values(LemonSqueezyEvent);
+    return Object.values(ExternalPaymentGatewayEvents);
   }
 
   /**
-   * Validate if event is a known LemonSqueezy event
+   * Validate if event is a known external payment gateway event
    */
   static isValidEvent(event: string): boolean {
-    return Object.values(LemonSqueezyEvent).includes(event as LemonSqueezyEvent);
+    return Object.values(ExternalPaymentGatewayEvents).includes(event as ExternalPaymentGatewayEvents);
   }
 }

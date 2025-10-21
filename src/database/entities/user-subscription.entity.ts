@@ -6,14 +6,15 @@ import { SubscriptionPlan } from './subscription-plan.entity';
 
 
 @Entity('user_subscriptions')
-@Index(['external_subscription_id'])
+@Index(['external_payment_gateway_subscription_id'])
 @Index(['user_id', 'status'])
+@Index(['cancelled_at'])
 export class UserSubscription {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'external_subscription_id' })
-  external_subscription_id: string;
+  @Column({ name: 'external_payment_gateway_subscription_id' })
+  external_payment_gateway_subscription_id: string;
 
   @Column({
     type: 'enum',
@@ -29,10 +30,10 @@ export class UserSubscription {
   @Column({ length: 3 })
   currency: string;
 
-  @Column({ name: 'starts_at', type: 'timestamp', nullable: true, default: () => 'NOW()' })
+  @Column({ name: 'starts_at', type: 'timestamp', nullable: false, default: () => 'NOW()' })
   starts_at: Date;
 
-  @Column({ name: 'ends_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'ends_at', type: 'timestamp', nullable: false })
   ends_at: Date;
 
   @Column({ name: 'is_active', type: 'boolean', default: false })
@@ -40,6 +41,9 @@ export class UserSubscription {
 
   @Column({ name: 'is_cancelled', type: 'boolean', default: false })
   is_cancelled: boolean;
+
+  @Column({ name: 'cancelled_at', type: 'timestamp', nullable: true })
+  cancelled_at: Date;
 
   // User relationship
   @Column({ name: 'user_id' })
@@ -77,5 +81,16 @@ export class UserSubscription {
 
   isExpired(): boolean {
     return this.status === SubscriptionStatus.EXPIRED || new Date() > this.ends_at;
+  }
+
+  wasCancelledOn(): Date | null {
+    return this.cancelled_at;
+  }
+
+  daysSinceCancellation(): number | null {
+    if (!this.cancelled_at) return null;
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - this.cancelled_at.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   }
 }

@@ -10,6 +10,9 @@ import {
   CancelSubscriptionResponse
 } from '../interfaces/payment-gateway.interface';
 import { LemonSqueezyService } from '../services/lemon_squeezy.service';
+import { LemonSqueezySubscription } from '../models/lemonsqueezy-subscription.model';
+import { BadRequestException, InternalServerErrorException, NotFoundException } from '../../../exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../../constants/error-codes';
 
 @Injectable()
 export class LemonSqueezyPaymentGateway implements IPaymentGateway {
@@ -21,16 +24,23 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
     return 'LemonSqueezy';
   }
 
-  async createCheckout(request: CreateCheckoutRequest) { //Promise<CheckoutResponse> {
+  async createCheckout(request: CreateCheckoutRequest): Promise<CheckoutResponse> {
     try {
       this.logger.log(`Creating checkout with LemonSqueezy for variant: ${request.variantId}`);
 
       const checkoutData = await this.lemonSqueezyService.createCheckoutSession(request);
 
-      return checkoutData;
+      return {
+        checkoutUrl: checkoutData.data.data.attributes.url,
+        checkoutId: checkoutData.data.data.id,
+        paymentProvider: 'LemonSqueezy',
+      };
     } catch (error) {
       this.logger.error('Failed to create LemonSqueezy checkout', error);
-      throw new Error(`LemonSqueezy checkout creation failed: ${error.message}`);
+      throw new BadRequestException(
+        `LemonSqueezy checkout creation failed: ${error.message}`,
+        ERROR_CODES.CHECKOUT_SESSION_CREATION_FAILED
+      );
     }
   }
 
@@ -38,10 +48,13 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
     try {
       const subscription = await this.lemonSqueezyService.getSubscriptionDetails(subscriptionId);
       
-      return this.mapLemonSqueezySubscription(subscription);
+      return new LemonSqueezySubscription(subscription);
     } catch (error) {
       this.logger.error(`Failed to get LemonSqueezy subscription: ${subscriptionId}`, error);
-      throw new Error(`Failed to retrieve subscription: ${error.message}`);
+      throw new NotFoundException(
+        `Failed to retrieve subscription: ${error.message}`,
+        ERROR_CODES.SUBSCRIPTION_NOT_FOUND
+      );
     }
   }
 
@@ -57,7 +70,10 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       };
     } catch (error) {
       this.logger.error(`Failed to cancel LemonSqueezy subscription: ${request.subscriptionId}`, error);
-      throw new Error(`Failed to cancel subscription: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to cancel subscription: ${error.message}`,
+        ERROR_CODES.FAILED_TO_CANCEL_SUBSCRIPTION
+      );
     }
   }
 
@@ -71,7 +87,10 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       };
     } catch (error) {
       this.logger.error(`Failed to create LemonSqueezy customer portal: ${request.customerId}`, error);
-      throw new Error(`Failed to create customer portal: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to create customer portal: ${error.message}`,
+        ERROR_CODES.CUSTOMER_PORTAL_URL_CREATION_FAILED
+      );
     }
   }
 
@@ -83,7 +102,10 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       return [];
     } catch (error) {
       this.logger.error(`Failed to get LemonSqueezy customer subscriptions: ${customerId}`, error);
-      throw new Error(`Failed to retrieve customer subscriptions: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to retrieve customer subscriptions: ${error.message}`,
+        ERROR_CODES.INTERNAL_SERVER
+      );
     }
   }
 
@@ -97,42 +119,5 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       this.logger.error('Failed to verify LemonSqueezy webhook signature', error);
       return false;
     }
-  }
-
-  /**
-   * Map LemonSqueezy subscription to our standard format
-   */
-  private mapLemonSqueezySubscription(lsSubscription: any): SubscriptionInfo {
-    const attributes = lsSubscription.data?.attributes || lsSubscription;
-    
-    return {
-      id: lsSubscription.data?.id || lsSubscription.id,
-      status: this.mapLemonSqueezyStatus(attributes.status),
-      planId: attributes.variant_id?.toString(),
-      customerId: attributes.customer_id?.toString(),
-      amount: attributes.unit_price ? attributes.unit_price / 100 : 0, // Convert cents to dollars
-      currency: attributes.currency || 'USD',
-      currentPeriodStart: new Date(attributes.created_at),
-      currentPeriodEnd: new Date(attributes.renews_at || attributes.ends_at),
-      cancelAtPeriodEnd: attributes.cancelled || false,
-      trialEnd: attributes.trial_ends_at ? new Date(attributes.trial_ends_at) : undefined,
-    };
-  }
-
-  /**
-   * Map LemonSqueezy status to our standard status
-   */
-  private mapLemonSqueezyStatus(lsStatus: string): SubscriptionInfo['status'] {
-    const statusMap: Record<string, SubscriptionInfo['status']> = {
-      'active': 'active',
-      'cancelled': 'cancelled',
-      'expired': 'expired',
-      'on_trial': 'active',
-      'paused': 'paused',
-      'past_due': 'past_due',
-      'unpaid': 'past_due',
-    };
-
-    return statusMap[lsStatus] || 'active';
   }
 }

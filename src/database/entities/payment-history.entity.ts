@@ -5,9 +5,8 @@ import { SubscriptionPlan } from './subscription-plan.entity';
 
 
 @Entity('payment_history')
-@Index(['external_payment_id'])
-@Index(['user_id', 'status'])
-@Index(['subscription_plan_id', 'created_at'])
+@Index(['user_id'])
+@Index(['created_at'])
 export class PaymentHistory {
   @PrimaryGeneratedColumn('uuid')
   id: string;

@@ -6,7 +6,7 @@ export interface ICreateSubscriptionPlanData {
   description: string;
   price: number;
   currency?: string;
-  external_variant_id: string;
+  external_payment_gateway_variant_id: string;
   features?: string[];
   billing_cycle?: BillingCycle;
 }
@@ -16,7 +16,7 @@ export interface IUpdateSubscriptionPlanData {
   description?: string;
   price?: number;
   currency?: string;
-  external_variant_id?: string;
+  external_payment_gateway_variant_id?: string;
   features?: string[];
   billing_cycle?: BillingCycle;
   is_active?: boolean;
@@ -24,7 +24,7 @@ export interface IUpdateSubscriptionPlanData {
 
 
 export interface ICreateSubscriptionData {
-  external_subscription_id: string;
+  external_payment_gateway_subscription_id: string;
   subscription_plan_id: string;
   user_id: string;
   status: SubscriptionStatus;
@@ -39,6 +39,7 @@ export interface IUpdateSubscriptionData {
   status?: SubscriptionStatus;
   is_active?: boolean;
   is_cancelled?: boolean;
+  cancelled_at?: Date;
   ends_at?: Date;
   metadata?: Record<string, any>;
 }

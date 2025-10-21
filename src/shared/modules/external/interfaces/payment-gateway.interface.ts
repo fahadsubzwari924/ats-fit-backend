@@ -71,7 +71,7 @@ export interface IPaymentGateway {
   /**
    * Create a checkout session/URL for subscription
    */
-  createCheckout(request: CreateCheckoutRequest);//: Promise<CheckoutResponse>;
+  createCheckout(request: CreateCheckoutRequest): Promise<CheckoutResponse>;
 
   /**
    * Get subscription information by ID

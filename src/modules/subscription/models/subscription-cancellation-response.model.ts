@@ -16,13 +16,13 @@ export class SubscriptionCancellationResponse {
     message: string;
     success: boolean;
   }) {
-    this.id = data.id;
-    this.status = data.status;
-    this.provider = data.provider;
-    this.cancelledAt = data.cancelledAt;
-    this.endsAt = data.endsAt;
-    this.message = data.message;
-    this.success = data.success;
+    this.id = data?.id;
+    this.status = data?.status;
+    this.provider = data?.provider;
+    this.cancelledAt = data?.cancelledAt;
+    this.endsAt = data?.endsAt;
+    this.message = data?.message;
+    this.success = data?.success;
   }
 
   /**
@@ -30,11 +30,11 @@ export class SubscriptionCancellationResponse {
    */
   static fromResponse(cancelResult: any, provider: string, message: string): SubscriptionCancellationResponse {
     return new SubscriptionCancellationResponse({
-      id: cancelResult.subscriptionId,
-      status: cancelResult.status,
+      id: cancelResult?.subscriptionId,
+      status: cancelResult?.status,
       provider: provider,
-      cancelledAt: cancelResult.cancelledAt,
-      endsAt: cancelResult.endsAt,
+      cancelledAt: cancelResult?.cancelledAt,
+      endsAt: cancelResult?.endsAt,
       message: message,
       success: true
     });

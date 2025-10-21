@@ -12,6 +12,7 @@ import { BadRequestException, NotFoundException } from '../../../shared/exceptio
 import { MESSAGES } from '../../../shared/constants/messages';
 import { ERROR_CODES } from 'src/shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
+import { SubscriptionIdParamDto, UserIdParamDto, PlanIdParamDto } from '../../../shared/dtos/id-param.dto';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -71,7 +72,7 @@ export class SubscriptionController {
       }
 
       const checkoutResponse = await this.paymentService.createCheckout({
-        variantId: subscriptionPlan.external_variant_id,
+        variantId: subscriptionPlan.external_payment_gateway_variant_id,
         email: createSubscriptionDto.metadata?.email,
         customData: {
           userId: request?.userContext?.userId,
@@ -87,7 +88,7 @@ export class SubscriptionController {
         request
       });
       throw new BadRequestException(
-        error.message || MESSAGES.FAILED_TO_CREATE_CHECKOUT_SESSION,
+      error?.message || MESSAGES.FAILED_TO_CREATE_CHECKOUT_SESSION,
         ERROR_CODES.CHECKOUT_SESSION_CREATION_FAILED
       );
     }
@@ -100,22 +101,34 @@ export class SubscriptionController {
     description: 'Returns the subscription details from database'
   })
   @ApiResponse({ status: 404, description: 'Subscription not found' })
+  @ApiResponse({ status: 400, description: 'Invalid subscription ID' })
   async getSubscriptionById(
-    @Param('id') subscriptionId: string,
+    @Param() params: SubscriptionIdParamDto,
     @Req() request: RequestWithUserContext
   ) {
-    // Get subscription from database
-    return await this.subscriptionService.findById(subscriptionId);
+    // Get subscription from database (validation handled by DTO)
+    const subscription = await this.subscriptionService.findById(params.id);
+    
+    if (!subscription) {
+      throw new NotFoundException(
+        'Subscription not found',
+        ERROR_CODES.SUBSCRIPTION_NOT_FOUND
+      );
+    }
+
+    return subscription;
   }
 
   @Get('user/:userId/subscriptions')
   @ApiOperation({ summary: 'Get all subscriptions for a user from database' })
   @ApiResponse({ status: 200, description: 'Returns user subscriptions from database' })
+  @ApiResponse({ status: 400, description: 'Invalid user ID' })
   async getUserSubscriptions(
-    @Param('userId') userId: string,
+    @Param() params: UserIdParamDto,
     @Req() request: RequestWithUserContext
   ) {
-    return await this.subscriptionService.findByUserId(userId);
+    // Get user subscriptions (validation handled by DTO)
+    return await this.subscriptionService.findByUserId(params.userId);
   }
 
 
@@ -140,10 +153,21 @@ export class SubscriptionController {
     type: SubscriptionPlanResponseDto
   })
   @ApiResponse({ status: 404, description: 'Subscription plan not found' })
+  @ApiResponse({ status: 400, description: 'Invalid plan ID' })
   async getSubscriptionPlanbyId(
-    @Param('id') planId: string
+    @Param() params: PlanIdParamDto
   ) {
-    return await this.subscriptionPlanService.findById(planId);
+    // Get subscription plan (validation handled by DTO)
+    const subscriptionPlan = await this.subscriptionPlanService.findById(params.id);
+    
+    if (!subscriptionPlan) {
+      throw new NotFoundException(
+        'Subscription plan not found',
+        ERROR_CODES.SUBSCRIPTION_NOT_FOUND
+      );
+    }
+
+    return subscriptionPlan;
   }
 
   //#region Webhook Controllers
@@ -179,5 +203,7 @@ export class SubscriptionController {
     return result;
   }
   //#endregion
+
+
 
 }

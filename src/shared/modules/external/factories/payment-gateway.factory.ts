@@ -29,7 +29,7 @@ export class PaymentGatewayFactory {
 
     switch (provider) {
       case 'lemonsqueezy':
-        return this.lemonSqueezyGateway;
+        return this.lemonSqueezyGateway as unknown as IPaymentGateway;
       
       case 'stripe':
         // return this.stripeGateway;

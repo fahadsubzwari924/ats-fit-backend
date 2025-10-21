@@ -22,7 +22,7 @@ export class CreateSubscriptionPlanDto {
 
   @ApiProperty({ description: 'External payment gateway variant ID for this plan' })
   @IsString()
-  external_variant_id: string;
+  external_payment_gateway_variant_id: string;
 
   @ApiPropertyOptional({ description: 'List of features included in the plan' })
   @IsOptional()
@@ -64,7 +64,7 @@ export class UpdateSubscriptionPlanDto {
   @ApiPropertyOptional({ description: 'External payment gateway variant ID for this plan' })
   @IsOptional()
   @IsString()
-  external_variant_id?: string;
+  external_payment_gateway_variant_id?: string;
 
   @ApiPropertyOptional({ description: 'List of features included in the plan' })
   @IsOptional()
@@ -103,7 +103,7 @@ export class SubscriptionPlanResponseDto {
   currency: string;
 
   @ApiProperty()
-  external_variant_id: string;
+  external_payment_gateway_variant_id: string;
 
   @ApiProperty()
   is_active: boolean;
