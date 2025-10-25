@@ -11,6 +11,15 @@ export class CreateSubscriptionDto {
   plan_id: string;
 
   @ApiProperty({
+    description: 'Name of the subscription',
+    required: false,
+    example: 'Premium Monthly Plan'
+  })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiProperty({
     description: 'Additional metadata for the subscription',
     required: false,
     example: {

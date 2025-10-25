@@ -8,6 +8,7 @@
 export interface CreateCheckoutRequest {
   variantId: string;
   userId?: string;
+  name?: string;
   email?: string;
   redirectUrl?: string;
   customData?: Record<string, any>;

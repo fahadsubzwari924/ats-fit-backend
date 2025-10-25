@@ -11,8 +11,8 @@ import {
 } from '../interfaces/payment-gateway.interface';
 import { LemonSqueezyService } from '../services/lemon_squeezy.service';
 import { LemonSqueezySubscription } from '../models/lemonsqueezy-subscription.model';
-import { BadRequestException, InternalServerErrorException, NotFoundException } from '../../../exceptions/custom-http-exceptions';
-import { ERROR_CODES } from '../../../constants/error-codes';
+import { BadRequestException, InternalServerErrorException, NotFoundException } from '../../../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../../../shared/constants/error-codes';
 
 @Injectable()
 export class LemonSqueezyPaymentGateway implements IPaymentGateway {

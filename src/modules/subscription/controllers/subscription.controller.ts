@@ -1,8 +1,9 @@
-import { Controller, Post, Body, Get, UseGuards, Param, Req, Logger, Headers } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Param, Req, Logger, Headers, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { SubscriptionService } from '../services/subscription.service';
 import { SubscriptionPlanService } from '../services/subscription-plan.service';
 import { PaymentService } from '../../../shared/services/payment.service';
+import { PaymentHistoryService } from '../services/payment-history.service';
 import { CreateSubscriptionDto } from '../dtos/subscription.dto';
 import { SubscriptionPlanResponseDto } from '../dtos/subscription-plan.dto';
 import { CheckoutResponseDto } from '../dtos/checkout-response.dto';
@@ -12,7 +13,6 @@ import { BadRequestException, NotFoundException } from '../../../shared/exceptio
 import { MESSAGES } from '../../../shared/constants/messages';
 import { ERROR_CODES } from 'src/shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
-import { SubscriptionIdParamDto, UserIdParamDto, PlanIdParamDto } from '../../../shared/dtos/id-param.dto';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -23,9 +23,10 @@ export class SubscriptionController {
   private readonly logger = new Logger(SubscriptionController.name);
 
   constructor(
-    private readonly subscriptionService: SubscriptionService,
-    private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly paymentService: PaymentService, // ✅ Abstract payment interface
+    private readonly subscriptionService: SubscriptionService,
+    private readonly paymentHistoryService: PaymentHistoryService, // ✅ Payment history handling
+    private readonly subscriptionPlanService: SubscriptionPlanService,
   ) {}
 
   @Post('checkout')
@@ -103,12 +104,12 @@ export class SubscriptionController {
   @ApiResponse({ status: 404, description: 'Subscription not found' })
   @ApiResponse({ status: 400, description: 'Invalid subscription ID' })
   async getSubscriptionById(
-    @Param() params: SubscriptionIdParamDto,
+    @Param('id', ParseUUIDPipe) id: string,
     @Req() request: RequestWithUserContext
   ) {
     // Get subscription from database (validation handled by DTO)
-    const subscription = await this.subscriptionService.findById(params.id);
-    
+    const subscription = await this.subscriptionService.findById(id);
+
     if (!subscription) {
       throw new NotFoundException(
         'Subscription not found',
@@ -124,11 +125,11 @@ export class SubscriptionController {
   @ApiResponse({ status: 200, description: 'Returns user subscriptions from database' })
   @ApiResponse({ status: 400, description: 'Invalid user ID' })
   async getUserSubscriptions(
-    @Param() params: UserIdParamDto,
+    @Param('userId', ParseUUIDPipe) userId: string,
     @Req() request: RequestWithUserContext
   ) {
     // Get user subscriptions (validation handled by DTO)
-    return await this.subscriptionService.findByUserId(params.userId);
+    return await this.subscriptionService.findByUserId(userId);
   }
 
 
@@ -154,11 +155,11 @@ export class SubscriptionController {
   })
   @ApiResponse({ status: 404, description: 'Subscription plan not found' })
   @ApiResponse({ status: 400, description: 'Invalid plan ID' })
-  async getSubscriptionPlanbyId(
-    @Param() params: PlanIdParamDto
+  async getSubscriptionPlanById(
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     // Get subscription plan (validation handled by DTO)
-    const subscriptionPlan = await this.subscriptionPlanService.findById(params.id);
+    const subscriptionPlan = await this.subscriptionPlanService.findById(id);
     
     if (!subscriptionPlan) {
       throw new NotFoundException(
@@ -174,33 +175,67 @@ export class SubscriptionController {
 
   @Public()
   @Post('payment-confirmation')
-  @ApiOperation({ summary: 'Handle payment confirmation webhook events' })
+  @ApiOperation({ summary: 'Handle payment confirmation notification events' })
   @ApiResponse({ status: 200, description: 'Payment Confirmation processed successfully' })
   @ApiResponse({ status: 400, description: 'Invalid Payment request' })
   async paymentConfirmation(
     @Headers('x-signature') signature: string,
     @Body() payload: any,
   ) {
+    try {
+      this.logger.log('🔔 Payment gateway "payment-confirmation" notification endpoint reached successfully!');
+      this.logger.log(`🔥 DEBUG: Received "payment-confirmation" notification payload:`, payload);
+      
+      // Step 1: Create payment history record first (audit trail)
+      this.logger.log(`🔥 DEBUG: Creating payment history record...`);
+      const paymentHistory = await this.paymentHistoryService.paymentConfirmation(payload);
+      this.logger.log(`🔥 DEBUG: Payment history created:`, { id: paymentHistory.id });
 
-    this.logger.log('🔔 Payment gateway "payment-confirmation" webhook endpoint reached successfully!');
-    this.logger.log(`🔥 DEBUG: Received "payment-confirmation" webhook payload:`, payload);
-    
-    // Process webhook through service layer
-    this.logger.log(`🔥 DEBUG: About to call webhookService.handleWebhook...`);
-    const result = await this.subscriptionService.paymentConfirmation(signature, payload);
-    this.logger.log(`🔥 DEBUG: Webhook service returned:`, result);
+      // Step 2: Verify signature
+      if (signature && !await this.subscriptionService.verifySignature(signature, JSON.stringify(payload))) {
+        await this.paymentHistoryService.markAsFailed(paymentHistory.id, 'Invalid signature');
+        throw new BadRequestException('Invalid signature', ERROR_CODES.BAD_REQUEST);
+      }
 
-    // Log processing results
-    this.logger.log(`🎯 NEW Subscription created in database:`, {
-        subscriptionId: result?.data?.subscription?.subscriptionId,
-        status: result?.data?.subscription?.status,
-        isActive: result?.data?.subscription?.isActive,
-        userId: result?.data?.subscription?.userId,
-        planId: result?.data?.subscription?.subscriptionPlanId,
-        payload: payload
-      });
-    
-    return result;
+      // Step 3: Process subscription logic (decoupled from payment history)
+      this.logger.log(`🔥 DEBUG: Processing subscription logic...`);
+      const subscriptionResult = await this.subscriptionService.processPaymentGatewayEvent(payload);
+      this.logger.log(`🔥 DEBUG: Subscription processing result:`, subscriptionResult);
+
+      // Step 4: Mark payment as processed
+      await this.paymentHistoryService.markAsProcessed(paymentHistory.id);
+      
+      const result = {
+        success: true,
+        message: 'Payment gateway notification processed successfully',
+        data: {
+          paymentHistory: {
+            id: paymentHistory.id,
+            status: paymentHistory.status,
+            paymentType: paymentHistory.payment_type,
+            amount: paymentHistory.amount,
+            currency: paymentHistory.currency
+          },
+          ...subscriptionResult
+        }
+      };
+
+      // Log processing results
+      this.logger.log(`🎯 NEW Subscription created in database:`, {
+          subscriptionId: result?.data?.subscription?.subscriptionId,
+          status: result?.data?.subscription?.status,
+          isActive: result?.data?.subscription?.isActive,
+          userId: result?.data?.subscription?.userId,
+          planId: result?.data?.subscription?.subscriptionPlanId,
+          paymentHistoryId: paymentHistory.id
+        });
+      
+      return result;
+
+    } catch (error) {
+      this.logger.error('Failed to process payment gateway notification', error);
+      throw error;
+    }
   }
   //#endregion
 

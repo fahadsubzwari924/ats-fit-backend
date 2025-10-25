@@ -84,7 +84,7 @@ export class UserService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
     }
 
     return {

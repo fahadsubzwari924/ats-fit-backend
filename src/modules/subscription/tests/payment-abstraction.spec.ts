@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentService } from '../../../shared/services/payment.service';
-import { IPaymentGateway } from '../../../shared/modules/external/interfaces/payment-gateway.interface';
-import { PAYMENT_GATEWAY_TOKEN } from '../../../shared/modules/external/interfaces/payment-gateway.interface';
+import { IPaymentGateway } from '../externals/interfaces/payment-gateway.interface';
+import { PAYMENT_GATEWAY_TOKEN } from '../externals/interfaces/payment-gateway.interface';
 
 describe('Payment Abstraction Layer', () => {
   let paymentService: PaymentService;

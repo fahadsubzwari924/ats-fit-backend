@@ -13,8 +13,8 @@ import { CacheService } from './services/cache.service';
 import { ValidationModule } from './modules/validation/validation.module';
 import { AIContentService } from './services/ai-content.service';
 import { FileValidationPipe } from './pipes/file-validation.pipe';
-import { LemonSqueezyService } from './modules/external/services/lemon_squeezy.service';
-import { LemonSqueezyPaymentGateway } from './modules/external/gateways/lemonsqueezy-payment.gateway';
+import { LemonSqueezyService } from '../modules/subscription/externals/services/lemon_squeezy.service';
+import { LemonSqueezyPaymentGateway } from '../modules/subscription/externals/gateways/lemonsqueezy-payment.gateway';
 
 @Module({
   imports: [

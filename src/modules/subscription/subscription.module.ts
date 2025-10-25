@@ -5,14 +5,14 @@ import { SubscriptionController } from './controllers/subscription.controller';
 import { SubscriptionService } from './services/subscription.service';
 import { SubscriptionPlanService } from './services/subscription-plan.service';
 import { PaymentService } from '../../shared/services/payment.service';
-import { LemonSqueezyService } from '../../shared/modules/external/services/lemon_squeezy.service';
-import { LemonSqueezyPaymentGateway } from '../../shared/modules/external/gateways/lemonsqueezy-payment.gateway';
-import { PaymentGatewayFactory } from '../../shared/modules/external/factories/payment-gateway.factory';
+import { LemonSqueezyService } from './externals/services/lemon_squeezy.service';
+import { LemonSqueezyPaymentGateway } from './externals/gateways/lemonsqueezy-payment.gateway';
+import { PaymentGatewayFactory } from './externals/factories/payment-gateway.factory';
 import { UserSubscription } from '../../database/entities/user-subscription.entity';
 import { UserModule } from '../user/user.module';
 import { SubscriptionPlan } from '../../database/entities/subscription-plan.entity';
 import { PaymentHistory } from '../../database/entities/payment-history.entity';
-import { PAYMENT_GATEWAY_TOKEN } from '../../shared/modules/external/interfaces/payment-gateway.interface';
+import { PAYMENT_GATEWAY_TOKEN } from './externals/interfaces/payment-gateway.interface';
 import { PaymentHistoryService } from './services/payment-history.service';
 
 @Module({

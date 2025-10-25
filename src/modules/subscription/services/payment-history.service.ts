@@ -42,9 +42,6 @@ export class PaymentHistoryService {
       
     } catch (error) {
       this.logger.error('Failed to create payment history from payment gateway notification', error);
-      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
-        throw error;
-      }
       throw new InternalServerErrorException(
         'Failed to process payment confirmation',
         ERROR_CODES.INTERNAL_SERVER

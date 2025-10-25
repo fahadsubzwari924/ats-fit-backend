@@ -1,27 +1,33 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { cancelSubscription, createCheckout, getCustomer, getSubscription, lemonSqueezySetup, NewCheckout } from '@lemonsqueezy/lemonsqueezy.js';
-import { CreateCheckoutRequest } from 'src/shared/modules/external/interfaces/payment-gateway.interface';
+import { CreateCheckoutRequest } from '../interfaces/payment-gateway.interface';
+import { BadRequestException, InternalServerErrorException, NotFoundException } from '../../../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../../../shared/constants/error-codes';
 
 
 @Injectable()
 export class LemonSqueezyService {
-    private readonly logger = new Logger(LemonSqueezyService.name);
-    private static isSetup = false;
 
-    constructor() {}
+  private readonly logger = new Logger(LemonSqueezyService.name);
+  private static isSetup = false;
 
-    private setupLemonSqueezy() {
+  constructor() {}
+
+  private setupLemonSqueezy() {
     if (LemonSqueezyService.isSetup) return;
 
     const apiKey = process.env.LEMON_SQUEEZY_API_KEY;
     if (!apiKey) {
-      throw new Error('Missing LEMON_SQUEEZY_API_KEY in .env');
+      throw new InternalServerErrorException(
+        'Missing LEMON_SQUEEZY_API_KEY in configuration',
+        ERROR_CODES.INTERNAL_SERVER
+      );
     }
 
     lemonSqueezySetup({
       apiKey,
       onError: (error) => {
-        this.logger.error('Lemon Squeezy SDK Error:', error);
+        this.logger.error('Payment gateway SDK Error:', error);
         // Optionally throw or handle
       },
     });
@@ -29,12 +35,15 @@ export class LemonSqueezyService {
     LemonSqueezyService.isSetup = true;
   }
 
-  async  createCheckoutSession(request: CreateCheckoutRequest) {
+  async createCheckoutSession(request: CreateCheckoutRequest) {
     this.setupLemonSqueezy();
 
     const storeId = process.env.LEMON_SQUEEZY_STORE_ID;
     if (!storeId) {
-      throw new Error('Missing LEMON_SQUEEZY_STORE_ID in .env');
+      throw new InternalServerErrorException(
+        'Missing LEMON_SQUEEZY_STORE_ID in configuration',
+        ERROR_CODES.INTERNAL_SERVER
+      );
     }
 
     
@@ -43,11 +52,11 @@ export class LemonSqueezyService {
 
         checkoutData: {
             email: request.email,
-            name: 'Ahsan Alam', // Optional: add real name if available
+            name: request.name, // Optional: add real name if available
             custom: request.customData, // For webhook linking
         },
         productOptions: {
-            redirectUrl: 'https://your-app.com/dashboard?payment=success', // Adjust to your success page
+            redirectUrl: process.env.SUBSCRIPTION_SUCCESS_URL, // Adjust to your success page
             receiptButtonText: 'Go to Dashboard',
         },
         testMode: true
@@ -58,7 +67,10 @@ export class LemonSqueezyService {
     const response = await createCheckout(storeId, request.variantId, attributes);
 
     if (response.error) {
-      throw new Error(`Checkout creation failed: ${response.error}`);
+      throw new BadRequestException(
+        `Checkout session creation failed: ${response.error}`,
+        ERROR_CODES.BAD_REQUEST
+      );
     }
 
     return response; // URL to redirect user to complete payment
@@ -70,7 +82,10 @@ export class LemonSqueezyService {
     const response = await getSubscription(subscriptionId);
 
     if (response.error) {
-      throw new Error(`Get subscription failed: ${response.error.message}`);
+      throw new NotFoundException(
+        `Subscription not found: ${response.error.message}`,
+        ERROR_CODES.NOT_FOUND
+      );
     }
 
     return response.data?.data.attributes; // Returns subscription data like status, plan, etc.
@@ -82,7 +97,10 @@ export class LemonSqueezyService {
     const response = await cancelSubscription(subscriptionId);
 
     if (response.error) {
-      throw new Error(`Cancellation failed: ${response.error.message}`);
+      throw new BadRequestException(
+        `Subscription cancellation failed: ${response.error.message}`,
+        ERROR_CODES.BAD_REQUEST
+      );
     }
 
     return response.data?.data.attributes; // Updated subscription data
@@ -95,7 +113,10 @@ export class LemonSqueezyService {
     const response = await getCustomer(customerId);
 
     if (response.error) {
-      throw new Error(`Get customer failed: ${response.error.message}`);
+      throw new NotFoundException(
+        `Customer not found: ${response.error.message}`,
+        ERROR_CODES.NOT_FOUND
+      );
     }
 
     return response.data?.data?.attributes?.urls?.customer_portal;

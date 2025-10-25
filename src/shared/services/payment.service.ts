@@ -9,7 +9,9 @@ import {
   CancelSubscriptionRequest,
   CancelSubscriptionResponse,
   PAYMENT_GATEWAY_TOKEN
-} from '../modules/external/interfaces/payment-gateway.interface';
+} from '../../modules/subscription/externals/interfaces/payment-gateway.interface';
+import { BadRequestException, InternalServerErrorException, NotFoundException } from '../exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../constants/error-codes';
 
 /**
  * Payment Service - Facade Pattern
@@ -51,7 +53,7 @@ export class PaymentService {
       return result;
     } catch (error) {
       this.logger.error('Payment checkout creation failed', error);
-      throw new Error(`Checkout creation failed: ${error.message}`);
+      throw new InternalServerErrorException(ERROR_CODES.INTERNAL_SERVER);
     }
   }
 
@@ -68,7 +70,7 @@ export class PaymentService {
       return subscription;
     } catch (error) {
       this.logger.error(`Failed to retrieve subscription: ${subscriptionId}`, error);
-      throw new Error(`Failed to retrieve subscription: ${error.message}`);
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND);
     }
   }
 
@@ -85,7 +87,7 @@ export class PaymentService {
       return result;
     } catch (error) {
       this.logger.error(`Failed to cancel subscription: ${request.subscriptionId}`, error);
-      throw new Error(`Failed to cancel subscription: ${error.message}`);
+      throw new InternalServerErrorException(ERROR_CODES.INTERNAL_SERVER);
     }
   }
 
@@ -102,7 +104,7 @@ export class PaymentService {
       return result;
     } catch (error) {
       this.logger.error(`Failed to create customer portal: ${request.customerId}`, error);
-      throw new Error(`Failed to create customer portal: ${error.message}`);
+      throw new InternalServerErrorException(ERROR_CODES.INTERNAL_SERVER);
     }
   }
 
@@ -119,7 +121,7 @@ export class PaymentService {
       return subscriptions;
     } catch (error) {
       this.logger.error(`Failed to retrieve customer subscriptions: ${customerId}`, error);
-      throw new Error(`Failed to retrieve customer subscriptions: ${error.message}`);
+      throw new NotFoundException(ERROR_CODES.NOT_FOUND);
     }
   }
 

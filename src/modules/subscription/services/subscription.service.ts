@@ -7,8 +7,7 @@ import { SubscriptionCancellationResponse } from '../models';
 import { ICreateSubscriptionData, IUpdateSubscriptionData } from '../interfaces/subscription.interface';
 import { BadRequestException, NotFoundException } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
-import { PaymentHistoryService } from 'src/modules/subscription/services/payment-history.service';
-import { ExternalPaymentGatewayEvents } from 'src/shared/modules/external/enums';
+import { ExternalPaymentGatewayEvents } from '../externals/enums/external-payment-gateway-events.enum';
 import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -20,7 +19,6 @@ export class SubscriptionService {
   constructor(
     @InjectRepository(UserSubscription)
     private readonly subscriptionRepository: Repository<UserSubscription>,
-    private readonly paymentHistoryService: PaymentHistoryService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -246,35 +244,54 @@ export class SubscriptionService {
     return !!activeSubscription;
   }
 
-  //#region Webhook Functions
+  //#region Payment Gateway Event Processing (Decoupled)
 
-  async paymentConfirmation(signature: string, payload: any): Promise<{ success: boolean; message: string; data: any }> {
+  /**
+   * Verify payment gateway signature
+   */
+  async verifySignature(signature: string, payload: string): Promise<boolean> {
+    // For development/testing, skip signature verification
+    if (process.env.NODE_ENV === 'development' || !signature) {
+      return true;
+    }
+
     try {
-      this.logger.log(`Processing webhook: ${payload.meta?.event_name}`);
-
-      // Create payment history record first (for audit trail)
-      const paymentHistory = await this.paymentHistoryService.paymentConfirmation(payload);
-
-      // Verify webhook signature
-      if (signature && !this.verifyWebhookSignature(signature, JSON.stringify(payload))) {
-        await this.paymentHistoryService.markAsFailed(paymentHistory.id, 'Invalid webhook signature');
-        throw new BadRequestException('Invalid webhook signature');
+      const secret = this.configService.get('LEMON_SQUEEZY_WEBHOOK_SECRET');
+      if (!secret) {
+        this.logger.warn('Payment gateway secret not configured, skipping verification');
+        return true;
       }
 
-      // Process the webhook event
-      await this.processSubscription(payload, paymentHistory.id);
-      
+      const hmac = crypto.createHmac('sha256', secret);
+      const expectedSignature = hmac.update(payload).digest('hex');
 
-      // Mark event as processed
-      await this.paymentHistoryService.markAsProcessed(paymentHistory.id);
-      
+      return crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expectedSignature)
+      );
+    } catch (error) {
+      this.logger.error('Failed to verify payment gateway signature', error);
+      return false;
+    }
+  }
 
-      this.logger.log(`Webhook processed successfully: ${paymentHistory.id}`);
+  /**
+   * Process payment gateway events (subscription-focused)
+   */
+  async processPaymentGatewayEvent(payload: any): Promise<any> {
+    try {
+      this.logger.log(`Processing payment gateway event: ${payload.meta?.event_name}`);
       
-      // Check if subscription was created/updated for subscription events
-      let subscriptionInfo = null;
       const eventType = payload.meta?.event_name;
-      if (eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED || eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS) {
+      let subscriptionInfo = null;
+
+      // Handle subscription creation events
+      if (eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED || 
+          eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS) {
+        
+        await this.createSubscriptionFromPaymentGatewayEvent(payload);
+        
+        // Verify subscription was created
         try {
           const subscription = await this.findByExternalId(payload.data?.id);
           if (subscription) {
@@ -293,68 +310,21 @@ export class SubscriptionService {
       }
       
       return {
-        success: true,
-        message: 'Webhook processed successfully',
-        data: {
-          paymentHistory: {
-            id: paymentHistory.id,
-            status: paymentHistory.status,
-            paymentType: paymentHistory.payment_type,
-            amount: paymentHistory.amount,
-            currency: paymentHistory.currency
-          },
-          eventType: eventType,
-          subscriptionCreated: !!subscriptionInfo,
-          subscription: subscriptionInfo
-        }
+        eventType: eventType,
+        subscriptionCreated: !!subscriptionInfo,
+        subscription: subscriptionInfo
       };
 
     } catch (error) {
-      this.logger.error('Failed to process webhook', error);
+      this.logger.error('Failed to process payment gateway event', error);
       throw error;
-    }
-  }
-
-  private async processSubscription(payload: PaymentConfirmationDto, paymentHistoryId: string): Promise<void> {
-    try {
-      this.createSubscriptionFromWebhook(payload);
-    } catch (error) {
-      await this.paymentHistoryService.markAsFailed(paymentHistoryId, error.message);
-      throw error;
-    }
-  }
-
-  private verifyWebhookSignature(signature: string, payload: string): boolean {
-    // For development/testing, skip signature verification
-    if (process.env.NODE_ENV === 'development' || !signature) {
-      return true;
-    }
-
-    try {
-      const secret = this.configService.get('LEMON_SQUEEZY_WEBHOOK_SECRET');
-      if (!secret) {
-        this.logger.warn('Webhook secret not configured, skipping verification');
-        return true;
-      }
-
-      const hmac = crypto.createHmac('sha256', secret);
-      const expectedSignature = hmac.update(payload).digest('hex');
-
-      return crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expectedSignature)
-      );
-    } catch (error) {
-      this.logger.error('Failed to verify webhook signature', error);
-      return false;
     }
   }
   
-
   /**
-   * Create subscription from webhook data
+   * Create subscription from payment gateway event data
    */
-  private async createSubscriptionFromWebhook(payload: PaymentConfirmationDto): Promise<void> {
+  private async createSubscriptionFromPaymentGatewayEvent(payload: PaymentConfirmationDto): Promise<void> {
     try {
       this.logger.log(`🔥 DEBUG: Starting subscription creation process...`);
       
@@ -362,13 +332,13 @@ export class SubscriptionService {
         external_payment_gateway_subscription_id: payload?.data?.id,
         subscription_plan_id: payload?.meta?.custom_data?.plan_id,
         user_id: payload?.meta?.custom_data?.user_id,
-        status: this.mapLemonSqueezyStatusToSubscriptionStatus(payload?.data?.attributes?.status),
+        status: this.mapPaymentGatewayStatusToSubscriptionStatus(payload?.data?.attributes?.status),
         amount: payload?.data?.attributes?.total || 0,
         currency: payload?.data?.attributes?.currency || 'USD',
         starts_at: new Date(payload?.data?.attributes?.created_at || Date.now()),
         ends_at: new Date(payload?.data?.attributes?.renews_at || payload?.data?.attributes?.ends_at || Date.now() + 30 * 24 * 60 * 60 * 1000), // Default to 30 days
         metadata: {
-          lemonSqueezyData: payload?.data?.attributes,
+          paymentGatewayData: payload?.data?.attributes,
           customData: payload?.meta?.custom_data
         }
       };
@@ -384,7 +354,7 @@ export class SubscriptionService {
       this.logger.log(`✅ SUCCESS: Subscription isActive: ${subscription.is_active}`);
       
     } catch (error) {
-      this.logger.error(`❌ CRITICAL ERROR: Failed to create subscription from webhook:`, error);
+      this.logger.error(`❌ CRITICAL ERROR: Failed to create subscription from payment gateway event:`, error);
       this.logger.error(`❌ Error message: ${error.message}`);
       this.logger.error(`❌ Error stack: ${error.stack}`);
       
@@ -397,9 +367,9 @@ export class SubscriptionService {
   }
 
   /**
-   * Map LemonSqueezy status to our SubscriptionStatus enum
+   * Map payment gateway status to our SubscriptionStatus enum
    */
-  private mapLemonSqueezyStatusToSubscriptionStatus(status: string): SubscriptionStatus {
+  private mapPaymentGatewayStatusToSubscriptionStatus(status: string): SubscriptionStatus {
     const statusMap: Record<string, SubscriptionStatus> = {
       'active': SubscriptionStatus.ACTIVE,
       'cancelled': SubscriptionStatus.CANCELLED, 
