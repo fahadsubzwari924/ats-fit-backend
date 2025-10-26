@@ -2,7 +2,8 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 
 // Load environment configuration - use the same pattern as other seed files
-const envFile = process.env.NODE_ENV === 'production' ? '.env.prod' : '.env.dev';
+const envFile =
+  process.env.NODE_ENV === 'production' ? '.env.prod' : '.env.dev';
 const envPath = path.resolve(__dirname, '../../../config', envFile);
 dotenv.config({ path: envPath });
 

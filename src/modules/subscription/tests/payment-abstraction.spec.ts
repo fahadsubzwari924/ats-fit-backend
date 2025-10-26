@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentService } from '../../../shared/services/payment.service';
 import { IPaymentGateway } from '../externals/interfaces/payment-gateway.interface';
 import { PAYMENT_GATEWAY_TOKEN } from '../externals/interfaces/payment-gateway.interface';
+import { Currency } from '../enums/payment.enum';
 
 describe('Payment Abstraction Layer', () => {
   let paymentService: PaymentService;
@@ -23,7 +24,7 @@ describe('Payment Abstraction Layer', () => {
         customerId: 'cust_123',
         planId: 'plan_123',
         amount: 2999,
-        currency: 'USD',
+        currency: Currency.USD,
         currentPeriodStart: new Date(),
         currentPeriodEnd: new Date(),
         cancelAtPeriodEnd: false,
@@ -72,7 +73,9 @@ describe('Payment Abstraction Layer', () => {
         expiresAt: expect.any(Date),
       });
 
-      expect(mockPaymentGateway.createCheckout).toHaveBeenCalledWith(checkoutRequest);
+      expect(mockPaymentGateway.createCheckout).toHaveBeenCalledWith(
+        checkoutRequest,
+      );
     });
 
     it('should get subscription without knowing the provider', async () => {
@@ -84,13 +87,15 @@ describe('Payment Abstraction Layer', () => {
         customerId: 'cust_123',
         planId: 'plan_123',
         amount: 2999,
-        currency: 'USD',
+        currency: Currency.USD,
         currentPeriodStart: expect.any(Date),
         currentPeriodEnd: expect.any(Date),
         cancelAtPeriodEnd: false,
       });
 
-      expect(mockPaymentGateway.getSubscription).toHaveBeenCalledWith('sub_123');
+      expect(mockPaymentGateway.getSubscription).toHaveBeenCalledWith(
+        'sub_123',
+      );
     });
 
     it('should cancel subscription without knowing the provider', async () => {
@@ -109,7 +114,9 @@ describe('Payment Abstraction Layer', () => {
         endsAt: expect.any(Date),
       });
 
-      expect(mockPaymentGateway.cancelSubscription).toHaveBeenCalledWith(cancelRequest);
+      expect(mockPaymentGateway.cancelSubscription).toHaveBeenCalledWith(
+        cancelRequest,
+      );
     });
 
     it('should create customer portal without knowing the provider', async () => {
@@ -124,7 +131,9 @@ describe('Payment Abstraction Layer', () => {
         portalUrl: 'https://test-provider.com/portal/123',
       });
 
-      expect(mockPaymentGateway.createCustomerPortal).toHaveBeenCalledWith(portalRequest);
+      expect(mockPaymentGateway.createCustomerPortal).toHaveBeenCalledWith(
+        portalRequest,
+      );
     });
 
     it('should get provider name for transparency', async () => {
@@ -164,7 +173,9 @@ describe('Payment Abstraction Layer', () => {
       // Same interface, same methods, different implementation
       await paymentService.getSubscription('sub_stripe_123');
 
-      expect(mockPaymentGateway.getSubscription).toHaveBeenCalledWith('sub_stripe_123');
+      expect(mockPaymentGateway.getSubscription).toHaveBeenCalledWith(
+        'sub_stripe_123',
+      );
     });
 
     it('should work with Paddle provider (future)', async () => {
@@ -188,7 +199,7 @@ describe('Payment Abstraction Layer', () => {
   describe('Error Handling Abstraction', () => {
     it('should handle provider errors consistently', async () => {
       mockPaymentGateway.createCheckout.mockRejectedValue(
-        new Error('Provider-specific error: Invalid API key')
+        new Error('Provider-specific error: Invalid API key'),
       );
 
       await expect(
@@ -197,7 +208,7 @@ describe('Payment Abstraction Layer', () => {
           userId: 'user_123',
           email: 'test@example.com',
           redirectUrl: 'https://app.com/success',
-        })
+        }),
       ).rejects.toThrow('Provider-specific error: Invalid API key');
 
       // The service doesn't need to know about provider-specific errors
@@ -208,14 +219,14 @@ describe('Payment Abstraction Layer', () => {
 
 /**
  * 🎯 What this test proves:
- * 
+ *
  * 1. ✅ **Complete Abstraction**: PaymentService works with ANY provider that implements IPaymentGateway
  * 2. ✅ **Provider Agnostic**: Same code works with LemonSqueezy, Stripe, Paddle, etc.
  * 3. ✅ **Easy Testing**: Can mock any provider implementation
  * 4. ✅ **Consistent Interface**: All operations have the same signature regardless of provider
  * 5. ✅ **Error Handling**: Provider-specific errors are handled consistently
  * 6. ✅ **Zero Coupling**: Test doesn't know about any specific payment provider implementation
- * 
- * This is exactly what you wanted - the service layer has no idea which 
+ *
+ * This is exactly what you wanted - the service layer has no idea which
  * payment provider it's using! 🚀
  */

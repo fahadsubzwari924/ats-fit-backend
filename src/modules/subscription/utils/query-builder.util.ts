@@ -1,10 +1,10 @@
 import { FindManyOptions } from 'typeorm';
 import { SubscriptionPlan } from '../../../database/entities/subscription-plan.entity';
-import { 
-  ISubscriptionPlanQueryOptions, 
-  ISubscriptionPlanWhereClause, 
+import {
+  ISubscriptionPlanQueryOptions,
+  ISubscriptionPlanWhereClause,
   ISubscriptionPlanOrderBy,
-  DEFAULT_SUBSCRIPTION_PLAN_QUERY 
+  DEFAULT_SUBSCRIPTION_PLAN_QUERY,
 } from '../interfaces/query.interface';
 import { BadRequestException } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
@@ -19,9 +19,11 @@ export class SubscriptionPlanQueryBuilder {
    * @param options Query options with defaults applied
    * @returns TypeORM FindManyOptions
    */
-  static buildFindOptions(options: ISubscriptionPlanQueryOptions): FindManyOptions<SubscriptionPlan> {
+  static buildFindOptions(
+    options: ISubscriptionPlanQueryOptions,
+  ): FindManyOptions<SubscriptionPlan> {
     const mergedOptions = this.mergeWithDefaults(options);
-    
+
     return {
       where: this.buildWhereClause(mergedOptions.where!),
       order: this.buildOrderClause(mergedOptions.orderBy!),
@@ -33,14 +35,18 @@ export class SubscriptionPlanQueryBuilder {
    * @param options User-provided query options
    * @returns Complete options with defaults applied
    */
-  private static mergeWithDefaults(options: ISubscriptionPlanQueryOptions): Required<ISubscriptionPlanQueryOptions> {
+  private static mergeWithDefaults(
+    options: ISubscriptionPlanQueryOptions,
+  ): Required<ISubscriptionPlanQueryOptions> {
     return {
-      where: { 
+      where: {
         ...DEFAULT_SUBSCRIPTION_PLAN_QUERY.where,
-        ...options.where 
+        ...options.where,
       },
       orderBy: options.orderBy || DEFAULT_SUBSCRIPTION_PLAN_QUERY.orderBy,
-      includeInactive: options.includeInactive ?? DEFAULT_SUBSCRIPTION_PLAN_QUERY.includeInactive,
+      includeInactive:
+        options.includeInactive ??
+        DEFAULT_SUBSCRIPTION_PLAN_QUERY.includeInactive,
     };
   }
 
@@ -49,40 +55,52 @@ export class SubscriptionPlanQueryBuilder {
    * @param whereClause Where clause parameters
    * @returns Validated where clause
    */
-  private static buildWhereClause(whereClause: ISubscriptionPlanWhereClause): ISubscriptionPlanWhereClause {
+  private static buildWhereClause(
+    whereClause: ISubscriptionPlanWhereClause,
+  ): ISubscriptionPlanWhereClause {
     const validatedWhere = { ...whereClause };
 
     // Validate price if provided
     if (validatedWhere.price !== undefined) {
-      if (typeof validatedWhere.price !== 'number' || validatedWhere.price < 0) {
+      if (
+        typeof validatedWhere.price !== 'number' ||
+        validatedWhere.price < 0
+      ) {
         throw new BadRequestException(
           'Price must be a non-negative number',
-          ERROR_CODES.BAD_REQUEST
+          ERROR_CODES.BAD_REQUEST,
         );
       }
     }
 
     // Validate name if provided
     if (validatedWhere.name !== undefined) {
-      if (typeof validatedWhere.name !== 'string' || validatedWhere.name.trim().length === 0) {
+      if (
+        typeof validatedWhere.name !== 'string' ||
+        validatedWhere.name.trim().length === 0
+      ) {
         throw new BadRequestException(
           'Name must be a non-empty string',
-          ERROR_CODES.BAD_REQUEST
+          ERROR_CODES.BAD_REQUEST,
         );
       }
       validatedWhere.name = validatedWhere.name.trim();
     }
 
-    // Validate external variant ID if provided
-    if (validatedWhere.external_payment_gateway_variant_id !== undefined) {
-      if (typeof validatedWhere.external_payment_gateway_variant_id !== 'string' || 
-          validatedWhere.external_payment_gateway_variant_id.trim().length === 0) {
+    // Validate payment_gateway_variant_id if provided
+    if (validatedWhere.payment_gateway_variant_id !== undefined) {
+      if (
+        typeof validatedWhere.payment_gateway_variant_id !==
+          'string' ||
+        validatedWhere.payment_gateway_variant_id.trim().length === 0
+      ) {
         throw new BadRequestException(
-          'External payment gateway variant ID must be a non-empty string',
-          ERROR_CODES.BAD_REQUEST
+          'Payment gateway variant ID must be a non-empty string',
+          ERROR_CODES.BAD_REQUEST,
         );
       }
-      validatedWhere.external_payment_gateway_variant_id = validatedWhere.external_payment_gateway_variant_id.trim();
+      validatedWhere.payment_gateway_variant_id =
+        validatedWhere.payment_gateway_variant_id.trim();
     }
 
     return validatedWhere;
@@ -93,12 +111,14 @@ export class SubscriptionPlanQueryBuilder {
    * @param orderBy Order parameters
    * @returns TypeORM order object
    */
-  private static buildOrderClause(orderBy: ISubscriptionPlanOrderBy): Record<string, 'ASC' | 'DESC'> {
+  private static buildOrderClause(
+    orderBy: ISubscriptionPlanOrderBy,
+  ): Record<string, 'ASC' | 'DESC'> {
     // Validate order direction
     if (!['ASC', 'DESC'].includes(orderBy.direction)) {
       throw new BadRequestException(
         'Order direction must be either ASC or DESC',
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
 
@@ -115,15 +135,18 @@ export class SubscriptionPlanQueryBuilder {
     if (!options || typeof options !== 'object') {
       throw new BadRequestException(
         'Query options must be a valid object',
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
 
     // Validate where clause if provided
-    if (options.where !== undefined && (typeof options.where !== 'object' || options.where === null)) {
+    if (
+      options.where !== undefined &&
+      (typeof options.where !== 'object' || options.where === null)
+    ) {
       throw new BadRequestException(
         'Where clause must be a valid object',
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
 
@@ -132,14 +155,14 @@ export class SubscriptionPlanQueryBuilder {
       if (typeof options.orderBy !== 'object' || options.orderBy === null) {
         throw new BadRequestException(
           'Order by must be a valid object',
-          ERROR_CODES.BAD_REQUEST
+          ERROR_CODES.BAD_REQUEST,
         );
       }
-      
+
       if (!options.orderBy.field || !options.orderBy.direction) {
         throw new BadRequestException(
           'Order by must contain both field and direction properties',
-          ERROR_CODES.BAD_REQUEST
+          ERROR_CODES.BAD_REQUEST,
         );
       }
     }

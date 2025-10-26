@@ -3,6 +3,7 @@ import { AppModule } from '../../app.module';
 import { SubscriptionPlanService } from '../../modules/subscription/services/subscription-plan.service';
 import { Logger } from '@nestjs/common';
 import { BillingCycle } from '../../modules/subscription/enums';
+import { Currency } from '../../modules/subscription/enums/payment.enum';
 
 async function seedSubscriptionPlans() {
   const logger = new Logger('SeedSubscriptionPlans');
@@ -16,10 +17,11 @@ async function seedSubscriptionPlans() {
     const subscriptionPlans = [
       {
         plan_name: 'Weekly',
-        description: 'Perfect for short-term projects and quick resume optimization. Get access to all premium features for one week, including unlimited ATS score checks, resume generation, and job application tracking.',
+        description:
+          'Perfect for short-term projects and quick resume optimization. Get access to all premium features for one week, including unlimited ATS score checks, resume generation, and job application tracking.',
         price: 9.99,
-        currency: 'USD',
-        external_payment_gateway_variant_id: '1012063',
+        currency: Currency.USD,
+        payment_gateway_variant_id: '1012063',
         billing_cycle: BillingCycle.WEEKLY,
         is_active: true,
         features: [
@@ -27,15 +29,16 @@ async function seedSubscriptionPlans() {
           'Resume generation with all templates',
           'Job application tracking',
           'Priority customer support',
-          '7-day access'
-        ]
+          '7-day access',
+        ],
       },
       {
         plan_name: 'Monthly',
-        description: 'Our most popular plan for job seekers who want comprehensive resume optimization and job search tools. Best value for active job hunting with full feature access for 30 days.',
+        description:
+          'Our most popular plan for job seekers who want comprehensive resume optimization and job search tools. Best value for active job hunting with full feature access for 30 days.',
         price: 34.99,
-        currency: 'USD',
-        external_payment_gateway_variant_id: '1012070',
+        currency: Currency.USD,
+        payment_gateway_variant_id: '1012070',
         billing_cycle: BillingCycle.MONTHLY,
         is_active: true,
         features: [
@@ -45,15 +48,16 @@ async function seedSubscriptionPlans() {
           'Resume optimization suggestions',
           'Interview preparation tools',
           'Priority customer support',
-          '30-day access'
-        ]
+          '30-day access',
+        ],
       },
       {
         plan_name: 'Premium Monthly',
-        description: 'Enterprise-grade solution for professionals and career coaches. Includes advanced analytics, bulk resume processing, and premium support for serious job seekers and career professionals.',
-        price: 100.00,
-        currency: 'USD',
-        external_payment_gateway_variant_id: '1012071',
+        description:
+          'Enterprise-grade solution for professionals and career coaches. Includes advanced analytics, bulk resume processing, and premium support for serious job seekers and career professionals.',
+        price: 100.0,
+        currency: Currency.USD,
+        payment_gateway_variant_id: '1012071',
         billing_cycle: BillingCycle.MONTHLY,
         is_active: true,
         features: [
@@ -65,9 +69,9 @@ async function seedSubscriptionPlans() {
           'Dedicated account manager',
           'API access',
           '24/7 premium support',
-          'Custom integrations'
-        ]
-      }
+          'Custom integrations',
+        ],
+      },
     ];
 
     // Check if subscription plans already exist
@@ -80,7 +84,9 @@ async function seedSubscriptionPlans() {
     // Create subscription plans
     for (const planData of subscriptionPlans) {
       await subscriptionPlanService.create(planData);
-      logger.log(`Seeded subscription plan: ${planData.plan_name} - $${planData.price}`);
+      logger.log(
+        `Seeded subscription plan: ${planData.plan_name} - $${planData.price}`,
+      );
     }
 
     logger.log('All subscription plans seeded successfully!');

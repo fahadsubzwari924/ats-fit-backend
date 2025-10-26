@@ -28,7 +28,11 @@ export class SubscriptionCancellationResponse {
   /**
    * Create instance from the return object structure
    */
-  static fromResponse(cancelResult: any, provider: string, message: string): SubscriptionCancellationResponse {
+  static fromResponse(
+    cancelResult: any,
+    provider: string,
+    message: string,
+  ): SubscriptionCancellationResponse {
     return new SubscriptionCancellationResponse({
       id: cancelResult?.subscriptionId,
       status: cancelResult?.status,
@@ -36,7 +40,7 @@ export class SubscriptionCancellationResponse {
       cancelledAt: cancelResult?.cancelledAt,
       endsAt: cancelResult?.endsAt,
       message: message,
-      success: true
+      success: true,
     });
   }
 
@@ -51,7 +55,7 @@ export class SubscriptionCancellationResponse {
       cancelledAt: this.cancelledAt,
       endsAt: this.endsAt,
       message: this.message,
-      success: this.success
+      success: this.success,
     };
   }
 }

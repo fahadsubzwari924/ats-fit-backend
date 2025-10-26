@@ -8,7 +8,9 @@ import { SubscriptionPlanService } from '../services/subscription-plan.service';
 import { ISubscriptionPlanQueryOptions } from '../interfaces/query.interface';
 
 export class SubscriptionPlanQueryExamples {
-  constructor(private readonly subscriptionPlanService: SubscriptionPlanService) {}
+  constructor(
+    private readonly subscriptionPlanService: SubscriptionPlanService,
+  ) {}
 
   /**
    * Example 1: Default behavior (backward compatible)
@@ -26,8 +28,8 @@ export class SubscriptionPlanQueryExamples {
     const queryOptions: ISubscriptionPlanQueryOptions = {
       where: {
         billing_cycle: BillingCycle.YEARLY,
-        is_active: true
-      }
+        is_active: true,
+      },
     };
     return await this.subscriptionPlanService.findAll(queryOptions);
   }
@@ -40,8 +42,8 @@ export class SubscriptionPlanQueryExamples {
     const queryOptions: ISubscriptionPlanQueryOptions = {
       orderBy: {
         field: 'name',
-        direction: 'DESC'
-      }
+        direction: 'DESC',
+      },
     };
     return await this.subscriptionPlanService.findAll(queryOptions);
   }
@@ -55,12 +57,12 @@ export class SubscriptionPlanQueryExamples {
       where: {
         billing_cycle: BillingCycle.MONTHLY,
         price: price,
-        is_active: true
+        is_active: true,
       },
       orderBy: {
         field: 'created_at',
-        direction: 'DESC'
-      }
+        direction: 'DESC',
+      },
     };
     return await this.subscriptionPlanService.findAll(queryOptions);
   }
@@ -73,10 +75,12 @@ export class SubscriptionPlanQueryExamples {
     const queryOptions: ISubscriptionPlanQueryOptions = {
       orderBy: {
         field: 'updated_at',
-        direction: 'DESC'
-      }
+        direction: 'DESC',
+      },
     };
-    return await this.subscriptionPlanService.findAllIncludeInactive(queryOptions);
+    return await this.subscriptionPlanService.findAllIncludeInactive(
+      queryOptions,
+    );
   }
 
   /**
@@ -94,21 +98,23 @@ export class SubscriptionPlanQueryExamples {
   async getYearlyPlansIncludingInactive() {
     const queryOptions: ISubscriptionPlanQueryOptions = {
       where: {
-        billing_cycle: BillingCycle.YEARLY
-      }
+        billing_cycle: BillingCycle.YEARLY,
+      },
     };
-    return await this.subscriptionPlanService.findAllIncludeInactive(queryOptions);
+    return await this.subscriptionPlanService.findAllIncludeInactive(
+      queryOptions,
+    );
   }
 
   /**
-   * Example 6: Search by external payment gateway variant ID
+   * Example 6: Search by payment gateway variant ID
    */
-  async getPlanByExternalVariantId(variantId: string) {
+  async getPlanByVariantId(variantId: string) {
     const queryOptions: ISubscriptionPlanQueryOptions = {
       where: {
-        external_payment_gateway_variant_id: variantId,
-        is_active: true
-      }
+        payment_gateway_variant_id: variantId,
+        is_active: true,
+      },
     };
     return await this.subscriptionPlanService.findAll(queryOptions);
   }
@@ -121,12 +127,12 @@ export class SubscriptionPlanQueryExamples {
     const queryOptions: ISubscriptionPlanQueryOptions = {
       where: {
         price: targetPrice,
-        is_active: true
+        is_active: true,
       },
       orderBy: {
         field: 'price',
-        direction: 'ASC'
-      }
+        direction: 'ASC',
+      },
     };
     return await this.subscriptionPlanService.findAll(queryOptions);
   }
@@ -142,21 +148,21 @@ export class UsageExamples {
 
     // 2. Custom where clause
     const yearlyPlans = await service.findAll({
-      where: { billing_cycle: BillingCycle.YEARLY }
+      where: { billing_cycle: BillingCycle.YEARLY },
     });
 
     // 3. Custom ordering
     const plansByName = await service.findAll({
-      orderBy: { field: 'name', direction: 'DESC' }
+      orderBy: { field: 'name', direction: 'DESC' },
     });
 
     // 4. Combined filters and ordering
     const monthlyActivePlans = await service.findAll({
-      where: { 
-        billing_cycle: BillingCycle.MONTHLY, 
-        is_active: true 
+      where: {
+        billing_cycle: BillingCycle.MONTHLY,
+        is_active: true,
       },
-      orderBy: { field: 'price', direction: 'ASC' }
+      orderBy: { field: 'price', direction: 'ASC' },
     });
 
     // 5. Include inactive plans (default behavior)
@@ -164,12 +170,12 @@ export class UsageExamples {
 
     // 6. Include inactive plans with custom filtering
     const yearlyPlansIncludeInactive = await service.findAllIncludeInactive({
-      where: { billing_cycle: BillingCycle.YEARLY }
+      where: { billing_cycle: BillingCycle.YEARLY },
     });
 
     // 7. Include inactive plans with custom ordering
     const allPlansByUpdateDate = await service.findAllIncludeInactive({
-      orderBy: { field: 'updated_at', direction: 'DESC' }
+      orderBy: { field: 'updated_at', direction: 'DESC' },
     });
 
     return {
@@ -179,7 +185,7 @@ export class UsageExamples {
       monthlyActivePlans,
       allPlansIncludeInactive,
       yearlyPlansIncludeInactive,
-      allPlansByUpdateDate
+      allPlansByUpdateDate,
     };
   }
 }

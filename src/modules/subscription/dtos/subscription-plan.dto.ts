@@ -1,4 +1,12 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, IsArray, IsIn, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsBoolean,
+  IsArray,
+  IsIn,
+  IsEnum,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingCycle } from '../enums';
 
@@ -20,9 +28,11 @@ export class CreateSubscriptionPlanDto {
   @IsString()
   currency?: string;
 
-  @ApiProperty({ description: 'External payment gateway variant ID for this plan' })
-  @IsString()
-  external_payment_gateway_variant_id: string;
+      @ApiProperty({
+    description: 'Payment gateway variant ID for the plan',
+    example: '1012063',
+  })
+  payment_gateway_variant_id: string;
 
   @ApiPropertyOptional({ description: 'List of features included in the plan' })
   @IsOptional()
@@ -30,9 +40,9 @@ export class CreateSubscriptionPlanDto {
   @IsString({ each: true })
   features?: string[];
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Billing cycle for the plan',
-    enum: ['monthly', 'yearly', 'one-time']
+    enum: ['monthly', 'yearly', 'one-time'],
   })
   @IsOptional()
   @IsString()
@@ -61,20 +71,21 @@ export class UpdateSubscriptionPlanDto {
   @IsString()
   currency?: string;
 
-  @ApiPropertyOptional({ description: 'External payment gateway variant ID for this plan' })
+  @ApiPropertyOptional({
+    description: 'Payment gateway variant ID',
+    example: '1012063',
+  })
   @IsOptional()
   @IsString()
-  external_payment_gateway_variant_id?: string;
-
-  @ApiPropertyOptional({ description: 'List of features included in the plan' })
+  payment_gateway_variant_id?: string;  @ApiPropertyOptional({ description: 'List of features included in the plan' })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   features?: string[];
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Billing cycle for the plan',
-    enum: BillingCycle
+    enum: BillingCycle,
   })
   @IsOptional()
   @IsEnum(BillingCycle)
@@ -103,7 +114,7 @@ export class SubscriptionPlanResponseDto {
   currency: string;
 
   @ApiProperty()
-  external_payment_gateway_variant_id: string;
+  payment_gateway_variant_id: string;
 
   @ApiProperty()
   is_active: boolean;

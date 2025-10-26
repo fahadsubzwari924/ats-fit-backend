@@ -3,9 +3,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSubscription } from '../../../database/entities/user-subscription.entity';
 import { SubscriptionStatus } from '../enums/subscription-status.enum';
+import { Currency } from '../enums/payment.enum';
 import { SubscriptionCancellationResponse } from '../models';
-import { ICreateSubscriptionData, IUpdateSubscriptionData } from '../interfaces/subscription.interface';
-import { BadRequestException, NotFoundException } from '../../../shared/exceptions/custom-http-exceptions';
+import {
+  ICreateSubscriptionData,
+  IUpdateSubscriptionData,
+} from '../interfaces/subscription.interface';
+import {
+  BadRequestException,
+  NotFoundException,
+} from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { ExternalPaymentGatewayEvents } from '../externals/enums/external-payment-gateway-events.enum';
 import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
@@ -25,9 +32,10 @@ export class SubscriptionService {
   async create(data: ICreateSubscriptionData): Promise<UserSubscription> {
     try {
       this.logger.debug('SubscriptionService.create() called with data:', data);
-      
+
       const subscription = this.subscriptionRepository.create({
-        external_payment_gateway_subscription_id: data.external_payment_gateway_subscription_id,
+        payment_gateway_subscription_id:
+          data.payment_gateway_subscription_id,
         subscription_plan_id: data.subscription_plan_id,
         user_id: data.user_id,
         status: data.status,
@@ -39,18 +47,20 @@ export class SubscriptionService {
         is_active: data.status === SubscriptionStatus.ACTIVE,
         is_cancelled: false,
       });
-      
+
       this.logger.debug('Created subscription entity:', subscription);
       this.logger.debug('About to save to database...');
-      
-      const savedSubscription = await this.subscriptionRepository.save(subscription);
-      
-      this.logger.log('Subscription saved to database successfully', { 
+
+      const savedSubscription =
+        await this.subscriptionRepository.save(subscription);
+
+      this.logger.log('Subscription saved to database successfully', {
         subscriptionId: savedSubscription.id,
-        externalSubscriptionId: savedSubscription.external_payment_gateway_subscription_id,
-        userId: savedSubscription.user_id
+        externalSubscriptionId:
+          savedSubscription.payment_gateway_subscription_id,
+        userId: savedSubscription.user_id,
       });
-      
+
       return savedSubscription;
     } catch (error) {
       this.logger.error('Failed to create subscription in database', {
@@ -58,12 +68,12 @@ export class SubscriptionService {
         stack: error.stack,
         code: error.code,
         detail: error.detail,
-        data
+        data,
       });
-      
+
       throw new BadRequestException(
         `Failed to create subscription: ${error.message}`,
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
   }
@@ -76,7 +86,7 @@ export class SubscriptionService {
     if (!subscription) {
       throw new NotFoundException(
         `Subscription with ID ${id} not found`,
-        ERROR_CODES.SUBSCRIPTION_NOT_FOUND
+        ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
       );
     }
 
@@ -85,20 +95,20 @@ export class SubscriptionService {
 
   async findByExternalId(externalId: string): Promise<UserSubscription | null> {
     return await this.subscriptionRepository.findOne({
-      where: { external_payment_gateway_subscription_id: externalId },
+      where: { payment_gateway_subscription_id: externalId },
     });
   }
 
   async createCancellationResponse(
-    cancelResult: any, 
-    provider: string, 
-    message: string
+    cancelResult: any,
+    provider: string,
+    message: string,
   ): Promise<SubscriptionCancellationResponse> {
     // Create response using the model class
     const response = SubscriptionCancellationResponse.fromResponse(
       cancelResult,
       provider,
-      message
+      message,
     );
     return response;
   }
@@ -112,29 +122,32 @@ export class SubscriptionService {
 
   async findActiveByUserId(userId: string): Promise<UserSubscription | null> {
     return await this.subscriptionRepository.findOne({
-      where: { 
-        user_id: userId, 
+      where: {
+        user_id: userId,
         is_active: true,
-        is_cancelled: false 
+        is_cancelled: false,
       },
       order: { created_at: 'DESC' },
     });
   }
 
-  async update(id: string, data: IUpdateSubscriptionData): Promise<UserSubscription> {
+  async update(
+    id: string,
+    data: IUpdateSubscriptionData,
+  ): Promise<UserSubscription> {
     // Validate input
     this.validateSubscriptionId(id);
-    
+
     // Verify subscription exists (findById throws NotFoundException if not found)
     await this.findById(id);
-    
+
     // Use TypeORM's update method for partial updates (more efficient and safe)
     const updateResult = await this.subscriptionRepository.update(id, data);
-    
+
     if (updateResult.affected === 0) {
       throw new NotFoundException(
         `Failed to update subscription with ID ${id}`,
-        ERROR_CODES.SUBSCRIPTION_NOT_FOUND
+        ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
       );
     }
 
@@ -142,35 +155,38 @@ export class SubscriptionService {
     return await this.findById(id);
   }
 
-  async updateByExternalId(externalId: string, data: IUpdateSubscriptionData): Promise<UserSubscription> {
+  async updateByExternalId(
+    externalId: string,
+    data: IUpdateSubscriptionData,
+  ): Promise<UserSubscription> {
     // Validate input
     if (!externalId || externalId?.trim() === '') {
       throw new BadRequestException(
         'External subscription ID is required and must be a valid string',
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
 
     // Find subscription to verify it exists
     const subscription = await this.findByExternalId(externalId);
-    
+
     if (!subscription) {
       throw new NotFoundException(
         `Subscription with external ID ${externalId} not found`,
-        ERROR_CODES.SUBSCRIPTION_NOT_FOUND
+        ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
       );
     }
-    
+
     // Use TypeORM's update method for partial updates
     const updateResult = await this.subscriptionRepository.update(
-      { external_payment_gateway_subscription_id: externalId }, 
-      data
+      { payment_gateway_subscription_id: externalId },
+      data,
     );
-    
+
     if (updateResult.affected === 0) {
       throw new NotFoundException(
         `Failed to update subscription with external ID ${externalId}`,
-        ERROR_CODES.SUBSCRIPTION_NOT_FOUND
+        ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
       );
     }
 
@@ -205,7 +221,7 @@ export class SubscriptionService {
     if (!id || typeof id !== 'string' || id.trim() === '') {
       throw new BadRequestException(
         'Subscription ID is required and must be a valid string',
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
   }
@@ -217,12 +233,12 @@ export class SubscriptionService {
   private async performDeletion(id: string): Promise<void> {
     try {
       const result = await this.subscriptionRepository.delete(id);
-      
+
       if (result?.affected === 0) {
         // This should not happen if findById passed, but defensive programming
         throw new NotFoundException(
           `Subscription with ID ${id} not found`,
-          ERROR_CODES.SUBSCRIPTION_NOT_FOUND
+          ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
         );
       }
 
@@ -258,7 +274,9 @@ export class SubscriptionService {
     try {
       const secret = this.configService.get('LEMON_SQUEEZY_WEBHOOK_SECRET');
       if (!secret) {
-        this.logger.warn('Payment gateway secret not configured, skipping verification');
+        this.logger.warn(
+          'Payment gateway secret not configured, skipping verification',
+        );
         return true;
       }
 
@@ -267,7 +285,7 @@ export class SubscriptionService {
 
       return crypto.timingSafeEqual(
         Buffer.from(signature),
-        Buffer.from(expectedSignature)
+        Buffer.from(expectedSignature),
       );
     } catch (error) {
       this.logger.error('Failed to verify payment gateway signature', error);
@@ -280,17 +298,20 @@ export class SubscriptionService {
    */
   async processPaymentGatewayEvent(payload: any): Promise<any> {
     try {
-      this.logger.log(`Processing payment gateway event: ${payload.meta?.event_name}`);
-      
+      this.logger.log(
+        `Processing payment gateway event: ${payload.meta?.event_name}`,
+      );
+
       const eventType = payload.meta?.event_name;
       let subscriptionInfo = null;
 
       // Handle subscription creation events
-      if (eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED || 
-          eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS) {
-        
+      if (
+        eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED ||
+        eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS
+      ) {
         await this.createSubscriptionFromPaymentGatewayEvent(payload);
-        
+
         // Verify subscription was created
         try {
           const subscription = await this.findByExternalId(payload.data?.id);
@@ -300,68 +321,90 @@ export class SubscriptionService {
               status: subscription.status,
               isActive: subscription.is_active,
               userId: subscription.user_id,
-              subscriptionPlanId: subscription.subscription_plan_id
+              subscriptionPlanId: subscription.subscription_plan_id,
             };
-            this.logger.log(`✅ Subscription entry confirmed in database: ${subscription.id}`);
+            this.logger.log(
+              `✅ Subscription entry confirmed in database: ${subscription.id}`,
+            );
           }
         } catch (error) {
-          this.logger.warn(`Could not verify subscription creation: ${error.message}`);
+          this.logger.warn(
+            `Could not verify subscription creation: ${error.message}`,
+          );
         }
       }
-      
+
       return {
         eventType: eventType,
         subscriptionCreated: !!subscriptionInfo,
-        subscription: subscriptionInfo
+        subscription: subscriptionInfo,
       };
-
     } catch (error) {
       this.logger.error('Failed to process payment gateway event', error);
       throw error;
     }
   }
-  
+
   /**
    * Create subscription from payment gateway event data
    */
-  private async createSubscriptionFromPaymentGatewayEvent(payload: PaymentConfirmationDto): Promise<void> {
+  private async createSubscriptionFromPaymentGatewayEvent(
+    payload: PaymentConfirmationDto,
+  ): Promise<void> {
     try {
       this.logger.log(`🔥 DEBUG: Starting subscription creation process...`);
-      
+
       const subscriptionData: ICreateSubscriptionData = {
-        external_payment_gateway_subscription_id: payload?.data?.id,
+        payment_gateway_subscription_id: payload?.data?.id,
         subscription_plan_id: payload?.meta?.custom_data?.plan_id,
         user_id: payload?.meta?.custom_data?.user_id,
-        status: this.mapPaymentGatewayStatusToSubscriptionStatus(payload?.data?.attributes?.status),
+        status: this.mapPaymentGatewayStatusToSubscriptionStatus(
+          payload?.data?.attributes?.status,
+        ),
         amount: payload?.data?.attributes?.total || 0,
-        currency: payload?.data?.attributes?.currency || 'USD',
-        starts_at: new Date(payload?.data?.attributes?.created_at || Date.now()),
-        ends_at: new Date(payload?.data?.attributes?.renews_at || payload?.data?.attributes?.ends_at || Date.now() + 30 * 24 * 60 * 60 * 1000), // Default to 30 days
+        currency: payload?.data?.attributes?.currency || Currency.USD,
+        starts_at: new Date(
+          payload?.data?.attributes?.created_at || Date.now(),
+        ),
+        ends_at: new Date(
+          payload?.data?.attributes?.renews_at ||
+            payload?.data?.attributes?.ends_at ||
+            Date.now() + 30 * 24 * 60 * 60 * 1000,
+        ), // Default to 30 days
         metadata: {
           paymentGatewayData: payload?.data?.attributes,
-          customData: payload?.meta?.custom_data
-        }
+          customData: payload?.meta?.custom_data,
+        },
       };
 
-      this.logger.log(`🔥 DEBUG: Subscription data to create:`, subscriptionData);
+      this.logger.log(
+        `🔥 DEBUG: Subscription data to create:`,
+        subscriptionData,
+      );
       this.logger.log(`🔥 DEBUG: Calling subscriptionService.create()...`);
-      
+
       const subscription = await this.create(subscriptionData);
-      
+
       this.logger.log(`✅ SUCCESS: Created subscription in database!`);
       this.logger.log(`✅ SUCCESS: Subscription ID: ${subscription.id}`);
-      this.logger.log(`✅ SUCCESS: Subscription status: ${subscription.status}`);
-      this.logger.log(`✅ SUCCESS: Subscription isActive: ${subscription.is_active}`);
-      
+      this.logger.log(
+        `✅ SUCCESS: Subscription status: ${subscription.status}`,
+      );
+      this.logger.log(
+        `✅ SUCCESS: Subscription isActive: ${subscription.is_active}`,
+      );
     } catch (error) {
-      this.logger.error(`❌ CRITICAL ERROR: Failed to create subscription from payment gateway event:`, error);
+      this.logger.error(
+        `❌ CRITICAL ERROR: Failed to create subscription from payment gateway event:`,
+        error,
+      );
       this.logger.error(`❌ Error message: ${error.message}`);
       this.logger.error(`❌ Error stack: ${error.stack}`);
-      
+
       if (error.code) {
         this.logger.error(`❌ Database error code: ${error.code}`);
       }
-      
+
       throw error;
     }
   }
@@ -369,21 +412,21 @@ export class SubscriptionService {
   /**
    * Map payment gateway status to our SubscriptionStatus enum
    */
-  private mapPaymentGatewayStatusToSubscriptionStatus(status: string): SubscriptionStatus {
+  private mapPaymentGatewayStatusToSubscriptionStatus(
+    status: string,
+  ): SubscriptionStatus {
     const statusMap: Record<string, SubscriptionStatus> = {
-      'active': SubscriptionStatus.ACTIVE,
-      'cancelled': SubscriptionStatus.CANCELLED, 
-      'expired': SubscriptionStatus.EXPIRED,
-      'paused': SubscriptionStatus.PAUSED,
-      'past_due': SubscriptionStatus.PAST_DUE,
-      'on_trial': SubscriptionStatus.ACTIVE,
-      'unpaid': SubscriptionStatus.PAST_DUE
+      active: SubscriptionStatus.ACTIVE,
+      cancelled: SubscriptionStatus.CANCELLED,
+      expired: SubscriptionStatus.EXPIRED,
+      paused: SubscriptionStatus.PAUSED,
+      past_due: SubscriptionStatus.PAST_DUE,
+      on_trial: SubscriptionStatus.ACTIVE,
+      unpaid: SubscriptionStatus.PAST_DUE,
     };
 
     return statusMap[status?.toLowerCase()] || SubscriptionStatus.ACTIVE;
   }
 
   //#endregion
-
-  
 }

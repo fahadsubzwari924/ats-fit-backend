@@ -2,7 +2,7 @@
 
 /**
  * 🚀 Payment Provider Switching Demonstration
- * 
+ *
  * This script demonstrates how easy it is to switch between payment providers
  * with our new abstraction layer.
  */
@@ -19,7 +19,9 @@ async function demonstrateProviderSwitching() {
   const paymentService = app.get(PaymentService);
 
   console.log('Current Payment Provider:', paymentService.getProviderName());
-  console.log('Provider switching is controlled by PAYMENT_PROVIDER environment variable\n');
+  console.log(
+    'Provider switching is controlled by PAYMENT_PROVIDER environment variable\n',
+  );
 
   // Demonstrate provider-agnostic operations
   console.log('📋 Testing Provider-Agnostic Operations:');
@@ -34,26 +36,36 @@ async function demonstrateProviderSwitching() {
       redirectUrl: 'https://yourapp.com/success',
       customData: {
         source: 'demonstration',
-        feature: 'provider_switching_demo'
-      }
+        feature: 'provider_switching_demo',
+      },
     });
 
     console.log('✅ Checkout created successfully!');
     console.log('   Checkout URL:', checkoutResponse.checkoutUrl);
     console.log('   Checkout ID:', checkoutResponse.checkoutId);
     console.log('   Provider:', checkoutResponse.paymentProvider);
-
   } catch (error) {
-    console.log('ℹ️ Checkout creation failed (expected in demo):', error.message);
+    console.log(
+      'ℹ️ Checkout creation failed (expected in demo):',
+      error.message,
+    );
   }
 
   console.log('\n🔄 Provider Switching Instructions:');
-  console.log('To switch payment providers, simply change your environment variable:');
+  console.log(
+    'To switch payment providers, simply change your environment variable:',
+  );
   console.log('');
   console.log('   PAYMENT_PROVIDER=lemonsqueezy  # Current (LemonSqueezy)');
-  console.log('   PAYMENT_PROVIDER=stripe       # Switch to Stripe (when implemented)');
-  console.log('   PAYMENT_PROVIDER=paddle       # Switch to Paddle (when implemented)');
-  console.log('   PAYMENT_PROVIDER=paypal       # Switch to PayPal (when implemented)');
+  console.log(
+    '   PAYMENT_PROVIDER=stripe       # Switch to Stripe (when implemented)',
+  );
+  console.log(
+    '   PAYMENT_PROVIDER=paddle       # Switch to Paddle (when implemented)',
+  );
+  console.log(
+    '   PAYMENT_PROVIDER=paypal       # Switch to PayPal (when implemented)',
+  );
   console.log('');
   console.log('💡 The controller and business logic remain EXACTLY the same!');
   console.log('   No code changes needed - just environment configuration.');
@@ -67,7 +79,9 @@ async function demonstrateProviderSwitching() {
   console.log('✅ Unified testing interface for all payment operations');
 
   console.log('\n🧪 Testing Benefits:');
-  console.log('• Mock the IPaymentGateway interface instead of concrete services');
+  console.log(
+    '• Mock the IPaymentGateway interface instead of concrete services',
+  );
   console.log('• Test business logic without external payment API calls');
   console.log('• Consistent test patterns across all payment providers');
 
@@ -92,12 +106,12 @@ export { demonstrateProviderSwitching };
 
 /**
  * 🎯 Key Takeaways:
- * 
+ *
  * 1. Controller Independence: Your controllers now have ZERO knowledge of payment providers
  * 2. Easy Switching: Change one environment variable to switch providers
  * 3. Future-Proof: Add new providers without changing existing code
  * 4. SOLID Compliant: Follows all SOLID principles perfectly
  * 5. Testable: Mock interfaces instead of concrete implementations
- * 
+ *
  * This is exactly what you wanted - complete decoupling! 🎯
  */

@@ -1,29 +1,30 @@
 import { BadRequestException } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { ICreateSubscriptionPlanData } from '../interfaces/subscription.interface';
+import { Currency } from '../enums';
 
 export class SubscriptionPlanValidator {
   private static readonly VALIDATION_RULES = {
     PLAN_NAME: {
       required: true,
       minLength: 1,
-      message: 'Plan name is required and cannot be empty'
+      message: 'Plan name is required and cannot be empty',
     },
     DESCRIPTION: {
       required: true,
       minLength: 1,
-      message: 'Plan description is required and cannot be empty'
+      message: 'Plan description is required and cannot be empty',
     },
     PRICE: {
       required: true,
       min: 0,
-      message: 'Price is required and must be a non-negative number'
+      message: 'Price is required and must be a non-negative number',
     },
-    EXTERNAL_VARIANT_ID: {
+    PAYMENT_GATEWAY_VARIANT_ID: {
       required: true,
       minLength: 1,
-      message: 'External payment gateway variant ID is required'
-    }
+      message: 'Payment gateway variant ID is required',
+    },
   };
 
   static validateCreateData(data: ICreateSubscriptionPlanData): void {
@@ -35,12 +36,14 @@ export class SubscriptionPlanValidator {
     if (!data || typeof data !== 'object') {
       throw new BadRequestException(
         'Subscription plan data is required',
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
   }
 
-  private static validateRequiredFields(data: ICreateSubscriptionPlanData): void {
+  private static validateRequiredFields(
+    data: ICreateSubscriptionPlanData,
+  ): void {
     const validationErrors: string[] = [];
 
     // Validate plan name
@@ -58,15 +61,15 @@ export class SubscriptionPlanValidator {
       validationErrors.push(this.VALIDATION_RULES.PRICE.message);
     }
 
-    // Validate external variant ID
-    if (!this.isValidString(data.external_payment_gateway_variant_id)) {
-      validationErrors.push(this.VALIDATION_RULES.EXTERNAL_VARIANT_ID.message);
+    // Validate payment gateway variant ID
+    if (!this.isValidString(data.payment_gateway_variant_id)) {
+      validationErrors.push(this.VALIDATION_RULES.PAYMENT_GATEWAY_VARIANT_ID.message);
     }
 
     if (validationErrors.length > 0) {
       throw new BadRequestException(
         validationErrors.join(', '),
-        ERROR_CODES.BAD_REQUEST
+        ERROR_CODES.BAD_REQUEST,
       );
     }
   }
@@ -76,16 +79,24 @@ export class SubscriptionPlanValidator {
   }
 
   private static isValidPrice(price: any): boolean {
-    return price !== undefined && price !== null && typeof price === 'number' && price >= 0;
+    return (
+      price !== undefined &&
+      price !== null &&
+      typeof price === 'number' &&
+      price >= 0
+    );
   }
 
-  static sanitizeCreateData(data: ICreateSubscriptionPlanData): ICreateSubscriptionPlanData {
+  static sanitizeCreateData(
+    data: ICreateSubscriptionPlanData,
+  ): ICreateSubscriptionPlanData {
     return {
       ...data,
       plan_name: data.plan_name?.trim(),
       description: data.description?.trim(),
-      external_payment_gateway_variant_id: data.external_payment_gateway_variant_id?.trim(),
-      currency: data.currency || 'USD'
+      payment_gateway_variant_id:
+        data.payment_gateway_variant_id?.trim(),
+      currency: data.currency || Currency.USD,
     };
   }
 }

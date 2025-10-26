@@ -1,6 +1,6 @@
 /**
  * Abstract Payment Gateway Interface
- * 
+ *
  * This interface defines the contract for all payment providers.
  * Controllers depend on this abstraction, not concrete implementations.
  */
@@ -59,8 +59,8 @@ export interface CancelSubscriptionResponse {
 
 /**
  * Payment Gateway Interface
- * 
- * All payment providers (LemonSqueezy, Stripe, Paddle, etc.) 
+ *
+ * All payment providers (LemonSqueezy, Stripe, Paddle, etc.)
  * must implement this interface.
  */
 export interface IPaymentGateway {
@@ -82,12 +82,16 @@ export interface IPaymentGateway {
   /**
    * Cancel a subscription
    */
-  cancelSubscription(request: CancelSubscriptionRequest): Promise<CancelSubscriptionResponse>;
+  cancelSubscription(
+    request: CancelSubscriptionRequest,
+  ): Promise<CancelSubscriptionResponse>;
 
   /**
    * Create customer portal URL for managing subscription
    */
-  createCustomerPortal(request: CustomerPortalRequest): Promise<CustomerPortalResponse>;
+  createCustomerPortal(
+    request: CustomerPortalRequest,
+  ): Promise<CustomerPortalResponse>;
 
   /**
    * Get all subscriptions for a customer

@@ -1,6 +1,6 @@
 /**
  * Billing Cycle Enum
- * 
+ *
  * Defines the available billing cycles for subscription plans
  */
 export enum BillingCycle {

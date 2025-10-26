@@ -1,8 +1,16 @@
 import { User } from './user.entity';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Index,
+} from 'typeorm';
 import { PaymentStatus, PaymentType } from '../../modules/subscription/enums';
 import { SubscriptionPlan } from './subscription-plan.entity';
-
 
 @Entity('payment_history')
 @Index(['user_id'])
@@ -11,8 +19,8 @@ export class PaymentHistory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'external_payment_id'})
-  external_payment_id: string;
+  @Column({ name: 'payment_gateway_transaction_id' })
+  payment_gateway_transaction_id: string;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   amount: number;
@@ -46,7 +54,9 @@ export class PaymentHistory {
   @Column({ name: 'subscription_plan_id', nullable: true })
   subscription_plan_id: string;
 
-  @ManyToOne(() => SubscriptionPlan, plan => plan.payment_history, { eager: false })
+  @ManyToOne(() => SubscriptionPlan, (plan) => plan.payment_history, {
+    eager: false,
+  })
   @JoinColumn({ name: 'subscription_plan_id' })
   subscription_plan: SubscriptionPlan;
 
@@ -85,23 +95,36 @@ export class PaymentHistory {
 
   // Computed properties from payment gateway response
   get product_name(): string | null {
-    return this.payment_gateway_response?.data?.attributes?.product_name || null;
+    return (
+      this.payment_gateway_response?.data?.attributes?.product_name || null
+    );
   }
 
   get variant_name(): string | null {
-    return this.payment_gateway_response?.data?.attributes?.variant_name || null;
+    return (
+      this.payment_gateway_response?.data?.attributes?.variant_name || null
+    );
   }
 
   get product_id(): string | null {
-    return this.payment_gateway_response?.data?.attributes?.product_id?.toString() || null;
+    return (
+      this.payment_gateway_response?.data?.attributes?.product_id?.toString() ||
+      null
+    );
   }
 
   get variant_id(): string | null {
-    return this.payment_gateway_response?.data?.attributes?.variant_id?.toString() || null;
+    return (
+      this.payment_gateway_response?.data?.attributes?.variant_id?.toString() ||
+      null
+    );
   }
 
   get order_id(): string | null {
-    return this.payment_gateway_response?.data?.attributes?.order_id?.toString() || null;
+    return (
+      this.payment_gateway_response?.data?.attributes?.order_id?.toString() ||
+      null
+    );
   }
 
   // Helper methods

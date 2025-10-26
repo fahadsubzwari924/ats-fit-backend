@@ -1,9 +1,9 @@
 /**
  * External Payment Gateway Webhook Event Types
- * 
+ *
  * This enum defines all possible webhook events that can be received from external payment gateways.
  * These events are sent when various actions occur in your payment gateway store.
- * 
+ *
  * @see https://docs.lemonsqueezy.com/api/webhooks
  */
 export enum ExternalPaymentGatewayEvents {
@@ -52,7 +52,11 @@ export class ExternalPaymentGatewayEventHelper {
    * Check if an event is payment-related
    */
   static isPaymentEvent(event: string): boolean {
-    return event?.includes('payment_') || event === ExternalPaymentGatewayEvents.ORDER_CREATED || false;
+    return (
+      event?.includes('payment_') ||
+      event === ExternalPaymentGatewayEvents.ORDER_CREATED ||
+      false
+    );
   }
 
   /**
@@ -105,6 +109,8 @@ export class ExternalPaymentGatewayEventHelper {
    * Validate if event is a known external payment gateway event
    */
   static isValidEvent(event: string): boolean {
-    return Object.values(ExternalPaymentGatewayEvents).includes(event as ExternalPaymentGatewayEvents);
+    return Object.values(ExternalPaymentGatewayEvents).includes(
+      event as ExternalPaymentGatewayEvents,
+    );
   }
 }

@@ -12,3 +12,14 @@ export enum PaymentType {
   ONE_TIME = 'one_time',
   REFUND = 'refund',
 }
+
+export enum Currency {
+  USD = 'USD',
+  EUR = 'EUR',
+  GBP = 'GBP',
+  CAD = 'CAD',
+  AUD = 'AUD',
+  JPY = 'JPY',
+  INR = 'INR',
+  BRL = 'BRL',
+}

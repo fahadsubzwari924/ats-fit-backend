@@ -10,14 +10,19 @@ export interface ISubscriptionPlanWhereClause {
   billing_cycle?: BillingCycle;
   price?: number;
   name?: string;
-  external_payment_gateway_variant_id?: string;
+  payment_gateway_variant_id?: string;
 }
 
 /**
  * Allowed fields for ordering subscription plans
  * Using keyof to ensure only valid entity fields can be used
  */
-export type SubscriptionPlanOrderField = 'price' | 'name' | 'billing_cycle' | 'created_at' | 'updated_at';
+export type SubscriptionPlanOrderField =
+  | 'price'
+  | 'name'
+  | 'billing_cycle'
+  | 'created_at'
+  | 'updated_at';
 
 /**
  * Order configuration for subscription plan queries
@@ -39,8 +44,9 @@ export interface ISubscriptionPlanQueryOptions {
 /**
  * Default query configuration
  */
-export const DEFAULT_SUBSCRIPTION_PLAN_QUERY: Required<ISubscriptionPlanQueryOptions> = {
-  where: { is_active: true },
-  orderBy: { field: 'price', direction: 'ASC' },
-  includeInactive: false,
-};
+export const DEFAULT_SUBSCRIPTION_PLAN_QUERY: Required<ISubscriptionPlanQueryOptions> =
+  {
+    where: { is_active: true },
+    orderBy: { field: 'price', direction: 'ASC' },
+    includeInactive: false,
+  };

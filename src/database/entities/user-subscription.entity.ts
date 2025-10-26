@@ -1,20 +1,26 @@
 import { User } from './user.entity';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Index,
+} from 'typeorm';
 import { Optional } from '@nestjs/common';
 import { SubscriptionStatus } from '../../modules/subscription/enums/subscription-status.enum';
 import { SubscriptionPlan } from './subscription-plan.entity';
 
-
 @Entity('user_subscriptions')
-@Index(['external_payment_gateway_subscription_id'])
 @Index(['user_id', 'status'])
-@Index(['cancelled_at'])
 export class UserSubscription {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'external_payment_gateway_subscription_id' })
-  external_payment_gateway_subscription_id: string;
+  @Column({ name: 'payment_gateway_subscription_id' })
+  payment_gateway_subscription_id: string;
 
   @Column({
     type: 'enum',
@@ -30,7 +36,12 @@ export class UserSubscription {
   @Column({ length: 3 })
   currency: string;
 
-  @Column({ name: 'starts_at', type: 'timestamp', nullable: false, default: () => 'NOW()' })
+  @Column({
+    name: 'starts_at',
+    type: 'timestamp',
+    nullable: false,
+    default: () => 'NOW()',
+  })
   starts_at: Date;
 
   @Column({ name: 'ends_at', type: 'timestamp', nullable: false })
@@ -57,7 +68,9 @@ export class UserSubscription {
   @Column({ name: 'subscription_plan_id' })
   subscription_plan_id: string;
 
-  @ManyToOne(() => SubscriptionPlan, plan => plan.subscriptions, { eager: false })
+  @ManyToOne(() => SubscriptionPlan, (plan) => plan.subscriptions, {
+    eager: false,
+  })
   @JoinColumn({ name: 'subscription_plan_id' })
   subscription_plan: SubscriptionPlan;
 
@@ -80,7 +93,9 @@ export class UserSubscription {
   }
 
   isExpired(): boolean {
-    return this.status === SubscriptionStatus.EXPIRED || new Date() > this.ends_at;
+    return (
+      this.status === SubscriptionStatus.EXPIRED || new Date() > this.ends_at
+    );
   }
 
   wasCancelledOn(): Date | null {

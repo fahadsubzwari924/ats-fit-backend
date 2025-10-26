@@ -1,6 +1,6 @@
 export enum OrderBy {
   ASC = 'ASC',
-  DESC = 'DESC'
+  DESC = 'DESC',
 }
 
 export type OrderByType = 'ASC' | 'DESC';

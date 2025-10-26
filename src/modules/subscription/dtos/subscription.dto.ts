@@ -1,10 +1,16 @@
-import { IsNotEmpty, IsString, IsOptional, IsObject, IsUUID } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsObject,
+  IsUUID,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateSubscriptionDto {
   @ApiProperty({
     description: 'The ID of the subscription plan (External variant ID)',
-    example: 'variant_12345'
+    example: 'variant_12345',
   })
   @IsNotEmpty()
   @IsString()
@@ -13,7 +19,7 @@ export class CreateSubscriptionDto {
   @ApiProperty({
     description: 'Name of the subscription',
     required: false,
-    example: 'Premium Monthly Plan'
+    example: 'Premium Monthly Plan',
   })
   @IsOptional()
   @IsString()
@@ -24,8 +30,8 @@ export class CreateSubscriptionDto {
     required: false,
     example: {
       email: 'user@example.com',
-      name: 'John Doe'
-    }
+      name: 'John Doe',
+    },
   })
   @IsOptional()
   @IsObject()
@@ -35,7 +41,7 @@ export class CreateSubscriptionDto {
 export class UpdateSubscriptionDto {
   @ApiProperty({
     description: 'The ID of the subscription to update',
-    example: 'sub_12345'
+    example: 'sub_12345',
   })
   @IsNotEmpty()
   @IsUUID()
@@ -43,7 +49,7 @@ export class UpdateSubscriptionDto {
 
   @ApiProperty({
     description: 'Additional metadata for the subscription',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsObject()

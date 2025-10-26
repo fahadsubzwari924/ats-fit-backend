@@ -1,10 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToMany,
+  Index,
+} from 'typeorm';
 import { PaymentHistory } from './payment-history.entity';
 import { UserSubscription } from './user-subscription.entity';
 import { BillingCycle } from '../../modules/subscription/enums';
 
 @Entity('subscription_plans')
-@Index(['external_payment_gateway_variant_id'], { unique: true })
+@Index(['payment_gateway_variant_id'], { unique: true })
 export class SubscriptionPlan {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -21,8 +29,8 @@ export class SubscriptionPlan {
   @Column({ length: 3 })
   currency: string;
 
-  @Column({ name: 'external_payment_gateway_variant_id', unique: true })
-  external_payment_gateway_variant_id: string;
+  @Column({ name: 'payment_gateway_variant_id', unique: true })
+  payment_gateway_variant_id: string;
 
   @Column({ name: 'is_active', default: true })
   is_active: boolean;
@@ -30,19 +38,22 @@ export class SubscriptionPlan {
   @Column({ type: 'jsonb', nullable: true })
   features: string[];
 
-  @Column({ 
-    name: 'billing_cycle', 
-    type: 'enum', 
-    enum: BillingCycle, 
-    nullable: true 
+  @Column({
+    name: 'billing_cycle',
+    type: 'enum',
+    enum: BillingCycle,
+    nullable: true,
   })
   billing_cycle: BillingCycle;
 
   // Relationships
-  @OneToMany(() => PaymentHistory, payment => payment.subscription_plan)
+  @OneToMany(() => PaymentHistory, (payment) => payment.subscription_plan)
   payment_history: PaymentHistory[];
 
-  @OneToMany(() => UserSubscription, subscription => subscription.subscription_plan)
+  @OneToMany(
+    () => UserSubscription,
+    (subscription) => subscription.subscription_plan,
+  )
   subscriptions: UserSubscription[];
 
   @CreateDateColumn({ name: 'created_at' })

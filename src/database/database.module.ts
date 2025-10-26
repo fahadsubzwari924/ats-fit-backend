@@ -14,7 +14,7 @@ import {
   ExtractedResumeContent,
   SubscriptionPlan,
   UserSubscription,
-  PaymentHistory
+  PaymentHistory,
 } from './entities';
 
 @Module({

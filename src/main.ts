@@ -20,7 +20,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Lemon Squeezy SDK setup
-  lemonSqueezySetup({ apiKey: process.env.LEMON_SQUEEZY_API_KEY });
+  lemonSqueezySetup({ 
+    apiKey: process.env.LEMON_SQUEEZY_API_KEY,
+    onError: (error) => {
+      this.logger.error('Payment gateway SDK Error:', error);
+      // Optionally throw or handle
+    },
+  });
 
   // Enable graceful shutdown for Cloud Run
   app.enableShutdownHooks();

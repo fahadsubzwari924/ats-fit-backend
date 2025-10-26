@@ -18,7 +18,11 @@ import { PaymentHistoryService } from './services/payment-history.service';
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([UserSubscription, SubscriptionPlan, PaymentHistory]),
+    TypeOrmModule.forFeature([
+      UserSubscription,
+      SubscriptionPlan,
+      PaymentHistory,
+    ]),
     UserModule, // Import UserModule to access UserService
   ],
   controllers: [SubscriptionController],
@@ -26,26 +30,27 @@ import { PaymentHistoryService } from './services/payment-history.service';
     // Core Services
     SubscriptionService,
     SubscriptionPlanService,
-    
+
     // Payment Services
     PaymentService,
     PaymentHistoryService,
     PaymentGatewayFactory,
-    
+
     // Payment Gateway Implementations
     LemonSqueezyService,
     LemonSqueezyPaymentGateway,
-    
+
     // Factory Provider for Payment Gateway
     {
       provide: PAYMENT_GATEWAY_TOKEN,
-      useFactory: (factory: PaymentGatewayFactory) => factory.createPaymentGateway(),
+      useFactory: (factory: PaymentGatewayFactory) =>
+        factory.createPaymentGateway(),
       inject: [PaymentGatewayFactory],
     },
   ],
   exports: [
-    SubscriptionService, 
-    SubscriptionPlanService, 
+    SubscriptionService,
+    SubscriptionPlanService,
     PaymentService,
     PAYMENT_GATEWAY_TOKEN,
   ],
