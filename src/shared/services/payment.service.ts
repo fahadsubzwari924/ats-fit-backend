@@ -56,10 +56,8 @@ export class PaymentService {
         `Creating checkout with ${this.getProviderName()} for variant: ${request.variantId}`,
       );
 
-      const result = await this.paymentGateway.createCheckout(request);
-
-      this.logger.log(`Checkout created successfully: ${result.checkoutId}`);
-      return result;
+      return await this.paymentGateway.createCheckout(request);
+      
     } catch (error) {
       this.logger.error('Payment checkout creation failed', error);
       throw new InternalServerErrorException(ERROR_CODES.INTERNAL_SERVER);
@@ -73,13 +71,7 @@ export class PaymentService {
     try {
       this.logger.log(`Retrieving subscription: ${subscriptionId}`);
 
-      const subscription =
-        await this.paymentGateway.getSubscription(subscriptionId);
-
-      this.logger.log(
-        `Subscription retrieved: ${subscription.id} - Status: ${subscription.status}`,
-      );
-      return subscription;
+      return  await this.paymentGateway.getSubscription(subscriptionId);
     } catch (error) {
       this.logger.error(
         `Failed to retrieve subscription: ${subscriptionId}`,

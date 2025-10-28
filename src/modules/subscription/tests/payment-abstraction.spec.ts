@@ -3,6 +3,8 @@ import { PaymentService } from '../../../shared/services/payment.service';
 import { IPaymentGateway } from '../externals/interfaces/payment-gateway.interface';
 import { PAYMENT_GATEWAY_TOKEN } from '../externals/interfaces/payment-gateway.interface';
 import { Currency } from '../enums/payment.enum';
+import { PaymentProvider } from '../enums/payment-provider.enum';
+import { SubscriptionStatus } from '../enums/subscription-status.enum';
 
 describe('Payment Abstraction Layer', () => {
   let paymentService: PaymentService;
@@ -20,7 +22,7 @@ describe('Payment Abstraction Layer', () => {
       }),
       getSubscription: jest.fn().mockResolvedValue({
         id: 'sub_123',
-        status: 'active',
+        status: SubscriptionStatus.ACTIVE,
         customerId: 'cust_123',
         planId: 'plan_123',
         amount: 2999,
@@ -31,7 +33,7 @@ describe('Payment Abstraction Layer', () => {
       }),
       cancelSubscription: jest.fn().mockResolvedValue({
         subscriptionId: 'sub_123',
-        status: 'cancelled',
+        status: SubscriptionStatus.CANCELLED,
         cancelledAt: new Date(),
         endsAt: new Date(),
       }),
@@ -83,7 +85,7 @@ describe('Payment Abstraction Layer', () => {
 
       expect(result).toEqual({
         id: 'sub_123',
-        status: 'active',
+        status: SubscriptionStatus.ACTIVE,
         customerId: 'cust_123',
         planId: 'plan_123',
         amount: 2999,
@@ -109,7 +111,7 @@ describe('Payment Abstraction Layer', () => {
 
       expect(result).toEqual({
         subscriptionId: 'sub_123',
-        status: 'cancelled',
+        status: SubscriptionStatus.CANCELLED,
         cancelledAt: expect.any(Date),
         endsAt: expect.any(Date),
       });
@@ -145,54 +147,30 @@ describe('Payment Abstraction Layer', () => {
   });
 
   describe('Provider Switching Simulation', () => {
-    it('should work with LemonSqueezy provider', async () => {
-      // Simulate switching to LemonSqueezy
-      mockPaymentGateway.getProviderName.mockReturnValue('LemonSqueezy');
-
-      const providerName = paymentService.getProviderName();
-      expect(providerName).toBe('LemonSqueezy');
-
-      // Same interface, same methods, different implementation
-      await paymentService.createCheckout({
-        variantId: 'variant_123',
-        userId: 'user_123',
-        email: 'test@example.com',
-        redirectUrl: 'https://app.com/success',
-      });
-
-      expect(mockPaymentGateway.createCheckout).toHaveBeenCalled();
+    it('should return LemonSqueezy provider name', async () => {
+      // Mock the provider name
+      mockPaymentGateway.getProviderName.mockReturnValue(PaymentProvider.LEMONSQUEEZY);
+      
+      const providerName = await paymentService.getProviderName();
+      expect(providerName).toBe(PaymentProvider.LEMONSQUEEZY);
     });
 
-    it('should work with Stripe provider (future)', async () => {
-      // Simulate switching to Stripe
-      mockPaymentGateway.getProviderName.mockReturnValue('Stripe');
-
-      const providerName = paymentService.getProviderName();
-      expect(providerName).toBe('Stripe');
-
-      // Same interface, same methods, different implementation
-      await paymentService.getSubscription('sub_stripe_123');
-
-      expect(mockPaymentGateway.getSubscription).toHaveBeenCalledWith(
-        'sub_stripe_123',
-      );
+    it('should work with different payment providers (Stripe example)', async () => {
+      // This demonstrates how the abstraction allows switching providers
+      // Mock Stripe-like behavior
+      mockPaymentGateway.getProviderName.mockReturnValue(PaymentProvider.STRIPE);
+      
+      const providerName = await paymentService.getProviderName();
+      expect(providerName).toBe(PaymentProvider.STRIPE);
     });
 
-    it('should work with Paddle provider (future)', async () => {
-      // Simulate switching to Paddle
-      mockPaymentGateway.getProviderName.mockReturnValue('Paddle');
-
-      const providerName = paymentService.getProviderName();
-      expect(providerName).toBe('Paddle');
-
-      // Same interface, same methods, different implementation
-      await paymentService.cancelSubscription({
-        subscriptionId: 'paddle_sub_123',
-        cancelAtPeriodEnd: true,
-        reason: 'downgrade',
-      });
-
-      expect(mockPaymentGateway.cancelSubscription).toHaveBeenCalled();
+    it('should work with different payment providers (Paddle example)', async () => {
+      // This demonstrates provider-agnostic design
+      // Mock Paddle-like behavior
+      mockPaymentGateway.getProviderName.mockReturnValue(PaymentProvider.PADDLE);
+      
+      const providerName = await paymentService.getProviderName();
+      expect(providerName).toBe(PaymentProvider.PADDLE);
     });
   });
 

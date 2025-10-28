@@ -5,6 +5,10 @@
  * Controllers depend on this abstraction, not concrete implementations.
  */
 
+import { Currency } from '../../enums';
+import { PaymentProvider } from '../../enums/payment-provider.enum';
+import { SubscriptionStatus } from '../../enums/subscription-status.enum';
+
 export interface CreateCheckoutRequest {
   variantId: string;
   userId?: string;
@@ -17,13 +21,13 @@ export interface CreateCheckoutRequest {
 export interface CheckoutResponse {
   checkoutUrl: string;
   checkoutId: string;
-  paymentProvider: string;
+  paymentProvider: PaymentProvider;
   expiresAt?: Date;
 }
 
 export interface SubscriptionInfo {
   id: string;
-  status: 'active' | 'cancelled' | 'expired' | 'paused' | 'past_due';
+  status: SubscriptionStatus;
   planId: string;
   customerId: string;
   amount: number;
@@ -52,7 +56,7 @@ export interface CancelSubscriptionRequest {
 
 export interface CancelSubscriptionResponse {
   subscriptionId: string;
-  status: string;
+  status: SubscriptionStatus;
   cancelledAt: Date;
   endsAt?: Date;
 }
@@ -67,7 +71,7 @@ export interface IPaymentGateway {
   /**
    * Get the name of the payment provider
    */
-  getProviderName(): string;
+  getProviderName(): PaymentProvider;
 
   /**
    * Create a checkout session/URL for subscription

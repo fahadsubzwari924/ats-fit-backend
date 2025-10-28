@@ -7,8 +7,11 @@ import {
   InternalServerErrorException,
 } from '../../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../../shared/constants/error-codes';
-
-export type PaymentProvider = 'lemonsqueezy' | 'stripe' | 'paddle' | 'paypal';
+import { 
+  PaymentProvider, 
+  getAllPaymentProviders, 
+  isValidPaymentProvider 
+} from '../../enums/payment-provider.enum';
 
 /**
  * Payment Gateway Factory
@@ -33,24 +36,24 @@ export class PaymentGatewayFactory {
     const provider = this.getActivePaymentProvider();
 
     switch (provider) {
-      case 'lemonsqueezy':
+      case PaymentProvider.LEMONSQUEEZY:
         return this.lemonSqueezyGateway as unknown as IPaymentGateway;
 
-      case 'stripe':
+      case PaymentProvider.STRIPE:
         // return this.stripeGateway;
         throw new InternalServerErrorException(
           'Stripe payment gateway not implemented yet',
           ERROR_CODES.INTERNAL_SERVER,
         );
 
-      case 'paddle':
+      case PaymentProvider.PADDLE:
         // return this.paddleGateway;
         throw new InternalServerErrorException(
           'Paddle payment gateway not implemented yet',
           ERROR_CODES.INTERNAL_SERVER,
         );
 
-      case 'paypal':
+      case PaymentProvider.PAYPAL:
         throw new InternalServerErrorException(
           'PayPal payment gateway not implemented yet',
           ERROR_CODES.INTERNAL_SERVER,
@@ -69,31 +72,25 @@ export class PaymentGatewayFactory {
    */
   private getActivePaymentProvider(): PaymentProvider {
     const provider = this.configService
-      .get<string>('PAYMENT_PROVIDER', 'lemonsqueezy')
+      .get<string>('PAYMENT_PROVIDER', PaymentProvider.LEMONSQUEEZY)
       .toLowerCase();
 
-    const supportedProviders: PaymentProvider[] = [
-      'lemonsqueezy',
-      'stripe',
-      'paddle',
-      'paypal',
-    ];
-
-    if (!supportedProviders.includes(provider as PaymentProvider)) {
+    if (!isValidPaymentProvider(provider)) {
+      const supportedProviders = getAllPaymentProviders();
       throw new BadRequestException(
         `Invalid payment provider in configuration: ${provider}. Supported providers: ${supportedProviders.join(', ')}`,
         ERROR_CODES.BAD_REQUEST,
       );
     }
 
-    return provider as PaymentProvider;
+    return provider;
   }
 
   /**
    * Get list of supported payment providers
    */
   getSupportedProviders(): PaymentProvider[] {
-    return ['lemonsqueezy', 'stripe', 'paddle', 'paypal'];
+    return getAllPaymentProviders();
   }
 
   /**

@@ -18,6 +18,8 @@ import {
 } from '../../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../../shared/constants/error-codes';
 import { IdValidator } from '../../../../shared/validators/id.validator';
+import { PaymentProvider } from '../../enums/payment-provider.enum';
+import { SubscriptionStatus } from '../../enums/subscription-status.enum';
 
 @Injectable()
 export class LemonSqueezyPaymentGateway implements IPaymentGateway {
@@ -25,8 +27,8 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
 
   constructor(private readonly lemonSqueezyService: LemonSqueezyService) {}
 
-  getProviderName(): string {
-    return 'LemonSqueezy';
+  getProviderName(): PaymentProvider {
+    return PaymentProvider.LEMONSQUEEZY;
   }
 
   async createCheckout(
@@ -114,7 +116,7 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
     return {
       checkoutUrl: checkoutData.data.data.attributes.url,
       checkoutId: checkoutData.data.data.id,
-      paymentProvider: 'LemonSqueezy',
+      paymentProvider: PaymentProvider.LEMONSQUEEZY,
     };
   }
 
@@ -234,7 +236,7 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
   ): CancelSubscriptionResponse {
     return {
       subscriptionId,
-      status: 'cancelled',
+      status: SubscriptionStatus.CANCELLED,
       cancelledAt: new Date(),
       endsAt: lemonSqueezyResult.ends_at ? new Date(lemonSqueezyResult.ends_at) : undefined,
     };
