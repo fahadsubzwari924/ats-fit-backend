@@ -28,6 +28,15 @@ export const validationSchema = Joi.object({
   OPENAI_API_KEY: Joi.string().required(),
   OPENAI_MODEL: Joi.string().default('gpt-4-turbo'),
 
+  // LemonSqueezy configuration
+  LEMON_SQUEEZY_API_KEY: Joi.string().required(),
+  LEMON_SQUEEZY_STORE_ID: Joi.string().required(),
+  LEMON_SQUEEZY_WEBHOOK_SECRET: Joi.string().required(),
+
+  // App configuration
+  APP_URL: Joi.string().required(),
+  APP_ENV: Joi.string().valid('development', 'production').default('development'),
+
   // Performance configuration
   TEMPLATE_CACHE_TTL: Joi.number().default(600000), // 10 minutes in milliseconds
   RESUME_SERVICE_CACHE_TTL: Joi.number().default(300000), // 5 minutes in milliseconds

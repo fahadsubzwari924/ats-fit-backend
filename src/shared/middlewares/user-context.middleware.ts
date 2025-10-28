@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { UserContext } from '../../modules/auth/types/user-context.type';
 import { ForbiddenException } from '../exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../constants/error-codes';
+import { shouldSkipUserContext } from '../constants/middleware-config';
 
 @Injectable()
 export class UserContextMiddleware implements NestMiddleware {
@@ -17,6 +18,22 @@ export class UserContextMiddleware implements NestMiddleware {
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
+    // Check if this path should skip user context middleware
+    const fullPath = req.originalUrl || req.url;
+    this.logger.debug(
+      'Checking path:',
+      fullPath,
+      'baseUrl:',
+      req.baseUrl,
+      'path:',
+      req.path,
+    );
+
+    if (shouldSkipUserContext(req)) {
+      this.logger.log('Skipping user context middleware for path:', fullPath);
+      return next();
+    }
+
     const authHeader = req.headers['authorization'];
     let userContext: UserContext | null = null;
 
@@ -67,6 +84,16 @@ export class UserContextMiddleware implements NestMiddleware {
       next();
     } catch (error) {
       this.logger.error('Failed to build user context:', error);
+
+      // For paths that should skip user context, continue without context rather than failing
+      if (shouldSkipUserContext(req)) {
+        this.logger.warn(
+          'User context failed for skip-auth path, continuing without context',
+          { path: req.path },
+        );
+        return next();
+      }
+
       next(error);
     }
   }

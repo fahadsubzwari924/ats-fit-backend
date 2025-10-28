@@ -12,6 +12,9 @@ import {
   JobApplication,
   QueueMessage,
   ExtractedResumeContent,
+  SubscriptionPlan,
+  UserSubscription,
+  PaymentHistory,
 } from './entities';
 
 @Module({
@@ -36,8 +39,11 @@ import {
           JobApplication,
           QueueMessage,
           ExtractedResumeContent,
+          SubscriptionPlan,
+          UserSubscription,
+          PaymentHistory,
         ],
-        synchronize: process.env.NODE_ENV !== 'production',
+        synchronize: false, // Disabled to use migrations instead
         logging: process.env.NODE_ENV !== 'production',
         migrations: [__dirname + '/migrations/*.ts'],
         migrationsTableName: 'migrations',

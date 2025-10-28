@@ -100,10 +100,7 @@ export class QueueService {
 
     // Check if this file has already been processed using ResumeContentService
     const existingContent =
-      await this.resumeContentService.findExistingByFileHash(
-        userId,
-        fileHash,
-      );
+      await this.resumeContentService.findExistingByFileHash(userId, fileHash);
 
     if (existingContent) {
       this.logger.log(

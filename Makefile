@@ -83,6 +83,7 @@ seed: ## Run all seed scripts
 	@echo "🌱 Seeding database..."
 	npm run seed:resume-templates
 	npm run seed:rate-limits
+	npm run seed:subscription-plans
 	@echo "✅ Database seeding complete!"
 
 seed-templates: ## Seed resume templates only
@@ -94,6 +95,11 @@ seed-limits: ## Seed rate limits only
 	@echo "⚡ Seeding rate limits..."
 	npm run seed:rate-limits
 	@echo "✅ Rate limits seeded!"
+
+seed-subscription-plans: ## Seed subscription plans only
+	@echo "📅 Seeding subscription plans..."
+	npm run seed:subscription-plans
+	@echo "✅ Subscription plans seeded!"
 
 clean: ## Remove all containers, volumes, and images
 	@echo "🧹 Cleaning up Docker resources..."

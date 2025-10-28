@@ -13,9 +13,20 @@ import { AllExceptionsFilter } from './shared/modules/response/exception.filter'
 import { RequestIdMiddleware } from './shared/modules/response/request-id.middleware';
 import { Request, Response, NextFunction } from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { lemonSqueezySetup } from '@lemonsqueezy/lemonsqueezy.js';
+import { authtoken, forward } from '@ngrok/ngrok';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Lemon Squeezy SDK setup
+  lemonSqueezySetup({ 
+    apiKey: process.env.LEMON_SQUEEZY_API_KEY,
+    onError: (error) => {
+      this.logger.error('Payment gateway SDK Error:', error);
+      // Optionally throw or handle
+    },
+  });
 
   // Enable graceful shutdown for Cloud Run
   app.enableShutdownHooks();
@@ -96,11 +107,17 @@ async function bootstrap() {
     defaultVersion: '1',
   });
 
+
   // Cloud Run expects app to listen on PORT environment variable
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
-
   console.log(`🚀 Application is running on port ${port}`);
+
+  // Ngrok setup for local development
+  await authtoken(process.env.NGROK_AUTH_TOKEN);
+  const tunnel = await forward({ addr: port });
+  console.log(`Public ngrok URL: ${tunnel.url()}`);
+
 }
 
 void bootstrap();

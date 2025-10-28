@@ -17,6 +17,7 @@ import { QueueModule } from './modules/queue/queue.module';
 import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
 import { UserContextMiddleware } from './shared/middlewares/user-context.middleware';
 import { HealthModule } from './health/health.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { HealthModule } from './health/health.module';
     JobApplicationModule,
     QueueModule,
     HealthModule,
+    SubscriptionModule,
   ],
   providers: [
     {
