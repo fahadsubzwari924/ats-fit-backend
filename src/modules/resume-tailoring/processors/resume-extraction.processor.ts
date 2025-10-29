@@ -3,12 +3,13 @@ import { Logger, OnModuleInit } from '@nestjs/common';
 import { Job } from 'bull';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
-import { QueueMessage } from '../../database/entities/queue-message.entity';
-import { ResumeService } from '../resume-tailoring/services/resume.service';
+import { ExtractedResumeContent } from '../../../database/entities/extracted-resume-content.entity';
+import { QueueMessage } from '../../../database/entities/queue-message.entity';
+import { QueueMessageStatus } from '../../../shared/enums/queue-message.enum';
+import { ResumeService } from '../services/resume.service';
 import * as crypto from 'crypto';
 
-export interface ResumeProcessingJobData {
+export interface ResumeExtractionJobData {
   queueMessageId: string;
   userId: string;
   fileName: string;
@@ -17,9 +18,19 @@ export interface ResumeProcessingJobData {
   resumeId: string;
 }
 
+/**
+ * Resume Extraction Processor
+ *
+ * Handles async extraction of resume content from uploaded files.
+ * Extracts both raw text and structured data.
+ *
+ * Domain: Resume Tailoring
+ * Queue: resume_processing
+ * Job Type: extract_resume_content
+ */
 @Processor('resume_processing')
-export class ResumeProcessingProcessor implements OnModuleInit {
-  private readonly logger = new Logger(ResumeProcessingProcessor.name);
+export class ResumeExtractionProcessor implements OnModuleInit {
+  private readonly logger = new Logger(ResumeExtractionProcessor.name);
 
   constructor(
     @InjectRepository(ExtractedResumeContent)
@@ -28,18 +39,18 @@ export class ResumeProcessingProcessor implements OnModuleInit {
     private readonly queueMessageRepository: Repository<QueueMessage>,
     private readonly resumeService: ResumeService,
   ) {
-    this.logger.log('ResumeProcessingProcessor constructor called');
+    this.logger.log('ResumeExtractionProcessor constructor called');
   }
 
   onModuleInit() {
     this.logger.log(
-      'ResumeProcessingProcessor initialized and ready to process jobs',
+      'ResumeExtractionProcessor initialized and ready to process jobs',
     );
   }
 
   @Process('extract_resume_content')
   async handleResumeExtraction(
-    job: Job<ResumeProcessingJobData>,
+    job: Job<ResumeExtractionJobData>,
   ): Promise<void> {
     this.logger.log(`🔥 PROCESSOR METHOD CALLED! Job ID: ${job.id}`, {
       jobData: job.data,
@@ -60,7 +71,10 @@ export class ResumeProcessingProcessor implements OnModuleInit {
 
     try {
       // Update queue message status to processing
-      await this.updateQueueMessageStatus(queueMessageId, 'processing');
+      await this.updateQueueMessageStatus(
+        queueMessageId,
+        QueueMessageStatus.PROCESSING,
+      );
 
       // Update job progress
       await job.progress(10);
@@ -115,15 +129,19 @@ export class ResumeProcessingProcessor implements OnModuleInit {
       );
 
       // Update queue message status to completed
-      await this.updateQueueMessageStatus(queueMessageId, 'completed', {
-        processingDurationMs: processingDuration,
-        result: {
-          success: true,
-          resumeId,
-          extractedContentSize: extractedText.length,
-          hasStructuredContent: Object.keys(structuredContent).length > 0,
+      await this.updateQueueMessageStatus(
+        queueMessageId,
+        QueueMessageStatus.COMPLETED,
+        {
+          processingDurationMs: processingDuration,
+          result: {
+            success: true,
+            resumeId,
+            extractedContentSize: extractedText.length,
+            hasStructuredContent: Object.keys(structuredContent).length > 0,
+          },
         },
-      });
+      );
 
       await job.progress(100);
 
@@ -151,10 +169,14 @@ export class ResumeProcessingProcessor implements OnModuleInit {
       );
 
       // Update queue message status to failed
-      await this.updateQueueMessageStatus(queueMessageId, 'failed', {
-        errorDetails: errorMessage,
-        processingDurationMs: processingDuration,
-      });
+      await this.updateQueueMessageStatus(
+        queueMessageId,
+        QueueMessageStatus.FAILED,
+        {
+          errorDetails: errorMessage,
+          processingDurationMs: processingDuration,
+        },
+      );
 
       throw error;
     }
@@ -165,7 +187,7 @@ export class ResumeProcessingProcessor implements OnModuleInit {
    */
   private async updateQueueMessageStatus(
     queueMessageId: string,
-    status: 'queued' | 'processing' | 'completed' | 'failed' | 'retrying',
+    status: QueueMessageStatus,
     additionalData?: {
       result?: Record<string, any>;
       errorDetails?: string;
@@ -176,11 +198,14 @@ export class ResumeProcessingProcessor implements OnModuleInit {
       status,
     };
 
-    if (status === 'processing') {
+    if (status === QueueMessageStatus.PROCESSING) {
       updateData.startedAt = new Date();
     }
 
-    if (status === 'completed' || status === 'failed') {
+    if (
+      status === QueueMessageStatus.COMPLETED ||
+      status === QueueMessageStatus.FAILED
+    ) {
       updateData.completedAt = new Date();
       if (additionalData?.processingDurationMs) {
         updateData.processingDurationMs = additionalData.processingDurationMs;

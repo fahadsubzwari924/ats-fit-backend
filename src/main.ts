@@ -5,6 +5,7 @@ import {
   ValidationPipe,
   VersioningType,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { ValidationError } from 'class-validator';
 import { ResponseService } from './shared/modules/response/response.service';
@@ -14,16 +15,16 @@ import { RequestIdMiddleware } from './shared/modules/response/request-id.middle
 import { Request, Response, NextFunction } from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { lemonSqueezySetup } from '@lemonsqueezy/lemonsqueezy.js';
-import { authtoken, forward } from '@ngrok/ngrok';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
   // Lemon Squeezy SDK setup
-  lemonSqueezySetup({ 
+  lemonSqueezySetup({
     apiKey: process.env.LEMON_SQUEEZY_API_KEY,
     onError: (error) => {
-      this.logger.error('Payment gateway SDK Error:', error);
+      logger.error('Payment gateway SDK Error:', error);
       // Optionally throw or handle
     },
   });
@@ -107,17 +108,52 @@ async function bootstrap() {
     defaultVersion: '1',
   });
 
-
   // Cloud Run expects app to listen on PORT environment variable
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
-  console.log(`🚀 Application is running on port ${port}`);
+  logger.log(`🚀 Application is running on port ${port}`);
 
-  // Ngrok setup for local development
-  await authtoken(process.env.NGROK_AUTH_TOKEN);
-  const tunnel = await forward({ addr: port });
-  console.log(`Public ngrok URL: ${tunnel.url()}`);
+  // Ngrok setup for local development only
+  await setupNgrokTunnel(port, logger);
+}
 
+/**
+ * Setup Ngrok tunnel for local development
+ * Only runs when ENABLE_NGROK=true and NODE_ENV is 'development' or 'local'
+ */
+async function setupNgrokTunnel(port: number | string, logger: Logger) {
+  logger.log(`ENV: ${process.env.NODE_ENV}`);
+  const isLocalDevelopment =
+    process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'local';
+  const enableNgrok = process.env.ENABLE_NGROK === 'true';
+
+  if (!isLocalDevelopment || !enableNgrok) {
+    logger.log('Ngrok tunnel disabled (not in local development mode)');
+    return;
+  }
+
+  if (!process.env.NGROK_AUTH_TOKEN) {
+    logger.warn(
+      'NGROK_AUTH_TOKEN not set. Skipping ngrok tunnel setup. Set ENABLE_NGROK=true and NGROK_AUTH_TOKEN to enable.',
+    );
+    return;
+  }
+
+  try {
+    // Dynamically import ngrok only when needed
+    const { authtoken, forward } = await import('@ngrok/ngrok');
+
+    await authtoken(process.env.NGROK_AUTH_TOKEN);
+    const tunnel = await forward({ addr: port });
+
+    logger.log(`✅ Ngrok tunnel established: ${tunnel.url()}`);
+    logger.log(
+      `📱 Use this URL for webhooks and external access: ${tunnel.url()}`,
+    );
+  } catch (error) {
+    logger.error('Failed to setup ngrok tunnel:', error);
+    logger.warn('Application will continue without ngrok tunnel');
+  }
 }
 
 void bootstrap();

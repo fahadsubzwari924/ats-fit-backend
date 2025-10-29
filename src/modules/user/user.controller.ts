@@ -24,9 +24,10 @@ import { FileValidationPipe } from '../../shared/pipes/file-validation.pipe';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
 import { MimeTypes } from '../../shared/constants/mime-types.enum';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { QueueMessageStatus } from '../../shared/enums/queue-message.enum';
 import { ResumeService } from '../resume-tailoring/services/resume.service';
 import { UserService } from './user.service';
-import { QueueService } from '../queue/queue.service';
+import { ResumeQueueService } from '../resume-tailoring/services/resume-queue.service';
 import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
 
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
@@ -46,7 +47,7 @@ export class UserController {
   constructor(
     private readonly resumeService: ResumeService,
     private readonly userService: UserService,
-    private readonly queueService: QueueService,
+    private readonly resumeQueueService: ResumeQueueService,
     private readonly resumeContentService: ResumeContentService,
   ) {}
 
@@ -186,17 +187,20 @@ export class UserController {
       );
 
       try {
-        const extractedContent = await this.queueService.addResumeProcessingJob(
-          userId,
-          resume.fileName,
-          resumeFile.buffer,
-        );
+        const extractedContent =
+          await this.resumeQueueService.addResumeProcessingJob(
+            userId,
+            resume.fileName,
+            resumeFile.buffer,
+          );
 
         return {
           ...result,
           asyncProcessing: {
             processingId: extractedContent.id,
-            status: extractedContent.queueMessage?.status || 'queued',
+            status:
+              extractedContent.queueMessage?.status ||
+              QueueMessageStatus.QUEUED,
             message:
               'Premium feature: Async processing initiated for faster future generations',
           },
