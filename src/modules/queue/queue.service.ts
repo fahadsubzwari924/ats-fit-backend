@@ -1,18 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { QueueMessage } from '../../database/entities/queue-message.entity';
 import {
-  QueueMessage,
   QueueMessageStatus,
   QueueMessagePriority,
-} from '../../database/entities/queue-message.entity';
-import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
-import { ResumeProcessingJobData } from './resume-processing.processor';
+} from '../../shared/enums/queue-message.enum';
 import { v4 as uuidv4 } from 'uuid';
-import { FileUtil } from '../../shared/utils/file.util';
-import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
 
 export interface CreateQueueJobOptions {
   queueName: string;
@@ -31,11 +25,8 @@ export class QueueService {
   private readonly logger = new Logger(QueueService.name);
 
   constructor(
-    @InjectQueue('resume_processing')
-    private readonly resumeProcessingQueue: Queue<ResumeProcessingJobData>,
     @InjectRepository(QueueMessage)
     private readonly queueMessageRepository: Repository<QueueMessage>,
-    private readonly resumeContentService: ResumeContentService,
   ) {}
 
   /**
@@ -50,7 +41,7 @@ export class QueueService {
       entityName,
       entityId,
       payload,
-      priority = 'normal',
+      priority = QueueMessagePriority.NORMAL,
       correlationId,
       metadata = {},
     } = options;
@@ -66,7 +57,7 @@ export class QueueService {
       payload,
       priority,
       metadata,
-      status: 'queued',
+      status: QueueMessageStatus.QUEUED,
     });
 
     const savedQueueMessage =
@@ -87,100 +78,6 @@ export class QueueService {
   }
 
   /**
-   * Add resume processing job with proper queue tracking
-   * Uses ResumeContentService for business logic separation
-   */
-  async addResumeProcessingJob(
-    userId: string,
-    fileName: string,
-    fileBuffer: Buffer,
-  ): Promise<ExtractedResumeContent> {
-    const fileSize = fileBuffer.length;
-    const fileHash = FileUtil.generateFileHash(fileBuffer);
-
-    // Check if this file has already been processed using ResumeContentService
-    const existingContent =
-      await this.resumeContentService.findExistingByFileHash(userId, fileHash);
-
-    if (existingContent) {
-      this.logger.log(
-        `Resume with hash ${fileHash} already exists for user ${userId}`,
-      );
-      return existingContent;
-    }
-
-    // Create queue message for tracking
-    const queueMessage = await this.createQueueJob({
-      queueName: 'resume_processing',
-      jobType: 'extract_resume_content',
-      userId,
-      entityName: 'extracted_resume_content',
-      payload: {
-        fileName,
-        fileSize,
-        fileHash,
-        fileBuffer: FileUtil.bufferToBase64(fileBuffer), // Store as base64 for JSON compatibility
-      },
-      priority: 'normal',
-      metadata: {
-        originalFileName: fileName,
-        fileSize,
-        fileHash,
-      },
-    });
-
-    // Create business entity using ResumeContentService
-    const savedRecord =
-      await this.resumeContentService.createExtractedResumeRecord({
-        userId,
-        queueMessageId: queueMessage.id,
-        originalFileName: fileName,
-        fileSize,
-        fileHash,
-      });
-
-    // Update queue message with entity ID
-    await this.queueMessageRepository.update(queueMessage.id, {
-      entityId: savedRecord.id,
-    });
-
-    // Add job to Bull queue with queue message ID
-    const job = await this.resumeProcessingQueue.add(
-      'extract_resume_content',
-      {
-        queueMessageId: queueMessage.id,
-        userId,
-        fileName,
-        fileBuffer, // Keep as Buffer for processing
-        fileSize,
-        resumeId: savedRecord.id,
-      },
-      {
-        priority: 1,
-        delay: 0,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
-      },
-    );
-
-    this.logger.log(
-      `Added resume processing job ${job.id} for user ${userId}, file: ${fileName}`,
-      {
-        queueMessageId: queueMessage.id,
-        resumeId: savedRecord.id,
-        correlationId: queueMessage.correlationId,
-        jobStatus: await job.getState(),
-        jobProgress: (await job.progress()) as number | object,
-      },
-    );
-
-    return savedRecord;
-  }
-
-  /**
    * Update queue message status with proper audit trail
    */
   async updateQueueMessageStatus(
@@ -196,11 +93,14 @@ export class QueueService {
       status,
     };
 
-    if (status === 'processing') {
+    if (status === QueueMessageStatus.PROCESSING) {
       updateData.startedAt = new Date();
     }
 
-    if (status === 'completed' || status === 'failed') {
+    if (
+      status === QueueMessageStatus.COMPLETED ||
+      status === QueueMessageStatus.FAILED
+    ) {
       updateData.completedAt = new Date();
       if (additionalData?.processingDurationMs) {
         updateData.processingDurationMs = additionalData.processingDurationMs;
@@ -246,41 +146,10 @@ export class QueueService {
   }
 
   /**
-   * Get comprehensive queue statistics
-   */
-  async getQueueStats() {
-    const bullStats = await this.getBullQueueStats();
-    const dbStats = await this.getDatabaseQueueStats();
-
-    return {
-      bull: bullStats,
-      database: dbStats,
-    };
-  }
-
-  /**
-   * Get Bull queue statistics
-   */
-  private async getBullQueueStats() {
-    const [waiting, active, completed, failed] = await Promise.all([
-      this.resumeProcessingQueue.getWaiting(),
-      this.resumeProcessingQueue.getActive(),
-      this.resumeProcessingQueue.getCompleted(),
-      this.resumeProcessingQueue.getFailed(),
-    ]);
-
-    return {
-      waiting: waiting.length,
-      active: active.length,
-      completed: completed.length,
-      failed: failed.length,
-    };
-  }
-
-  /**
    * Get database queue statistics
+   * Returns statistics grouped by queue name and status
    */
-  private async getDatabaseQueueStats(): Promise<
+  async getDatabaseQueueStats(): Promise<
     Record<
       string,
       Record<string, { count: number; avgDurationMs: number | null }>

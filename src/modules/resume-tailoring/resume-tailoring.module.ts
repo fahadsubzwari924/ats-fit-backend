@@ -3,12 +3,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ResumeTailoringController } from './resume-tailoring.controller';
+import { ResumeTailoringAsyncController } from './resume-tailoring-async.controller';
 import {
   ResumeGeneration,
   ResumeTemplate,
   User,
   Resume,
   ExtractedResumeContent,
+  ResumeGenerationResult,
+  QueueMessage,
 } from '../../database/entities';
 import { HandlebarsService } from '../../shared/services/handlebars.service';
 import {
@@ -24,6 +27,8 @@ import { PdfGenerationOrchestratorService } from './services/pdf-generation-orch
 import { ResumeGenerationOrchestratorService } from './services/resume-generation-orchestrator.service';
 import { ResumeContentService } from './services/resume-content.service';
 import { ResumeValidationService } from './services/resume-validation.service';
+import { ResumeGenerationResultService } from './services/resume-generation-result.service';
+import { ResumeQueueService } from './services/resume-queue.service';
 import { BasicInputValidationRule } from './validation/basic-input-validation.rule';
 import { UserContextValidationRule } from './validation/user-context-validation.rule';
 import { TemplateValidationRule } from './validation/template-validation.rule';
@@ -34,7 +39,11 @@ import { SharedModule } from '../../shared/shared.module';
 import { ExternalModule } from '../../shared/modules/external/external.module';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { AtsMatchModule } from '../ats-match/ats-match.module';
+import { QueueModule } from '../queue/queue.module';
 import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-provider.token';
+// Queue Processors (Domain-specific)
+import { ResumeGenerationProcessor } from './processors/resume-generation.processor';
+import { ResumeExtractionProcessor } from './processors/resume-extraction.processor';
 
 @Module({
   imports: [
@@ -44,12 +53,15 @@ import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-prov
       ResumeGeneration,
       Resume,
       ExtractedResumeContent,
+      ResumeGenerationResult,
+      QueueMessage,
     ]),
     ConfigModule,
     SharedModule,
     ExternalModule,
     forwardRef(() => RateLimitModule),
     forwardRef(() => AtsMatchModule),
+    forwardRef(() => QueueModule),
   ],
   providers: [
     ResumeService,
@@ -76,13 +88,18 @@ import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-prov
     ResumeOptimizerService,
     PdfGenerationOrchestratorService,
     ResumeGenerationOrchestratorService,
+    ResumeGenerationResultService,
+    ResumeQueueService,
+    // Queue Processors (Domain-specific)
+    ResumeGenerationProcessor,
+    ResumeExtractionProcessor,
     // Interceptors
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformUserContextInterceptor,
     },
   ],
-  controllers: [ResumeTailoringController],
+  controllers: [ResumeTailoringController, ResumeTailoringAsyncController],
   exports: [
     ResumeTemplateService,
     ResumeService,
@@ -98,6 +115,9 @@ import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-prov
     ResumeContentProcessorService,
     ResumeOptimizerService,
     PdfGenerationOrchestratorService,
+    ResumeGenerationOrchestratorService,
+    ResumeGenerationResultService,
+    ResumeQueueService,
   ],
 })
 export class ResumeTailoringModule {}

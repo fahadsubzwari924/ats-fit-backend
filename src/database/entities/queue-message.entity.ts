@@ -6,15 +6,10 @@ import {
   UpdateDateColumn,
   Index,
 } from 'typeorm';
-
-export type QueueMessageStatus =
-  | 'queued'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'retrying';
-
-export type QueueMessagePriority = 'low' | 'normal' | 'high' | 'critical';
+import {
+  QueueMessageStatus,
+  QueueMessagePriority,
+} from '../../shared/enums/queue-message.enum';
 
 /**
  * Universal queue message tracking entity
@@ -60,16 +55,16 @@ export class QueueMessage {
   @Column({
     name: 'status',
     type: 'enum',
-    enum: ['queued', 'processing', 'completed', 'failed', 'retrying'],
-    default: 'queued',
+    enum: QueueMessageStatus,
+    default: QueueMessageStatus.QUEUED,
   })
   status: QueueMessageStatus;
 
   @Column({
     name: 'priority',
     type: 'enum',
-    enum: ['low', 'normal', 'high', 'critical'],
-    default: 'normal',
+    enum: QueueMessagePriority,
+    default: QueueMessagePriority.NORMAL,
   })
   priority: QueueMessagePriority;
 
@@ -109,15 +104,18 @@ export class QueueMessage {
 
   // Helper methods for better usability
   get isCompleted(): boolean {
-    return this.status === 'completed';
+    return this.status === QueueMessageStatus.COMPLETED;
   }
 
   get isFailed(): boolean {
-    return this.status === 'failed';
+    return this.status === QueueMessageStatus.FAILED;
   }
 
   get canRetry(): boolean {
-    return this.attempts < this.maxAttempts && this.status === 'failed';
+    return (
+      this.attempts < this.maxAttempts &&
+      this.status === QueueMessageStatus.FAILED
+    );
   }
 
   get hasExceededMaxAttempts(): boolean {
