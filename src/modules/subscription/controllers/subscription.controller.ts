@@ -32,6 +32,7 @@ import {
 import { MESSAGES } from '../../../shared/constants/messages';
 import { ERROR_CODES } from 'src/shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
+import { ExternalPaymentGatewayEvents } from '../externals/enums';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -237,7 +238,7 @@ export class SubscriptionController {
     }
   }
 
-  @Get('user/:userId/subscriptions')
+  @Get('user/subscriptions/:userId')
   @ApiOperation({ summary: 'Get all subscriptions for a user from database' })
   @ApiResponse({
     status: 200,
@@ -252,7 +253,7 @@ export class SubscriptionController {
       this.logger.log(`Retrieving subscriptions for user ID: ${userId}`);
 
       // Get user subscriptions from database
-      const subscriptions = await this.subscriptionService.findByUserId(userId);
+      const subscriptions = await this.paymentHistoryService.findByUserId(userId);
 
       this.logger.log(`Retrieved ${subscriptions.length} subscriptions for user: ${userId}`);
       return subscriptions;
@@ -379,15 +380,30 @@ export class SubscriptionController {
         payload,
       );
 
-      // Step 1: Create payment history record first (audit trail)
+      // Step 1: Process subscription logic (decoupled from payment history)
+       
+      this.logger.log(`🔥 DEBUG: Processing subscription logic...`);
+      let subscriptionResult;
+      if (payload.meta?.event_name === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS) {
+        subscriptionResult = await this.subscriptionService.handleSuccessfulPayment(payload);
+      } else {
+        this.logger.log(`🔥 DEBUG: Payment failed for subscription: ${payload.subscriptionId}`);
+        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload);
+      }
+
+      this.logger.log(
+        `🔥 DEBUG: Subscription processing result:`,
+        subscriptionResult,
+      );
+
+      // Step 2: Create payment history record first (audit trail)
       this.logger.log(`🔥 DEBUG: Creating payment history record...`);
-      const paymentHistory =
-        await this.paymentHistoryService.paymentConfirmation(payload);
+      const paymentHistory = await this.paymentHistoryService.paymentConfirmation(payload);
       this.logger.log(`🔥 DEBUG: Payment history created:`, {
         id: paymentHistory.id,
       });
 
-      // Step 2: Verify signature
+      // Step 3: Verify signature
       if (
         signature &&
         !(await this.subscriptionService.verifySignature(
@@ -404,48 +420,21 @@ export class SubscriptionController {
           ERROR_CODES.BAD_REQUEST,
         );
       }
-
-      // Step 3: Process subscription logic (decoupled from payment history)
-      this.logger.log(`🔥 DEBUG: Processing subscription logic...`);
-      const subscriptionResult =
-        await this.subscriptionService.processPaymentGatewayEvent(payload);
-      this.logger.log(
-        `🔥 DEBUG: Subscription processing result:`,
-        subscriptionResult,
-      );
+      
 
       // Step 4: Mark payment as processed
       await this.paymentHistoryService.markAsProcessed(paymentHistory.id);
 
-      const result = {
-        success: true,
-        message: 'Payment gateway notification processed successfully',
-        data: {
-          paymentHistory: {
-            id: paymentHistory.id,
-            status: paymentHistory.status,
-            paymentType: paymentHistory.payment_type,
-            amount: paymentHistory.amount,
-            currency: paymentHistory.currency,
-          },
-          ...subscriptionResult,
-        },
-      };
 
       // Log processing results
       this.logger.log(`🎯 NEW Subscription created in database:`, {
-        subscriptionId: result?.data?.subscription?.subscriptionId,
-        status: result?.data?.subscription?.status,
-        isActive: result?.data?.subscription?.isActive,
-        userId: result?.data?.subscription?.userId,
-        planId: result?.data?.subscription?.subscriptionPlanId,
-        paymentHistoryId: paymentHistory.id,
+        paymentHistory,
+        subscriptionResult,
       });
 
-      return result;
     } catch (error) {
       this.logger.error(
-        'Failed to process payment gateway notification',
+        'Webhook -> payment-confirmation -> Failed to process payment gateway notification',
         error,
       );
       throw error;

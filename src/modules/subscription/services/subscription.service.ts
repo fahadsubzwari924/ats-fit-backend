@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSubscription } from '../../../database/entities/user-subscription.entity';
 import { SubscriptionStatus } from '../enums/subscription-status.enum';
-import { Currency } from '../enums/payment.enum';
 import { SubscriptionCancellationResponse } from '../models';
 import {
   ICreateSubscriptionData,
@@ -14,8 +13,8 @@ import {
   NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
-import { ExternalPaymentGatewayEvents } from '../externals/enums/external-payment-gateway-events.enum';
 import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
+import { CreateSubscriptionFromPaymentGatewayDto } from '../dtos/create-subscription-from-payment-gateway.dto';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -260,6 +259,14 @@ export class SubscriptionService {
     return !!activeSubscription;
   }
 
+  async handleSuccessfulPayment(payload: any) {
+    return this.processPaymentGatewayEvent(payload);
+  }
+
+  async handleFailedPayment(payload: any) {
+    // return this.processPaymentGatewayEvent(payload);
+  }
+
   //#region Payment Gateway Event Processing (Decoupled)
 
   /**
@@ -302,43 +309,36 @@ export class SubscriptionService {
         `Processing payment gateway event: ${payload.meta?.event_name}`,
       );
 
+      // Verify subscription was created
+
       const eventType = payload.meta?.event_name;
       let subscriptionInfo = null;
 
-      // Handle subscription creation events
-      if (
-        eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED ||
-        eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS
-      ) {
-        await this.createSubscriptionFromPaymentGatewayEvent(payload);
+      const subscription = await this.createSubscriptionFromPaymentGatewayEvent(payload);
 
-        // Verify subscription was created
-        try {
-          const subscription = await this.findByExternalId(payload.data?.id);
-          if (subscription) {
-            subscriptionInfo = {
-              subscriptionId: subscription.id,
-              status: subscription.status,
-              isActive: subscription.is_active,
-              userId: subscription.user_id,
-              subscriptionPlanId: subscription.subscription_plan_id,
-            };
-            this.logger.log(
-              `✅ Subscription entry confirmed in database: ${subscription.id}`,
-            );
-          }
-        } catch (error) {
-          this.logger.warn(
-            `Could not verify subscription creation: ${error.message}`,
-          );
-        }
+      if (!subscription) {
+        this.logger.warn(
+          `Subscription creation failed or returned null for event: ${eventType}`,
+        );
+        return null;
       }
 
-      return {
-        eventType: eventType,
-        subscriptionCreated: !!subscriptionInfo,
-        subscription: subscriptionInfo,
-      };
+        subscriptionInfo = {
+          subscriptionId: subscription.id,
+          status: subscription.status,
+          isActive: subscription.is_active,
+          userId: subscription.user_id,
+          subscriptionPlanId: subscription.subscription_plan_id,
+        };
+        this.logger.log(
+          `✅ Subscription entry confirmed in database: ${subscription.id}`,
+        );
+
+        return {
+          eventType: eventType,
+          subscriptionCreated: !!subscriptionInfo,
+          subscription: subscriptionInfo,
+        };
     } catch (error) {
       this.logger.error('Failed to process payment gateway event', error);
       throw error;
@@ -350,32 +350,12 @@ export class SubscriptionService {
    */
   private async createSubscriptionFromPaymentGatewayEvent(
     payload: PaymentConfirmationDto,
-  ): Promise<void> {
+  ): Promise<UserSubscription> {
     try {
       this.logger.log(`🔥 DEBUG: Starting subscription creation process...`);
 
-      const subscriptionData: ICreateSubscriptionData = {
-        payment_gateway_subscription_id: payload?.data?.id,
-        subscription_plan_id: payload?.meta?.custom_data?.plan_id,
-        user_id: payload?.meta?.custom_data?.user_id,
-        status: this.mapPaymentGatewayStatusToSubscriptionStatus(
-          payload?.data?.attributes?.status,
-        ),
-        amount: payload?.data?.attributes?.total || 0,
-        currency: payload?.data?.attributes?.currency || Currency.USD,
-        starts_at: new Date(
-          payload?.data?.attributes?.created_at || Date.now(),
-        ),
-        ends_at: new Date(
-          payload?.data?.attributes?.renews_at ||
-            payload?.data?.attributes?.ends_at ||
-            Date.now() + 30 * 24 * 60 * 60 * 1000,
-        ), // Default to 30 days
-        metadata: {
-          paymentGatewayData: payload?.data?.attributes,
-          customData: payload?.meta?.custom_data,
-        },
-      };
+      // Transform payment gateway payload to subscription data using DTO
+      const subscriptionData = new CreateSubscriptionFromPaymentGatewayDto(payload);
 
       this.logger.log(
         `🔥 DEBUG: Subscription data to create:`,
@@ -393,6 +373,8 @@ export class SubscriptionService {
       this.logger.log(
         `✅ SUCCESS: Subscription isActive: ${subscription.is_active}`,
       );
+
+      return subscription;
     } catch (error) {
       this.logger.error(
         `❌ CRITICAL ERROR: Failed to create subscription from payment gateway event:`,
@@ -407,25 +389,6 @@ export class SubscriptionService {
 
       throw error;
     }
-  }
-
-  /**
-   * Map payment gateway status to our SubscriptionStatus enum
-   */
-  private mapPaymentGatewayStatusToSubscriptionStatus(
-    status: string,
-  ): SubscriptionStatus {
-    const statusMap: Record<string, SubscriptionStatus> = {
-      active: SubscriptionStatus.ACTIVE,
-      cancelled: SubscriptionStatus.CANCELLED,
-      expired: SubscriptionStatus.EXPIRED,
-      paused: SubscriptionStatus.PAUSED,
-      past_due: SubscriptionStatus.PAST_DUE,
-      on_trial: SubscriptionStatus.ACTIVE,
-      unpaid: SubscriptionStatus.PAST_DUE,
-    };
-
-    return statusMap[status?.toLowerCase()] || SubscriptionStatus.ACTIVE;
   }
 
   //#endregion
