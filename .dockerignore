@@ -77,13 +77,29 @@ yarn.lock
 
 # Scripts
 scripts/seed/
+scripts/deployment/
+start-proxy.sh
 
 # Development tools
 .eslintrc.js
 .prettierrc
 jest.config.js
+eslint.config.mjs
 # Note: tsconfig files are needed for build
+
+# Postman collections
+postman/
+
+# HTML test files
+*.html
+
+# Makefile
+Makefile
 
 # Backup files
 *.bak
 *.backup
+
+# Git files
+.gitattributes
+.github/

@@ -36,7 +36,7 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
         redis: {
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: configService.get<number>('REDIS_PORT', 6379),
-          password: configService.get<string>('REDIS_PASSWORD'),
+          password: configService.get<string>('REDIS_PASSWORD') || undefined,
           db: configService.get<number>('REDIS_DB', 0),
         },
         defaultJobOptions: {
