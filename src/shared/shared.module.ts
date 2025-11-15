@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Global } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BaseMapperService } from './services/base-mapper.service';
 import { ResponseModule } from './modules/response/response.module';
@@ -15,7 +15,11 @@ import { AIContentService } from './services/ai-content.service';
 import { FileValidationPipe } from './pipes/file-validation.pipe';
 import { LemonSqueezyService } from '../modules/subscription/externals/services/lemon_squeezy.service';
 import { LemonSqueezyPaymentGateway } from '../modules/subscription/externals/gateways/lemonsqueezy-payment.gateway';
+import { MailchimpTransactionalService } from './services/mailchimp.service';
+import { EMAIL_SERVICE_TOKEN } from './interfaces/email.interface';
+import { AwsSesService } from './services/aws-ses.service';
 
+@Global()
 @Module({
   imports: [
     ResponseModule,
@@ -33,7 +37,17 @@ import { LemonSqueezyPaymentGateway } from '../modules/subscription/externals/ga
     CacheService,
     AIContentService,
     FileValidationPipe,
-
+    // Mailchimp transactional provider registered behind a token
+    MailchimpTransactionalService,
+    {
+      provide: EMAIL_SERVICE_TOKEN,
+      useClass: MailchimpTransactionalService,
+    },
+    AwsSesService,
+    {
+      provide: EMAIL_SERVICE_TOKEN,
+      useClass: AwsSesService,
+    },
     // Payment Gateways
     LemonSqueezyService,
     LemonSqueezyPaymentGateway,
@@ -49,6 +63,8 @@ import { LemonSqueezyPaymentGateway } from '../modules/subscription/externals/ga
     CacheService,
     AIContentService,
     FileValidationPipe,
+    // Export the email token so other modules can inject it without importing SharedModule
+    EMAIL_SERVICE_TOKEN,
   ],
 })
 export class SharedModule {}
