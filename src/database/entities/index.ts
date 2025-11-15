@@ -12,3 +12,4 @@ export * from './user.entity';
 export * from './user-subscription.entity';
 export * from './subscription-plan.entity';
 export * from './payment-history.entity';
+export * from './tailoring-session.entity';

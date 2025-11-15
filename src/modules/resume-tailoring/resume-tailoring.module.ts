@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ResumeTailoringController } from './resume-tailoring.controller';
 import { ResumeTailoringAsyncController } from './resume-tailoring-async.controller';
+import { QuestionBasedResumeTailoringController } from './controllers/question-based-tailoring.controller';
 import {
   ResumeGeneration,
   ResumeTemplate,
@@ -12,6 +13,8 @@ import {
   ExtractedResumeContent,
   ResumeGenerationResult,
   QueueMessage,
+  TailoringSession,
+  TailoringQuestion,
 } from '../../database/entities';
 import { HandlebarsService } from '../../shared/services/handlebars.service';
 import {
@@ -29,6 +32,8 @@ import { ResumeContentService } from './services/resume-content.service';
 import { ResumeValidationService } from './services/resume-validation.service';
 import { ResumeGenerationResultService } from './services/resume-generation-result.service';
 import { ResumeQueueService } from './services/resume-queue.service';
+import { QuestionGenerationService } from './services/question-generation.service';
+import { FactBasedResumeTailoringService } from './services/fact-based-resume-tailoring.service';
 import { BasicInputValidationRule } from './validation/basic-input-validation.rule';
 import { UserContextValidationRule } from './validation/user-context-validation.rule';
 import { TemplateValidationRule } from './validation/template-validation.rule';
@@ -55,6 +60,8 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
       ExtractedResumeContent,
       ResumeGenerationResult,
       QueueMessage,
+      TailoringSession,
+      TailoringQuestion,
     ]),
     ConfigModule,
     SharedModule,
@@ -90,6 +97,9 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
     ResumeGenerationOrchestratorService,
     ResumeGenerationResultService,
     ResumeQueueService,
+    // V3 Services - Question-Based Tailoring
+    QuestionGenerationService,
+    FactBasedResumeTailoringService,
     // Queue Processors (Domain-specific)
     ResumeGenerationProcessor,
     ResumeExtractionProcessor,
@@ -99,7 +109,11 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
       useClass: TransformUserContextInterceptor,
     },
   ],
-  controllers: [ResumeTailoringController, ResumeTailoringAsyncController],
+  controllers: [
+    ResumeTailoringController,
+    ResumeTailoringAsyncController,
+    QuestionBasedResumeTailoringController,
+  ],
   exports: [
     ResumeTemplateService,
     ResumeService,

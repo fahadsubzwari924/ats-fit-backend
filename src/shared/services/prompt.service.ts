@@ -898,4 +898,289 @@ Return valid JSON with the EXACT structure below. Ensure every achievement inclu
 - Use realistic, mid-range estimates for metrics; avoid exaggeration
 `;
   }
+
+  /**
+   * Generate prompt for analyzing resume and job description to create targeted questions
+   * This prompt helps AI understand what questions to ask the user for each work experience bullet point
+   *
+   * @param jobDescription - Complete job description text
+   * @param jobPosition - Job position title
+   * @param companyName - Target company name
+   * @param resumeContent - Candidate's current resume content
+   * @returns Structured prompt for question generation
+   */
+  getQuestionGenerationPrompt(
+    jobDescription: string,
+    jobPosition: string,
+    companyName: string,
+    resumeContent: string,
+  ): string {
+    return `
+You are an expert career advisor and resume consultant specializing in creating quantifiable, business-outcome-oriented resumes. Your task is to analyze a candidate's resume and a job description, then generate targeted questions that will help the candidate provide specific, factual information to enhance their resume bullet points.
+
+**Job Position:** ${jobPosition}
+**Company:** ${companyName}
+
+**Job Description:**
+${jobDescription}
+
+**Candidate's Current Resume:**
+${resumeContent}
+
+**OBJECTIVE:**
+Generate 1-3 strategic questions for each work experience bullet point that will elicit:
+1. Quantifiable metrics (numbers, percentages, dollar amounts)
+2. Business impact (revenue, cost savings, efficiency gains, customer satisfaction)
+3. Scope and scale (team size, user base, project size)
+4. Concrete outcomes and results
+5. Technologies and methodologies used
+
+**QUESTION GENERATION GUIDELINES:**
+1. **Be Specific:** Questions should target the exact work experience and bullet point
+2. **Business-Focused:** Prioritize questions about business outcomes, not just technical details
+3. **Quantification-Driven:** Ask for specific numbers, percentages, timeframes
+4. **Job-Aligned:** Consider what metrics would be most relevant for the target job
+5. **Minimal Yet Effective:** 1-2 questions per bullet point, maximum 3 for critical achievements
+6. **No Hallucination Risk:** Questions should help user provide THEIR OWN facts, not guess
+
+**QUESTION CATEGORIES:**
+- **metrics**: Numbers, percentages, volumes (e.g., "How many users did this feature serve?")
+- **impact**: Business outcomes (e.g., "What was the revenue impact or cost savings?")
+- **scope**: Scale of work (e.g., "How large was the team you led?")
+- **technology**: Technical details (e.g., "What specific technologies and frameworks did you use?")
+- **outcome**: Results and achievements (e.g., "By what percentage did performance improve?")
+
+**QUALITY CRITERIA:**
+- Skip bullet points that are already highly quantified
+- Focus on bullet points that are vague or lack metrics
+- Prioritize questions for experiences most relevant to the target job
+- Keep questions conversational and easy to answer
+- Avoid questions that could encourage exaggeration
+
+**RESPONSE FORMAT (JSON):**
+{
+  "questions": [
+    {
+      "workExperienceIndex": 0,
+      "workExperienceTitle": "Senior Developer at Company X",
+      "bulletPointIndex": 0,
+      "originalBulletPoint": "Led development of new features",
+      "questionText": "How many users were impacted by these new features, and what measurable improvements did they experience?",
+      "questionCategory": "impact",
+      "rationale": "Current bullet lacks quantification and business impact"
+    },
+    {
+      "workExperienceIndex": 0,
+      "workExperienceTitle": "Senior Developer at Company X",
+      "bulletPointIndex": 1,
+      "originalBulletPoint": "Improved system performance",
+      "questionText": "What specific percentage did performance improve, and how did this impact users or business operations?",
+      "questionCategory": "metrics",
+      "rationale": "Needs specific performance metrics and business context"
+    }
+  ],
+  "analysis": {
+    "totalWorkExperiences": 3,
+    "totalBulletPoints": 12,
+    "questionsGenerated": 8,
+    "strengthAreas": ["technical skills", "project leadership"],
+    "improvementAreas": ["quantification", "business impact demonstration"],
+    "jobAlignmentScore": 75
+  },
+  "recommendations": [
+    "Focus on quantifying team leadership experience",
+    "Emphasize scalability and performance improvements",
+    "Highlight cross-functional collaboration"
+  ]
+}
+
+**IMPORTANT RULES:**
+1. Generate questions ONLY for work experiences, not for education or certifications
+2. Index starts from 0 for both workExperienceIndex and bulletPointIndex
+3. Each question should be actionable and answerable with facts the candidate knows
+4. Prioritize recent and relevant work experiences
+5. Maximum 2-3 questions per bullet point, focus on highest impact opportunities
+6. Skip bullet points that are already well-quantified
+7. Ensure workExperienceTitle matches the position and company from the resume
+8. Keep total questions reasonable (15-25 maximum across all experiences)
+`;
+  }
+
+  /**
+   * Generate prompt for creating fact-based tailored resume using user's question responses
+   * This prompt ensures AI uses ONLY the facts provided by the user, with zero hallucination
+   *
+   * @param jobDescription - Complete job description text
+   * @param jobPosition - Job position title
+   * @param companyName - Target company name
+   * @param originalResumeContent - Candidate's original resume content
+   * @param questionsAndResponses - Array of questions with user's responses
+   * @returns Structured prompt for fact-based resume optimization
+   */
+  getFactBasedResumeTailoringPrompt(
+    jobDescription: string,
+    jobPosition: string,
+    companyName: string,
+    originalResumeContent: string,
+    questionsAndResponses: Array<{
+      workExperienceIndex: number;
+      workExperienceTitle: string;
+      bulletPointIndex: number;
+      originalBulletPoint: string;
+      questionText: string;
+      userResponse: string;
+    }>,
+  ): string {
+    const questionsResponsesFormatted = questionsAndResponses
+      .map(
+        (qr, idx) => `
+${idx + 1}. Work Experience: "${qr.workExperienceTitle}"
+   Original Bullet: "${qr.originalBulletPoint}"
+   Question: "${qr.questionText}"
+   User's Answer: "${qr.userResponse}"
+`,
+      )
+      .join('\n');
+
+    return `
+You are an expert resume writer specializing in creating quantifiable, ATS-optimized, and business-outcome-focused resumes. Your task is to tailor a candidate's resume to a specific job using ONLY the factual information provided by the candidate.
+
+**CRITICAL RULE: ZERO HALLUCINATION POLICY**
+- Use ONLY the facts, numbers, and information explicitly provided in the user's responses
+- If a user response is vague or doesn't provide numbers, keep the bullet point focused on what they DID provide
+- NEVER invent or assume metrics, percentages, dollar amounts, or other quantifiable data
+- If no quantification was provided, write impactful bullet points based on actions and responsibilities only
+
+**Job Position:** ${jobPosition}
+**Company:** ${companyName}
+
+**Job Description:**
+${jobDescription}
+
+**Original Resume:**
+${originalResumeContent}
+
+**User's Responses to Business Impact Questions:**
+${questionsResponsesFormatted}
+
+**TAILORING INSTRUCTIONS:**
+
+1. **Work Experience Bullet Point Enhancement:**
+   - For each bullet point that has a corresponding user response, rewrite it using the CAR method (Context, Action, Result)
+   - Incorporate the specific facts, numbers, and details from user responses
+   - If user provided metrics: integrate them naturally and prominently
+   - If user didn't provide metrics: focus on impact, scope, technologies, and outcomes they DID mention
+   - Never fabricate data not provided by the user
+
+2. **Bullet Point Selection (IMPORTANT):**
+   - **Most Recent Position:** Include ALL bullet points (enhanced with user responses where available)
+   - **Previous Positions:** Include up to 3-4 most relevant bullet points per job, prioritizing those with user responses
+   - Ensure bullet points align with the target job description
+
+3. **Resume Structure Requirements:**
+   - Keep all original contact information, education, and certifications
+   - Maintain chronological order of work experiences
+   - Update professional summary to reflect the enhanced, quantified achievements
+   - Align skills section with job requirements while keeping candidate's actual skills
+
+4. **ATS Optimization:**
+   - Incorporate keywords from job description naturally
+   - Match job title variations where appropriate
+   - Use industry-standard terminology
+   - Maintain clean, parseable format
+
+5. **Language and Tone:**
+   - Professional and achievement-focused
+   - Active voice with strong action verbs
+   - Concise yet comprehensive
+   - Industry-appropriate terminology
+
+**OUTPUT FORMAT (JSON):**
+{
+  "optimizedContent": {
+    "title": "string",
+    "contactInfo": {
+      "name": "string",
+      "email": "string",
+      "phone": "string",
+      "location": "string",
+      "linkedin": "string",
+      "portfolio": "string",
+      "github": "string"
+    },
+    "summary": "string - brief, quantified professional summary highlighting key achievements from user responses",
+    "skills": {
+      "languages": ["string"],
+      "frameworks": ["string"],
+      "tools": ["string"],
+      "databases": ["string"],
+      "concepts": ["string"]
+    },
+    "experience": [
+      {
+        "company": "string",
+        "position": "string",
+        "duration": "string",
+        "location": "string",
+        "responsibilities": ["enhanced bullet points using user's factual responses"],
+        "achievements": ["enhanced achievements using user's factual responses"],
+        "startDate": "string - MUST BE VALID DATE",
+        "endDate": "string - MUST BE VALID DATE OR 'Present'",
+        "technologies": "string"
+      }
+    ],
+    "education": [
+      {
+        "institution": "string",
+        "degree": "string",
+        "major": "string",
+        "startDate": "string",
+        "endDate": "string"
+      }
+    ],
+    "certifications": [
+      {
+        "name": "string",
+        "issuer": "string",
+        "date": "string",
+        "expiryDate": "string",
+        "credentialId": "string"
+      }
+    ],
+    "additionalSections": [
+      {
+        "title": "string",
+        "items": ["string"]
+      }
+    ]
+  },
+  "enhancementMetrics": {
+    "bulletPointsEnhanced": 0,
+    "metricsAdded": 0,
+    "keywordsIntegrated": 0,
+    "userResponsesUsed": 0,
+    "confidenceScore": 0
+  },
+  "enhancementSummary": {
+    "factsUsed": ["specific fact from user response 1", "specific fact from user response 2"],
+    "improvementAreas": ["what was improved"],
+    "atsOptimizations": ["keywords added", "format improvements"],
+    "noHallucinationConfirmation": "All quantifiable data comes directly from user responses"
+  }
+}
+
+**VALIDATION CHECKLIST:**
+✓ Every metric, percentage, or number comes from user responses or original resume
+✓ No invented or assumed quantifiable data
+✓ All work experiences have valid start and end dates
+✓ Bullet points are achievement-focused and use CAR method
+✓ Keywords from job description are naturally integrated
+✓ Professional summary reflects actual achievements mentioned by user
+✓ Skills section contains only skills mentioned in original resume or user responses
+✓ Most recent position includes all enhanced bullet points
+✓ Older positions include 3-4 most relevant and impactful bullet points
+
+**REMEMBER:** It's better to have a strong, factual bullet point without numbers than to invent data. Trust and accuracy are paramount.
+`;
+  }
 }
