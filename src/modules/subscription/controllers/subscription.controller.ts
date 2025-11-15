@@ -33,6 +33,8 @@ import { MESSAGES } from '../../../shared/constants/messages';
 import { ERROR_CODES } from 'src/shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
 import { ExternalPaymentGatewayEvents } from '../externals/enums';
+import { Inject } from '@nestjs/common';
+import { IEmailService, EMAIL_SERVICE_TOKEN } from '../../../shared/interfaces/email.interface';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -46,6 +48,7 @@ export class SubscriptionController {
     private readonly subscriptionService: SubscriptionService,
     private readonly paymentHistoryService: PaymentHistoryService, // ✅ Payment history handling
     private readonly subscriptionPlanService: SubscriptionPlanService,
+    @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService, // Inject email service via token
   ) {}
 
   @Post('checkout')
@@ -441,4 +444,21 @@ export class SubscriptionController {
     }
   }
   //#endregion
+
+
+  @Public()
+  @Get('test-email')
+  async testEmail() {
+    try {
+      const response = await this.emailService.send('info@atsfitt.com', {
+        amount: 1000,
+        orderId: '151515151',
+        subject: 'Ats Fit Payment Failure Test',
+      });
+      return response;
+    } catch (error) {
+      this.logger.error('Failed to send test email:', error);
+    }
+  }
+
 }
