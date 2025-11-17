@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSubscription } from '../../../database/entities/user-subscription.entity';
@@ -17,6 +17,10 @@ import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
 import { CreateSubscriptionFromPaymentGatewayDto } from '../dtos/create-subscription-from-payment-gateway.dto';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import { EMAIL_SERVICE_TOKEN, IEmailService } from '../../../shared/interfaces/email.interface';
+import { User } from '../../../database/entities';
+import { EmailTemplates, EmailSubjects } from '../../../shared/enums';
+
 
 @Injectable()
 export class SubscriptionService {
@@ -26,6 +30,7 @@ export class SubscriptionService {
     @InjectRepository(UserSubscription)
     private readonly subscriptionRepository: Repository<UserSubscription>,
     private readonly configService: ConfigService,
+    @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService
   ) {}
 
   async create(data: ICreateSubscriptionData): Promise<UserSubscription> {
@@ -263,8 +268,16 @@ export class SubscriptionService {
     return this.processPaymentGatewayEvent(payload);
   }
 
-  async handleFailedPayment(payload: any) {
+  async handleFailedPayment(payload: any, user: User) {
     // return this.processPaymentGatewayEvent(payload);
+    await this.emailService.send(user.email, {
+      templateKey: EmailTemplates.PAYMENT_FAILED,
+      templateData: {
+        amount: payload?.data?.attributes?.total_formatted,
+        userName: user.full_name
+      },
+      subject: EmailSubjects.PAYMENT_FAILED,
+    });
   }
 
   //#region Payment Gateway Event Processing (Decoupled)
@@ -306,12 +319,12 @@ export class SubscriptionService {
   async processPaymentGatewayEvent(payload: any): Promise<any> {
     try {
       this.logger.log(
-        `Processing payment gateway event: ${payload.meta?.event_name}`,
+        `Processing payment gateway event: ${payload?.meta?.event_name}`,
       );
 
       // Verify subscription was created
 
-      const eventType = payload.meta?.event_name;
+      const eventType = payload?.meta?.event_name;
       let subscriptionInfo = null;
 
       const subscription = await this.createSubscriptionFromPaymentGatewayEvent(payload);
@@ -323,22 +336,22 @@ export class SubscriptionService {
         return null;
       }
 
-        subscriptionInfo = {
-          subscriptionId: subscription.id,
-          status: subscription.status,
-          isActive: subscription.is_active,
-          userId: subscription.user_id,
-          subscriptionPlanId: subscription.subscription_plan_id,
-        };
-        this.logger.log(
-          `✅ Subscription entry confirmed in database: ${subscription.id}`,
-        );
+      subscriptionInfo = {
+        subscriptionId: subscription?.id,
+        status: subscription?.status,
+        isActive: subscription?.is_active,
+        userId: subscription?.user_id,
+        subscriptionPlanId: subscription?.subscription_plan_id,
+      };
+      this.logger.log(
+        `✅ Subscription entry confirmed in database: ${subscription?.id}`,
+      );
 
-        return {
-          eventType: eventType,
-          subscriptionCreated: !!subscriptionInfo,
-          subscription: subscriptionInfo,
-        };
+      return {
+        eventType: eventType,
+        subscriptionCreated: !!subscriptionInfo,
+        subscription: subscriptionInfo,
+      };
     } catch (error) {
       this.logger.error('Failed to process payment gateway event', error);
       throw error;
@@ -366,12 +379,12 @@ export class SubscriptionService {
       const subscription = await this.create(subscriptionData);
 
       this.logger.log(`✅ SUCCESS: Created subscription in database!`);
-      this.logger.log(`✅ SUCCESS: Subscription ID: ${subscription.id}`);
+      this.logger.log(`✅ SUCCESS: Subscription ID: ${subscription?.id}`);
       this.logger.log(
-        `✅ SUCCESS: Subscription status: ${subscription.status}`,
+        `✅ SUCCESS: Subscription status: ${subscription?.status}`,
       );
       this.logger.log(
-        `✅ SUCCESS: Subscription isActive: ${subscription.is_active}`,
+        `✅ SUCCESS: Subscription isActive: ${subscription?.is_active}`,
       );
 
       return subscription;

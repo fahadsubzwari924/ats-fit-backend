@@ -20,6 +20,7 @@ import { SubscriptionService } from '../services/subscription.service';
 import { SubscriptionPlanService } from '../services/subscription-plan.service';
 import { PaymentService } from '../../../shared/services/payment.service';
 import { PaymentHistoryService } from '../services/payment-history.service';
+import { UserService } from '../../user/user.service';
 import { CreateSubscriptionDto } from '../dtos/subscription.dto';
 import { SubscriptionPlanResponseDto } from '../dtos/subscription-plan.dto';
 import { CheckoutResponseDto } from '../dtos/checkout-response.dto';
@@ -35,6 +36,7 @@ import { Public } from '../../auth/decorators/public.decorator';
 import { ExternalPaymentGatewayEvents } from '../externals/enums';
 import { Inject } from '@nestjs/common';
 import { IEmailService, EMAIL_SERVICE_TOKEN } from '../../../shared/interfaces/email.interface';
+import { EmailTemplates } from '../../../shared/enums/email-templates.enum';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -48,6 +50,7 @@ export class SubscriptionController {
     private readonly subscriptionService: SubscriptionService,
     private readonly paymentHistoryService: PaymentHistoryService, // ✅ Payment history handling
     private readonly subscriptionPlanService: SubscriptionPlanService,
+    private readonly userService: UserService,
     @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService, // Inject email service via token
   ) {}
 
@@ -383,15 +386,40 @@ export class SubscriptionController {
         payload,
       );
 
-      // Step 1: Process subscription logic (decoupled from payment history)
-       
-      this.logger.log(`🔥 DEBUG: Processing subscription logic...`);
+      // Step 1: Get user by email from payload
+      const userEmail = payload?.meta?.custom_data?.email;
+      
+      if (!userEmail) {
+        this.logger.warn(
+          `🔥 DEBUG: Email not found in payment-confirmation payload`,
+        );
+        throw new BadRequestException(
+          'Email not found in payment payload',
+          ERROR_CODES.BAD_REQUEST,
+        );
+      }
+
+      this.logger.log(`🔥 DEBUG: Looking up user by email: ${userEmail}`);
+      const user = await this.userService.getUserByEmail(userEmail);
+
+      if (!user) {
+        this.logger.warn(
+          `🔥 DEBUG: User not found for email: ${userEmail}`,
+        );
+        throw new NotFoundException(
+          'User not found',
+          ERROR_CODES.USER_NOT_FOUND,
+        );
+      }
+
+      this.logger.log(`🔥 DEBUG: User found - ID: ${user.id}, Name: ${user.full_name}`);
+
+      // Step 2: Process subscription logic (decoupled from payment history)
       let subscriptionResult;
       if (payload.meta?.event_name === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS) {
         subscriptionResult = await this.subscriptionService.handleSuccessfulPayment(payload);
       } else {
-        this.logger.log(`🔥 DEBUG: Payment failed for subscription: ${payload.subscriptionId}`);
-        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload);
+        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload, user);
       }
 
       this.logger.log(
@@ -399,14 +427,14 @@ export class SubscriptionController {
         subscriptionResult,
       );
 
-      // Step 2: Create payment history record first (audit trail)
+      // Step 3: Create payment history record first (audit trail)
       this.logger.log(`🔥 DEBUG: Creating payment history record...`);
       const paymentHistory = await this.paymentHistoryService.paymentConfirmation(payload);
       this.logger.log(`🔥 DEBUG: Payment history created:`, {
         id: paymentHistory.id,
       });
 
-      // Step 3: Verify signature
+      // Step 4: Verify signature
       if (
         signature &&
         !(await this.subscriptionService.verifySignature(
@@ -425,7 +453,7 @@ export class SubscriptionController {
       }
       
 
-      // Step 4: Mark payment as processed
+      // Step 5: Mark payment as processed
       await this.paymentHistoryService.markAsProcessed(paymentHistory.id);
 
 
@@ -451,8 +479,12 @@ export class SubscriptionController {
   async testEmail() {
     try {
       const response = await this.emailService.send('info@atsfitt.com', {
-        amount: 1000,
-        orderId: '151515151',
+        templateKey: EmailTemplates.PAYMENT_FAILED,
+        templateData: {
+          amount: 1000,
+          userName: 'Ahsan',
+          orderId: '151515151',
+        },
         subject: 'Ats Fit Payment Failure Test',
       });
       return response;

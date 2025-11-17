@@ -15,9 +15,12 @@ import { AIContentService } from './services/ai-content.service';
 import { FileValidationPipe } from './pipes/file-validation.pipe';
 import { LemonSqueezyService } from '../modules/subscription/externals/services/lemon_squeezy.service';
 import { LemonSqueezyPaymentGateway } from '../modules/subscription/externals/gateways/lemonsqueezy-payment.gateway';
-import { MailchimpTransactionalService } from './services/mailchimp.service';
 import { EMAIL_SERVICE_TOKEN } from './interfaces/email.interface';
 import { AwsSesService } from './services/aws-ses.service';
+import { S3TemplateProviderService } from './services/s3-template-provider.service';
+import { HandlebarsTemplateRendererService } from './services/handlebars-template-renderer.service';
+import { TEMPLATE_PROVIDER_TOKEN } from './interfaces/template-provider.interface';
+import { TEMPLATE_RENDERER_TOKEN } from './interfaces/template-renderer.interface';
 
 @Global()
 @Module({
@@ -37,17 +40,30 @@ import { AwsSesService } from './services/aws-ses.service';
     CacheService,
     AIContentService,
     FileValidationPipe,
-    // Mailchimp transactional provider registered behind a token
-    MailchimpTransactionalService,
-    {
-      provide: EMAIL_SERVICE_TOKEN,
-      useClass: MailchimpTransactionalService,
-    },
+    
+    // Email services with dependency injection
+    S3TemplateProviderService,
+    HandlebarsTemplateRendererService,
     AwsSesService,
+    
+    // Template provider abstraction
+    {
+      provide: TEMPLATE_PROVIDER_TOKEN,
+      useClass: S3TemplateProviderService,
+    },
+    
+    // Template renderer abstraction
+    {
+      provide: TEMPLATE_RENDERER_TOKEN,
+      useClass: HandlebarsTemplateRendererService,
+    },
+    
+    // Email service abstraction
     {
       provide: EMAIL_SERVICE_TOKEN,
       useClass: AwsSesService,
     },
+    
     // Payment Gateways
     LemonSqueezyService,
     LemonSqueezyPaymentGateway,
@@ -63,8 +79,13 @@ import { AwsSesService } from './services/aws-ses.service';
     CacheService,
     AIContentService,
     FileValidationPipe,
-    // Export the email token so other modules can inject it without importing SharedModule
+    
+    // Export email service token for dependency injection
     EMAIL_SERVICE_TOKEN,
+    
+    // Export template abstractions for custom implementations
+    TEMPLATE_PROVIDER_TOKEN,
+    TEMPLATE_RENDERER_TOKEN,
   ],
 })
 export class SharedModule {}

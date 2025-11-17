@@ -1,23 +1,34 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import Handlebars from 'handlebars';
-import { IEmailService } from '../interfaces/email.interface';
-
-type CompiledTemplates = {
-  subject?: Handlebars.TemplateDelegate;
-  html?: Handlebars.TemplateDelegate;
-  text?: Handlebars.TemplateDelegate;
-};
+import { EmailSendPayload, IEmailService } from '../interfaces/email.interface';
+import {
+  ITemplateProvider,
+  TEMPLATE_PROVIDER_TOKEN,
+} from '../interfaces/template-provider.interface';
+import {
+  ITemplateRenderer,
+  TEMPLATE_RENDERER_TOKEN,
+} from '../interfaces/template-renderer.interface';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+} from '../exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../constants/error-codes';
 
 /**
- * AWS SES email sender using AWS SDK v3.
- * - Uses IAM credentials (access key + secret) from env via ConfigService
- * - Supports templateKey + templateData (templates on disk at src/shared/templates/<key>/)
- * - Caches compiled templates in-memory
- * - Implements IEmailService so it can be swapped via DI
+ * AWS SES Email Service
+ * 
+ * Sends emails using AWS SES with template support from S3
+ * Follows SOLID principles:
+ * - Single Responsibility: Only handles email sending via SES
+ * - Open/Closed: Extensible via template provider and renderer abstractions
+ * - Dependency Inversion: Depends on abstractions (ITemplateProvider, ITemplateRenderer)
+ * 
+ * Architecture:
+ * - Template Provider (S3TemplateProviderService): Fetches templates from S3
+ * - Template Renderer (HandlebarsTemplateRendererService): Renders templates with data
+ * - Email Service (AwsSesService): Sends rendered emails via AWS SES
  */
 @Injectable()
 export class AwsSesService implements IEmailService {
@@ -25,10 +36,14 @@ export class AwsSesService implements IEmailService {
   private readonly sesClient: SESClient;
   private readonly senderEmail: string;
   private readonly senderName: string;
-  private readonly templateFolder: string;
-  private readonly cache = new Map<string, CompiledTemplates>();
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject(TEMPLATE_PROVIDER_TOKEN)
+    private readonly templateProvider: ITemplateProvider,
+    @Inject(TEMPLATE_RENDERER_TOKEN)
+    private readonly templateRenderer: ITemplateRenderer,
+  ) {
     // Resolve sender info
     this.senderEmail =
       this.configService.get<string>('AWS_SES_FROM_EMAIL') ||
@@ -36,25 +51,20 @@ export class AwsSesService implements IEmailService {
     this.senderName =
       this.configService.get<string>('AWS_SES_FROM_NAME') || 'ATS Fit';
 
-    // Template folder (provider-agnostic templates on disk)
-    this.templateFolder = path.resolve(__dirname, '..', 'templates');
-
     // AWS credentials and region
     const region = this.configService.get<string>('AWS_REGION') || 'us-east-1';
-    const accessKeyId = this.configService.get<string>(
-      'AWS_SES_USER_ACCESS_KEY_ID',
-    );
+    const accessKeyId = this.configService.get<string>('AWS_SES_USER_ACCESS_KEY_ID');
     const secretAccessKey = this.configService.get<string>(
       'AES_SES_USER_SECRET_ACCESS_KEY',
     );
 
     this.logger.log(
-      `AWS SES Config - Region: ${region}, AccessKeyId: ${accessKeyId?.substring(0, 10)}..., From: ${this.senderEmail}`,
+      `AWS SES initialized - Region: ${region}, From: ${this.senderEmail}`,
     );
 
     if (!accessKeyId || !secretAccessKey) {
       this.logger.warn(
-        'AWS credentials are not fully configured. Email sending may fail. Ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set.',
+        'AWS credentials not configured. Email sending may fail.',
       );
     }
 
@@ -63,164 +73,212 @@ export class AwsSesService implements IEmailService {
       region,
       credentials:
         accessKeyId && secretAccessKey
-          ? {
-              accessKeyId,
-              secretAccessKey,
-            }
-          : undefined, // Will use default credential chain if not provided
+          ? { accessKeyId, secretAccessKey }
+          : undefined,
     });
 
-    this.logger.log('AWS SES Client initialized successfully');
-
-    // Register minimal Handlebars helpers
-    Handlebars.registerHelper('uppercase', (str: string) =>
-      String(str || '').toUpperCase(),
-    );
+    this.logger.log('AWS SES Client initialized with template support from S3');
   }
 
   /**
-   * Send an email using AWS SES.
-   * payload options:
-   * - subject, html, text : direct overrides
-   * - templateKey, templateData : load and render templates from disk
+   * Send an email using AWS SES
+   * 
+   * Payload options:
+   * - subject, html, text: Direct content (overrides template)
+   * - templateKey: Template identifier to fetch from S3
+   * - templateData: Data to bind to template variables
+   * - to: Recipient email (can be passed in payload or as parameter)
+   * 
+   * @param to Recipient email address
+   * @param payload Email payload with content or template info
+   * @returns SES send result
    */
-  async send(to: string, payload: Record<string, unknown>): Promise<unknown> {
-    try {
-      let subject = payload.subject as string | undefined;
-      let html = payload.html as string | undefined;
-      let text = payload.text as string | undefined;
+  async send(to: string, payload: EmailSendPayload): Promise<unknown> {
+    // Validate email address
+    this.validateEmail(to);
 
-      // Render templates if templateKey is provided
+    try {
+
+      let html: string = '';
+      let subject = payload.subject as string | undefined;
+
+      // Fetch and render template if templateKey provided
       if (payload.templateKey && typeof payload.templateKey === 'string') {
-        const rendered = await this.renderTemplate(
+        const rendered = await this.renderEmailTemplate(
           payload.templateKey,
           (payload.templateData as Record<string, unknown>) || {},
         );
-        subject = subject || rendered.subject;
-        html = html || rendered.html;
-        text = text || rendered.text;
+        
+        // Use template content but allow payload overrides
+        html = rendered.html;
       }
 
-      // Default subject
+      // Validation: at least subject or html/text required
+      if (!subject || !html) {
+        throw new BadRequestException(
+          'Email must have subject, html, or text content',
+          ERROR_CODES.BAD_REQUEST,
+          undefined,
+          { to, hasTemplateKey: !!payload.templateKey },
+        );
+      }
+
+      // Default subject if not provided
       if (!subject) {
         subject = 'Notification from ATS Fit';
       }
 
-      // Default content if none provided
-      if (!html && !text) {
-        text = `Notification: ${JSON.stringify(payload)}`;
+      // Send email via SES
+      return await this.sendViaSes(to, subject, html);
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
       }
 
-      // Prepare email command
-      const fromAddress = `${this.senderName} <${this.senderEmail}>`;
-
-      const command = new SendEmailCommand({
-        Source: fromAddress,
-        Destination: {
-          ToAddresses: [to],
-        },
-        Message: {
-          Subject: {
-            Data: subject,
-            Charset: 'UTF-8',
-          },
-          Body: {
-            ...(html && {
-              Html: {
-                Data: html,
-                Charset: 'UTF-8',
-              },
-            }),
-            ...(text && {
-              Text: {
-                Data: text,
-                Charset: 'UTF-8',
-              },
-            }),
-          },
-        },
-      });
-
-      this.logger.log(
-        `Sending email to ${to} using AWS SES (from ${this.senderEmail})`,
-      );
-
-      const result = await this.sesClient.send(command);
-
-      this.logger.log(
-        `Email sent successfully to ${to} (MessageId: ${result.MessageId || 'n/a'})`,
-      );
-
-      return result;
-    } catch (error) {
       this.logger.error('Failed to send email via AWS SES', {
         error: (error as Error).message,
         to,
-        payloadPreview: {
-          subject: payload.subject,
-          templateKey: payload.templateKey,
-        },
+        templateKey: payload.templateKey,
       });
-      throw error;
+
+      throw new InternalServerErrorException(
+        'Failed to send email',
+        ERROR_CODES.EMAIL_SEND_FAILED,
+        undefined,
+        {
+          to,
+          templateKey: payload.templateKey,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      );
     }
-  }
-
-  private async renderTemplate(
-    key: string,
-    data: Record<string, unknown>,
-  ): Promise<{ subject?: string; html?: string; text?: string }> {
-    try {
-      const compiled = await this.getCompiledTemplates(key);
-      const out: { subject?: string; html?: string; text?: string } = {};
-
-      if (compiled.subject) {
-        out.subject = compiled.subject(data).replace(/\s+/g, ' ').trim();
-      }
-      if (compiled.html) {
-        out.html = compiled.html(data);
-      }
-      if (compiled.text) {
-        out.text = compiled.text(data);
-      }
-
-      return out;
-    } catch (err) {
-      this.logger.warn(`Template render failed for key=${key}: ${String(err)}`);
-      return {};
-    }
-  }
-
-  private async getCompiledTemplates(key: string): Promise<CompiledTemplates> {
-    if (this.cache.has(key)) {
-      const cached = this.cache.get(key);
-      if (cached) return cached;
-    }
-
-    const folder = path.join(this.templateFolder, key);
-    const compileIfExists = async (fileName: string) => {
-      try {
-        const p = path.join(folder, fileName);
-        const source = await fs.readFile(p, 'utf8');
-        return Handlebars.compile(source);
-      } catch {
-        return undefined;
-      }
-    };
-
-    const compiled: CompiledTemplates = {
-      subject: await compileIfExists('subject.hbs'),
-      html: await compileIfExists('html.hbs'),
-      text: await compileIfExists('text.hbs'),
-    };
-
-    this.cache.set(key, compiled);
-    return compiled;
   }
 
   /**
-   * Invalidate cached templates for a key (call after editing templates on disk)
+   * Fetch template from S3 and render with data
    */
-  invalidateTemplate(key: string): void {
-    this.cache.delete(key);
+  private async renderEmailTemplate(
+    templateKey: string,
+    templateData: Record<string, unknown>,
+  ): Promise<{ subject?: string; html?: string; text?: string }> {
+    try {
+      this.logger.log(`Fetching template from S3: ${templateKey}`);
+
+      // Fetch template from S3 via provider
+      const templateContent = await this.templateProvider.fetchTemplate({
+        templateKey,
+      });
+
+      // Render template with data via renderer
+      const rendered = await this.templateRenderer.render(
+        templateContent,
+        templateData,
+      );
+
+      this.logger.log(`Template rendered successfully: ${templateKey}`);
+      return rendered;
+    } catch (error) {
+      this.logger.error(`Failed to render template: ${templateKey}`, error);
+      throw new InternalServerErrorException(
+        `Failed to render email template: ${templateKey}`,
+        ERROR_CODES.EMAIL_TEMPLATE_RENDER_FAILED,
+        undefined,
+        {
+          templateKey,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      );
+    }
+  }
+
+  /**
+   * Send email via AWS SES
+   */
+  private async sendViaSes(
+    to: string,
+    subject: string,
+    html?: string,
+    text?: string,
+  ): Promise<unknown> {
+    const fromAddress = `${this.senderName} <${this.senderEmail}>`;
+
+    const command = new SendEmailCommand({
+      Source: fromAddress,
+      Destination: {
+        ToAddresses: [to],
+      },
+      Message: {
+        Subject: {
+          Data: subject,
+          Charset: 'UTF-8',
+        },
+        Body: {
+          ...(html && {
+            Html: {
+              Data: html,
+              Charset: 'UTF-8',
+            },
+          }),
+          ...(text && {
+            Text: {
+              Data: text,
+              Charset: 'UTF-8',
+            },
+          }),
+        },
+      },
+    });
+
+    this.logger.log(`Sending email to ${to} via AWS SES`);
+
+    const result = await this.sesClient.send(command);
+
+    this.logger.log(
+      `Email sent successfully to ${to} (MessageId: ${result.MessageId})`,
+    );
+
+    return result;
+  }
+
+  /**
+   * Validate email address format
+   */
+  private validateEmail(email: string): void {
+    if (!email || typeof email !== 'string') {
+      throw new BadRequestException(
+        'Invalid email address',
+        ERROR_CODES.INVALID_EMAIL_ADDRESS,
+        undefined,
+        { email },
+      );
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new BadRequestException(
+        'Invalid email address format',
+        ERROR_CODES.INVALID_EMAIL_ADDRESS,
+        undefined,
+        { email },
+      );
+    }
+  }
+
+  /**
+   * Invalidate template cache (delegates to provider)
+   */
+  invalidateTemplate(templateKey: string): void {
+    this.templateProvider.invalidateCache(templateKey);
+    this.logger.log(`Template cache invalidated: ${templateKey}`);
+  }
+
+  /**
+   * Check if template exists in S3
+   */
+  async templateExists(templateKey: string): Promise<boolean> {
+    return this.templateProvider.templateExists({ templateKey });
   }
 }

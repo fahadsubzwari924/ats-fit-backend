@@ -147,6 +147,15 @@ export class UserService {
   }
 
   /**
+   * Get user by email
+   */
+  async getUserByEmail(email: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { email, is_active: true },
+    });
+  }
+
+  /**
    * Get feature usage for a user by user ID - Reusable method
    * This method can be used by login API and dedicated feature usage endpoint
    * @param userId User ID

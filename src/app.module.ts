@@ -18,7 +18,6 @@ import { RateLimitGuard } from './modules/rate-limit/rate-limit.guard';
 import { UserContextMiddleware } from './shared/middlewares/user-context.middleware';
 import { HealthModule } from './health/health.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
-import { MailchimpModule } from '@mindik/mailchimp-nestjs';
 
 @Module({
   imports: [
@@ -63,11 +62,6 @@ import { MailchimpModule } from '@mindik/mailchimp-nestjs';
     QueueModule,
     HealthModule,
     SubscriptionModule,
-    MailchimpModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => configService.get('MAILCHIMP_TRANSACTIONAL_API_KEY'),
-      inject: [ConfigService],
-    }),
   ],
   providers: [
     {
