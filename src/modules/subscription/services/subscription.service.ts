@@ -20,6 +20,7 @@ import * as crypto from 'crypto';
 import { EMAIL_SERVICE_TOKEN, IEmailService } from '../../../shared/interfaces/email.interface';
 import { User } from '../../../database/entities';
 import { EmailTemplates, EmailSubjects } from '../../../shared/enums';
+import { IAwsEmailConfig, IRecipients } from '../../../shared/interfaces';
 
 
 @Injectable()
@@ -269,18 +270,61 @@ export class SubscriptionService {
   }
 
   async handleFailedPayment(payload: any, user: User) {
-    // return this.processPaymentGatewayEvent(payload);
-    await this.emailService.send(user.email, {
-      templateKey: EmailTemplates.PAYMENT_FAILED,
-      templateData: {
-        amount: payload?.data?.attributes?.total_formatted,
-        userName: user.full_name
-      },
-      subject: EmailSubjects.PAYMENT_FAILED,
-    });
+
+    try {
+      await this.emailService.sendEmail(
+        this.createAWSEmailConfig(),
+        { emailsTo: [user?.email] },
+        { 
+          fromAddress: this.configService.get<string>('AWS_SES_FROM_EMAIL') || 'info@atsfitt.com',
+          senderName: this.configService.get<string>('AWS_SES_FROM_NAME') || 'ATS Fit'
+        },
+        {
+          templateKey: EmailTemplates.PAYMENT_FAILED,
+          templateData: {
+            amount: payload?.data?.attributes?.total_formatted,
+            userName: user.full_name
+          },
+          subject: EmailSubjects.PAYMENT_FAILED,
+        }
+      );
+
+      this.logger.log('Payment failed email sent successfully', {
+        data: user,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      this.logger.error('Failed to send payment failed email', {
+        error,
+        data: user,
+        timestamp: Date.now(),
+      });
+    }
+
+  
   }
 
   //#region Payment Gateway Event Processing (Decoupled)
+
+  private createAWSEmailConfig(): IAwsEmailConfig {
+    const region = this.configService.get<string>('AWS_REGION') || 'us-east-1';
+    const accessKeyId = this.configService.get<string>('AWS_SES_USER_ACCESS_KEY_ID');
+    const secretAccessKey = this.configService.get<string>('AWS_SES_USER_SECRET_ACCESS_KEY');
+    
+    return {
+      region,
+      accessKeyId,
+      secretAccessKey
+    }
+  }
+
+  private createRecipients(emails: string[], emailsCc?: string[], emailsBcc?: string[]): IRecipients {
+    return {
+      emailsTo: emails,
+      emailsCc: emailsCc,
+      emailsBcc: emailsBcc,
+    };
+  }
 
   /**
    * Verify payment gateway signature

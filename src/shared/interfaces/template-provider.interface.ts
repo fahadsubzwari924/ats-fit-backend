@@ -27,7 +27,7 @@ export interface ITemplateProvider {
    * @param params Template fetch parameters
    * @returns Template content (subject, html, text)
    */
-  fetchTemplate(params: TemplateFetchParams): Promise<TemplateContent>;
+  fetchTemplate(params: TemplateFetchParams): Promise<string>;
 
   /**
    * Check if template exists

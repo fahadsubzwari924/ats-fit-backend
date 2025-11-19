@@ -33,45 +33,72 @@ export class HandlebarsTemplateRendererService implements ITemplateRenderer {
   /**
    * Render template with context data
    */
-  async render(
-    templateSource: { subject?: string; html?: string; text?: string },
-    context: RenderContext,
-  ): Promise<RenderedTemplate> {
+  async bindTemplate(emailTemplate: string, emailTemplateContext: RenderContext): Promise<string> {
     try {
-      const rendered: RenderedTemplate = {};
+        // Validate inputs before rendering
+        this.validateEmailTemplateContent(emailTemplate, emailTemplateContext);
 
-      // Render subject
-      if (templateSource.subject) {
-        const compiledSubject = Handlebars.compile(templateSource.subject);
-        rendered.subject = compiledSubject(context).replace(/\s+/g, ' ').trim();
-      }
+        // Render HTML
+        const compiledHtml = Handlebars.compile(emailTemplate);
+        return compiledHtml(emailTemplateContext);
 
-      // Render HTML
-      if (templateSource.html) {
-        const compiledHtml = Handlebars.compile(templateSource.html);
-        rendered.html = compiledHtml(context);
-      }
-
-      // Render text
-      if (templateSource.text) {
-        const compiledText = Handlebars.compile(templateSource.text);
-        rendered.text = compiledText(context);
-      }
-
-      this.logger.debug('Template rendered successfully');
-      return rendered;
     } catch (error) {
-      this.logger.error('Failed to render template', error);
+        this.logger.error('Failed to complie template', error);
+        throw new InternalServerErrorException(
+            'Failed to complie email template',
+            ERROR_CODES.INTERNAL_SERVER,
+            undefined,
+            {
+                error: error instanceof Error ? error.message : 'Unknown error',
+            },
+        );
+    }
+  }
+
+  private validateEmailTemplateContent(emailTemplate: string, emailTemplateContext: RenderContext): void {
+    // Validate email template
+    if (!emailTemplate) {
       throw new InternalServerErrorException(
-        'Failed to render email template',
+        'Email template content is required',
         ERROR_CODES.INTERNAL_SERVER,
         undefined,
-        {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          hasSubject: !!templateSource.subject,
-          hasHtml: !!templateSource.html,
-          hasText: !!templateSource.text,
+        { reason: 'Template content is empty or undefined' },
+      );
+    }
+
+    if (typeof emailTemplate !== 'string') {
+      throw new InternalServerErrorException(
+        'Email template must be a string',
+        ERROR_CODES.INTERNAL_SERVER,
+        undefined,
+        { 
+          reason: 'Invalid template type',
+          receivedType: typeof emailTemplate,
         },
+      );
+    }
+
+    // Validate email template context
+    if (!emailTemplateContext || typeof emailTemplateContext !== 'object') {
+      throw new InternalServerErrorException(
+        'Email template context must be a valid object',
+        ERROR_CODES.INTERNAL_SERVER,
+        undefined,
+        { 
+          reason: 'Invalid context type',
+          receivedType: typeof emailTemplateContext,
+        },
+      );
+    }
+
+    // Check for required context properties (if any critical ones exist)
+    // This can be extended based on business requirements
+    if (Array.isArray(emailTemplateContext)) {
+      throw new InternalServerErrorException(
+        'Email template context cannot be an array',
+        ERROR_CODES.INTERNAL_SERVER,
+        undefined,
+        { reason: 'Context must be a plain object, not an array' },
       );
     }
   }

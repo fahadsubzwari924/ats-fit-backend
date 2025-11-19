@@ -26,10 +26,10 @@ export interface ITemplateRenderer {
    * @param context Data to bind to template
    * @returns Rendered template content
    */
-  render(
-    templateSource: { subject?: string; html?: string; text?: string },
+  bindTemplate(
+    templateSource: string,
     context: RenderContext,
-  ): Promise<RenderedTemplate>;
+  ): Promise<string>;
 
   /**
    * Compile template for better performance (optional)

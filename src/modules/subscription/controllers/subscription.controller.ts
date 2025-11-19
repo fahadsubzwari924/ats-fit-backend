@@ -37,6 +37,8 @@ import { ExternalPaymentGatewayEvents } from '../externals/enums';
 import { Inject } from '@nestjs/common';
 import { IEmailService, EMAIL_SERVICE_TOKEN } from '../../../shared/interfaces/email.interface';
 import { EmailTemplates } from '../../../shared/enums/email-templates.enum';
+import { ConfigService } from '@nestjs/config';
+import { EmailSubjects } from '../../../shared/enums';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -51,6 +53,7 @@ export class SubscriptionController {
     private readonly paymentHistoryService: PaymentHistoryService, // ✅ Payment history handling
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly userService: UserService,
+    private readonly configService: ConfigService,
     @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService, // Inject email service via token
   ) {}
 
@@ -478,15 +481,41 @@ export class SubscriptionController {
   @Get('test-email')
   async testEmail() {
     try {
-      const response = await this.emailService.send('info@atsfitt.com', {
-        templateKey: EmailTemplates.PAYMENT_FAILED,
-        templateData: {
-          amount: 1000,
-          userName: 'Ahsan',
-          orderId: '151515151',
+      // const response = await this.emailService.sendEmail(
+      //   'info@atsfitt.com', {
+      //   templateKey: EmailTemplates.PAYMENT_FAILED,
+      //   templateData: {
+      //     amount: 1000,
+      //     userName: 'Ahsan',
+      //     orderId: '151515151',
+      //   },
+      //   subject: 'Ats Fit Payment Failure Test',
+      // });
+
+      const awsConfig = {
+        region: this.configService.get<string>('AWS_REGION') || 'us-east-1',
+        accessKeyId: this.configService.get<string>('AWS_SES_USER_ACCESS_KEY_ID'),
+        secretAccessKey: this.configService.get<string>('AWS_SES_USER_SECRET_ACCESS_KEY')
+      }
+
+
+      const response = await this.emailService.sendEmail(
+        awsConfig,
+        { emailsTo: ['info@atsfitt.com'] },
+        { 
+          fromAddress: this.configService.get<string>('AWS_SES_FROM_EMAIL') || 'info@atsfitt.com',
+          senderName: this.configService.get<string>('AWS_SES_FROM_NAME') || 'ATS Fit'
         },
-        subject: 'Ats Fit Payment Failure Test',
-      });
+        {
+          templateKey: EmailTemplates.PAYMENT_FAILED,
+          templateData: {
+            amount: 1000,
+            userName: 'Ahsan'
+          },
+          subject: EmailSubjects.PAYMENT_FAILED,
+        }
+      );
+
       return response;
     } catch (error) {
       this.logger.error('Failed to send test email:', error);

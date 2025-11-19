@@ -9,6 +9,7 @@ import { S3Service } from '../modules/external/services/s3.service';
 import {
   NotFoundException,
   InternalServerErrorException,
+  BadRequestException,
 } from '../exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../constants/error-codes';
 
@@ -25,10 +26,7 @@ import { ERROR_CODES } from '../constants/error-codes';
 @Injectable()
 export class S3TemplateProviderService implements ITemplateProvider {
   private readonly logger = new Logger(S3TemplateProviderService.name);
-  private readonly cache = new Map<
-    string,
-    { content: TemplateContent; timestamp: number }
-  >();
+  private readonly cache = new Map<string,{ content: string; timestamp: number }>();
   private readonly defaultBucket: string;
   private readonly defaultCacheTtl: number;
 
@@ -53,11 +51,18 @@ export class S3TemplateProviderService implements ITemplateProvider {
    * Structure: email-templates/{templateKey}/subject.hbs, html.hbs, text.hbs
    * OR: email-templates/{templateKey}.hbs (single file)
    */
-  async fetchTemplate(params: TemplateFetchParams): Promise<TemplateContent> {
+  async fetchTemplate(params: TemplateFetchParams): Promise<string> {
     const { templateKey, bucketName, cacheTtl } = params;
     const bucket = bucketName || this.defaultBucket;
     const ttl = cacheTtl || this.defaultCacheTtl;
     const cacheKey = `${bucket}:${templateKey}`;
+
+    if (!templateKey) {
+      throw new BadRequestException(
+        'Template key is required',
+        ERROR_CODES.INVALID_TEMPLATE_KEY,
+      );
+    }
 
     // Check cache first
     const cached = this.getCachedTemplate(cacheKey, ttl);
@@ -71,6 +76,16 @@ export class S3TemplateProviderService implements ITemplateProvider {
     try {
       // Try structured approach first (folder with multiple files)
       const content = await this.fetchSingleFileTemplate(bucket, templateKey);
+
+      if (!content) {
+        this.logger.log(
+            `fetchSingleFileTemplate -> S3 Template content not found in bucket: ${this.defaultBucket} and templateKey: ${templateKey}`,
+        );
+        throw new NotFoundException(
+          'Email template not found',
+          ERROR_CODES.TEMPLATE_NOT_FOUND,
+        );
+      }
       
       // Cache the result
       this.cache.set(cacheKey, {
@@ -82,21 +97,6 @@ export class S3TemplateProviderService implements ITemplateProvider {
     } catch (error) {
       // Fallback: try single file approach
     }
-
-    // try {
-    //   // Try structured approach first (folder with multiple files)
-    //   const content = await this.fetchStructuredTemplate(bucket, templateKey);
-      
-    //   // Cache the result
-    //   this.cache.set(cacheKey, {
-    //     content,
-    //     timestamp: Date.now(),
-    //   });
-
-    //   return content;
-    // } catch (error) {
-    //   // Fallback: try single file approach
-    // }
   }
 
   /**
@@ -139,13 +139,9 @@ export class S3TemplateProviderService implements ITemplateProvider {
   private async fetchSingleFileTemplate(
     bucket: string,
     templateKey: string,
-  ): Promise<TemplateContent> {
+  ): Promise<string> {
     const key = `email-templates/${templateKey}.hbs`;
-    const htmlContent = await this.fetchTemplateFile(bucket, key);
-
-    return {
-      html: htmlContent,
-    };
+    return  await this.fetchTemplateFile(bucket, key);
   }
 
   /**
@@ -206,7 +202,7 @@ export class S3TemplateProviderService implements ITemplateProvider {
   private getCachedTemplate(
     cacheKey: string,
     ttl: number,
-  ): TemplateContent | null {
+  ): string | null {
     const cached = this.cache.get(cacheKey);
     if (!cached) return null;
 
