@@ -1,9 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSubscription } from '../../../database/entities/user-subscription.entity';
 import { SubscriptionStatus } from '../enums/subscription-status.enum';
-import { Currency } from '../enums/payment.enum';
 import { SubscriptionCancellationResponse } from '../models';
 import {
   ICreateSubscriptionData,
@@ -14,10 +13,15 @@ import {
   NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
-import { ExternalPaymentGatewayEvents } from '../externals/enums/external-payment-gateway-events.enum';
 import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
+import { CreateSubscriptionFromPaymentGatewayDto } from '../dtos/create-subscription-from-payment-gateway.dto';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import { EMAIL_SERVICE_TOKEN, IEmailService } from '../../../shared/interfaces/email.interface';
+import { SubscriptionPlan, User } from '../../../database/entities';
+import { EmailTemplates, EmailSubjects } from '../../../shared/enums';
+import { IAwsEmailConfig, IRecipients } from '../../../shared/interfaces';
+
 
 @Injectable()
 export class SubscriptionService {
@@ -27,6 +31,7 @@ export class SubscriptionService {
     @InjectRepository(UserSubscription)
     private readonly subscriptionRepository: Repository<UserSubscription>,
     private readonly configService: ConfigService,
+    @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService
   ) {}
 
   async create(data: ICreateSubscriptionData): Promise<UserSubscription> {
@@ -260,7 +265,68 @@ export class SubscriptionService {
     return !!activeSubscription;
   }
 
+  async handleSuccessfulPayment(payload: any) {
+    return this.processPaymentGatewayEvent(payload);
+  }
+
+  async handleFailedPayment(payload: any, user: User, plan: SubscriptionPlan) {
+
+    try {
+      await this.emailService.sendEmail(
+        this.createAWSEmailConfig(),
+        { emailsTo: [user?.email] },
+        { 
+          fromAddress: this.configService.get<string>('AWS_SES_FROM_EMAIL') || 'info@atsfitt.com',
+          senderName: this.configService.get<string>('AWS_SES_FROM_NAME') || 'ATS Fit'
+        },
+        {
+          templateKey: EmailTemplates.PAYMENT_FAILED,
+          templateData: {
+            amount: payload?.data?.attributes?.total_formatted,
+            userName: user.full_name,
+            planName: plan?.plan_name,
+            attemptDate: payload?.data?.attributes?.created_at
+          },
+          subject: EmailSubjects.PAYMENT_FAILED,
+        }
+      );
+
+      this.logger.log('Payment failed email sent successfully', {
+        data: user,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      this.logger.error('Failed to send payment failed email', {
+        error,
+        data: user,
+        timestamp: Date.now(),
+      });
+    }
+
+  
+  }
+
   //#region Payment Gateway Event Processing (Decoupled)
+
+  private createAWSEmailConfig(): IAwsEmailConfig {
+    const region = this.configService.get<string>('AWS_REGION') || 'us-east-1';
+    const accessKeyId = this.configService.get<string>('AWS_SES_USER_ACCESS_KEY_ID');
+    const secretAccessKey = this.configService.get<string>('AWS_SES_USER_SECRET_ACCESS_KEY');
+    
+    return {
+      region,
+      accessKeyId,
+      secretAccessKey
+    }
+  }
+
+  private createRecipients(emails: string[], emailsCc?: string[], emailsBcc?: string[]): IRecipients {
+    return {
+      emailsTo: emails,
+      emailsCc: emailsCc,
+      emailsBcc: emailsBcc,
+    };
+  }
 
   /**
    * Verify payment gateway signature
@@ -299,40 +365,33 @@ export class SubscriptionService {
   async processPaymentGatewayEvent(payload: any): Promise<any> {
     try {
       this.logger.log(
-        `Processing payment gateway event: ${payload.meta?.event_name}`,
+        `Processing payment gateway event: ${payload?.meta?.event_name}`,
       );
 
-      const eventType = payload.meta?.event_name;
+      // Verify subscription was created
+
+      const eventType = payload?.meta?.event_name;
       let subscriptionInfo = null;
 
-      // Handle subscription creation events
-      if (
-        eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED ||
-        eventType === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS
-      ) {
-        await this.createSubscriptionFromPaymentGatewayEvent(payload);
+      const subscription = await this.createSubscriptionFromPaymentGatewayEvent(payload);
 
-        // Verify subscription was created
-        try {
-          const subscription = await this.findByExternalId(payload.data?.id);
-          if (subscription) {
-            subscriptionInfo = {
-              subscriptionId: subscription.id,
-              status: subscription.status,
-              isActive: subscription.is_active,
-              userId: subscription.user_id,
-              subscriptionPlanId: subscription.subscription_plan_id,
-            };
-            this.logger.log(
-              `✅ Subscription entry confirmed in database: ${subscription.id}`,
-            );
-          }
-        } catch (error) {
-          this.logger.warn(
-            `Could not verify subscription creation: ${error.message}`,
-          );
-        }
+      if (!subscription) {
+        this.logger.warn(
+          `Subscription creation failed or returned null for event: ${eventType}`,
+        );
+        return null;
       }
+
+      subscriptionInfo = {
+        subscriptionId: subscription?.id,
+        status: subscription?.status,
+        isActive: subscription?.is_active,
+        userId: subscription?.user_id,
+        subscriptionPlanId: subscription?.subscription_plan_id,
+      };
+      this.logger.log(
+        `✅ Subscription entry confirmed in database: ${subscription?.id}`,
+      );
 
       return {
         eventType: eventType,
@@ -350,32 +409,12 @@ export class SubscriptionService {
    */
   private async createSubscriptionFromPaymentGatewayEvent(
     payload: PaymentConfirmationDto,
-  ): Promise<void> {
+  ): Promise<UserSubscription> {
     try {
       this.logger.log(`🔥 DEBUG: Starting subscription creation process...`);
 
-      const subscriptionData: ICreateSubscriptionData = {
-        payment_gateway_subscription_id: payload?.data?.id,
-        subscription_plan_id: payload?.meta?.custom_data?.plan_id,
-        user_id: payload?.meta?.custom_data?.user_id,
-        status: this.mapPaymentGatewayStatusToSubscriptionStatus(
-          payload?.data?.attributes?.status,
-        ),
-        amount: payload?.data?.attributes?.total || 0,
-        currency: payload?.data?.attributes?.currency || Currency.USD,
-        starts_at: new Date(
-          payload?.data?.attributes?.created_at || Date.now(),
-        ),
-        ends_at: new Date(
-          payload?.data?.attributes?.renews_at ||
-            payload?.data?.attributes?.ends_at ||
-            Date.now() + 30 * 24 * 60 * 60 * 1000,
-        ), // Default to 30 days
-        metadata: {
-          paymentGatewayData: payload?.data?.attributes,
-          customData: payload?.meta?.custom_data,
-        },
-      };
+      // Transform payment gateway payload to subscription data using DTO
+      const subscriptionData = new CreateSubscriptionFromPaymentGatewayDto(payload);
 
       this.logger.log(
         `🔥 DEBUG: Subscription data to create:`,
@@ -386,13 +425,15 @@ export class SubscriptionService {
       const subscription = await this.create(subscriptionData);
 
       this.logger.log(`✅ SUCCESS: Created subscription in database!`);
-      this.logger.log(`✅ SUCCESS: Subscription ID: ${subscription.id}`);
+      this.logger.log(`✅ SUCCESS: Subscription ID: ${subscription?.id}`);
       this.logger.log(
-        `✅ SUCCESS: Subscription status: ${subscription.status}`,
+        `✅ SUCCESS: Subscription status: ${subscription?.status}`,
       );
       this.logger.log(
-        `✅ SUCCESS: Subscription isActive: ${subscription.is_active}`,
+        `✅ SUCCESS: Subscription isActive: ${subscription?.is_active}`,
       );
+
+      return subscription;
     } catch (error) {
       this.logger.error(
         `❌ CRITICAL ERROR: Failed to create subscription from payment gateway event:`,
@@ -407,25 +448,6 @@ export class SubscriptionService {
 
       throw error;
     }
-  }
-
-  /**
-   * Map payment gateway status to our SubscriptionStatus enum
-   */
-  private mapPaymentGatewayStatusToSubscriptionStatus(
-    status: string,
-  ): SubscriptionStatus {
-    const statusMap: Record<string, SubscriptionStatus> = {
-      active: SubscriptionStatus.ACTIVE,
-      cancelled: SubscriptionStatus.CANCELLED,
-      expired: SubscriptionStatus.EXPIRED,
-      paused: SubscriptionStatus.PAUSED,
-      past_due: SubscriptionStatus.PAST_DUE,
-      on_trial: SubscriptionStatus.ACTIVE,
-      unpaid: SubscriptionStatus.PAST_DUE,
-    };
-
-    return statusMap[status?.toLowerCase()] || SubscriptionStatus.ACTIVE;
   }
 
   //#endregion
