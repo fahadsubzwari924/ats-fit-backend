@@ -390,9 +390,9 @@ export class SubscriptionController {
       );
 
       // Step 1: Get user by email from payload
-      const userEmail = payload?.meta?.custom_data?.email;
+      const {email, plan_id} = payload?.meta?.custom_data;
       
-      if (!userEmail) {
+      if (!email) {
         this.logger.warn(
           `🔥 DEBUG: Email not found in payment-confirmation payload`,
         );
@@ -402,12 +402,12 @@ export class SubscriptionController {
         );
       }
 
-      this.logger.log(`🔥 DEBUG: Looking up user by email: ${userEmail}`);
-      const user = await this.userService.getUserByEmail(userEmail);
+      this.logger.log(`🔥 DEBUG: Looking up user by email: ${email}`);
+      const user = await this.userService.getUserByEmail(email);
 
       if (!user) {
         this.logger.warn(
-          `🔥 DEBUG: User not found for email: ${userEmail}`,
+          `🔥 DEBUG: User not found for email: ${email}`,
         );
         throw new NotFoundException(
           'User not found',
@@ -417,12 +417,28 @@ export class SubscriptionController {
 
       this.logger.log(`🔥 DEBUG: User found - ID: ${user.id}, Name: ${user.full_name}`);
 
+      const subscriptionPlan = await this.subscriptionPlanService.findById(plan_id);
+
+      if (!subscriptionPlan) {
+        this.logger.warn(
+          `🔥 DEBUG: Subscription plan not found for ID: ${plan_id}`,
+        );
+        throw new NotFoundException(
+          'Subscription plan not found',
+          ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
+        );
+      }
+
+      this.logger.log(`🔥 DEBUG: Subscription plan found - ID: ${subscriptionPlan.id}, Name: ${subscriptionPlan.plan_name}`);
+
       // Step 2: Process subscription logic (decoupled from payment history)
       let subscriptionResult;
       if (payload.meta?.event_name === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS) {
-        subscriptionResult = await this.subscriptionService.handleSuccessfulPayment(payload);
+        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload, user, subscriptionPlan);
+        
+        // subscriptionResult = await this.subscriptionService.handleSuccessfulPayment(payload);
       } else {
-        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload, user);
+        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload, user, subscriptionPlan);
       }
 
       this.logger.log(
@@ -481,16 +497,6 @@ export class SubscriptionController {
   @Get('test-email')
   async testEmail() {
     try {
-      // const response = await this.emailService.sendEmail(
-      //   'info@atsfitt.com', {
-      //   templateKey: EmailTemplates.PAYMENT_FAILED,
-      //   templateData: {
-      //     amount: 1000,
-      //     userName: 'Ahsan',
-      //     orderId: '151515151',
-      //   },
-      //   subject: 'Ats Fit Payment Failure Test',
-      // });
 
       const awsConfig = {
         region: this.configService.get<string>('AWS_REGION') || 'us-east-1',

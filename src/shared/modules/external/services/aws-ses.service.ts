@@ -219,8 +219,8 @@ export class AwsSesService implements IEmailService {
       Source: fromAddress,
       Destination: {
         ToAddresses: recipients?.emailsTo,
-        CcAddresses: recipients?.emailsCc.length ? recipients.emailsCc : [],
-        BccAddresses: recipients?.emailsBcc.length ? recipients.emailsBcc : [],
+        CcAddresses: recipients?.emailsCc?.length ? recipients.emailsCc : [],
+        BccAddresses: recipients?.emailsBcc?.length ? recipients.emailsBcc : [],
       },
       Message: {
         Subject: {
@@ -238,12 +238,12 @@ export class AwsSesService implements IEmailService {
       },
     });
 
-    this.logger.log(`Sending email to ${recipients.emailsTo.join(', ')} via AWS SES`);
+    this.logger.log(`Sending email to ${recipients?.emailsTo.join(', ')} via AWS SES`);
 
     const result = await this.sesClient.send(command);
 
     this.logger.log(
-      `Email sent successfully to ${recipients.emailsTo.join(', ')} (MessageId: ${result.MessageId})`,
+      `Email sent successfully to ${recipients?.emailsTo.join(', ')} (MessageId: ${result?.MessageId})`,
     );
 
     return result;

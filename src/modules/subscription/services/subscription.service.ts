@@ -18,7 +18,7 @@ import { CreateSubscriptionFromPaymentGatewayDto } from '../dtos/create-subscrip
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { EMAIL_SERVICE_TOKEN, IEmailService } from '../../../shared/interfaces/email.interface';
-import { User } from '../../../database/entities';
+import { SubscriptionPlan, User } from '../../../database/entities';
 import { EmailTemplates, EmailSubjects } from '../../../shared/enums';
 import { IAwsEmailConfig, IRecipients } from '../../../shared/interfaces';
 
@@ -269,7 +269,7 @@ export class SubscriptionService {
     return this.processPaymentGatewayEvent(payload);
   }
 
-  async handleFailedPayment(payload: any, user: User) {
+  async handleFailedPayment(payload: any, user: User, plan: SubscriptionPlan) {
 
     try {
       await this.emailService.sendEmail(
@@ -283,7 +283,9 @@ export class SubscriptionService {
           templateKey: EmailTemplates.PAYMENT_FAILED,
           templateData: {
             amount: payload?.data?.attributes?.total_formatted,
-            userName: user.full_name
+            userName: user.full_name,
+            planName: plan?.plan_name,
+            attemptDate: payload?.data?.attributes?.created_at
           },
           subject: EmailSubjects.PAYMENT_FAILED,
         }
