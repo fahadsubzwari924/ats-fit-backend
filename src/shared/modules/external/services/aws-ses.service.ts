@@ -1,5 +1,4 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { EmailSendPayload, IEmailService } from '../../../interfaces/email.interface';
 import {
@@ -35,12 +34,8 @@ import { EmailSubjects } from '../../../enums';
 @Injectable()
 export class AwsSesService implements IEmailService {
   private readonly logger = new Logger(AwsSesService.name);
-  private sesClient: SESClient;
-  private readonly senderEmail: string;
-  private readonly senderName: string;
 
   constructor(
-    private readonly configService: ConfigService,
     @Inject(TEMPLATE_PROVIDER_TOKEN)
     private readonly templateProvider: ITemplateProvider,
     @Inject(TEMPLATE_RENDERER_TOKEN)
@@ -77,13 +72,26 @@ export class AwsSesService implements IEmailService {
    */
   async sendEmail(awsConfig: IAwsEmailConfig, recipients: IRecipients, senderConfig: IEmailSenderConfig, payload: EmailSendPayload): Promise<unknown> {
 
-    this.validateSendEmailParams(recipients, senderConfig, payload);
-   
-    this.sesClient = this.buildSesClient(awsConfig);
-
     try {
 
-      let subject = payload?.subject as string || EmailSubjects.NOTIFICATION_FROM_ATS_FIT;
+      this.validateSendEmailParams(recipients, senderConfig, payload);
+   
+      const sesClient: SESClient = this.buildSesClient(awsConfig);
+
+      // Validate SES client
+      if (!sesClient || !(sesClient instanceof SESClient)) {
+        throw new InternalServerErrorException(
+          'Invalid SES client instance',
+          ERROR_CODES.INTERNAL_SERVER,
+          undefined,
+          { 
+            reason: 'SES client must be an instance of SESClient',
+            receivedType: typeof sesClient,
+          },
+        );
+      }
+
+      const subject = payload?.subject as string || EmailSubjects.NOTIFICATION_FROM_ATS_FIT;
 
       // Fetch template from S3 via provider
       const templateContent = await this.templateProvider.fetchTemplate({
@@ -100,6 +108,7 @@ export class AwsSesService implements IEmailService {
         );
       }
       
+      // Binding Templates with Dynamic Data
       const bindedHtmlTemplate = await this.buildEmailTemplate(
         templateContent,
         payload?.templateData,
@@ -117,7 +126,7 @@ export class AwsSesService implements IEmailService {
 
 
       // Send email via SES to all recipients
-      return await this.sendViaSes(recipients, senderConfig, subject, bindedHtmlTemplate);
+      return await this.sendViaSes(recipients, senderConfig, subject, bindedHtmlTemplate, sesClient);
     } catch (error) {
       if (
         error instanceof BadRequestException ||
@@ -214,7 +223,11 @@ export class AwsSesService implements IEmailService {
     senderConfig: IEmailSenderConfig,
     subject: string,
     html: string,
+    sesClient: SESClient,
   ): Promise<unknown> {
+    // Validate parameters
+    this.validateSendViaSesParams(recipients, senderConfig, subject, html);
+
     const fromAddress = `${senderConfig.senderName} <${senderConfig.fromAddress}>`;
 
     const command = new SendEmailCommand({
@@ -242,13 +255,163 @@ export class AwsSesService implements IEmailService {
 
     this.logger.log(`Sending email to ${recipients?.emailsTo.join(', ')} via AWS SES`);
 
-    const result = await this.sesClient.send(command);
+    const result = await sesClient.send(command);
 
     this.logger.log(
       `Email sent successfully to ${recipients?.emailsTo.join(', ')} (MessageId: ${result?.MessageId})`,
     );
 
     return result;
+  }
+
+  /**
+   * Validate sendViaSes parameters
+   */
+  private validateSendViaSesParams(
+    recipients: IRecipients,
+    senderConfig: IEmailSenderConfig,
+    subject: string,
+    html: string,
+  ): void {
+    // Validate recipients
+    if (!recipients || typeof recipients !== 'object') {
+      throw new BadRequestException(
+        'Recipients configuration is required',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { recipients },
+      );
+    }
+
+    if (Array.isArray(recipients)) {
+      throw new BadRequestException(
+        'Recipients must be an object, not an array',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { recipients },
+      );
+    }
+
+    if (!recipients?.emailsTo || !Array.isArray(recipients?.emailsTo) || recipients?.emailsTo.length === 0) {
+      throw new BadRequestException(
+        'At least one recipient email (emailsTo) is required',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { recipients },
+      );
+    }
+
+    // Validate each email in emailsTo
+    recipients?.emailsTo?.forEach((email, index) => {
+      this.validateEmail(email, index);
+    });
+
+    // Validate emailsCc if provided
+    if (recipients?.emailsCc && recipients?.emailsCc?.length > 0) {
+      if (!Array.isArray(recipients?.emailsCc)) {
+        throw new BadRequestException(
+          'CC emails must be an array',
+          ERROR_CODES.BAD_REQUEST,
+          undefined,
+          { emailsCc: recipients?.emailsCc },
+        );
+      }
+
+      recipients?.emailsCc?.forEach((email, index) => {
+        this.validateEmail(email, index);
+      });
+    }
+
+    // Validate emailsBcc if provided
+    if (recipients?.emailsBcc && recipients?.emailsBcc?.length > 0) {
+      if (!Array.isArray(recipients?.emailsBcc)) {
+        throw new BadRequestException(
+          'BCC emails must be an array',
+          ERROR_CODES.BAD_REQUEST,
+          undefined,
+          { emailsBcc: recipients?.emailsBcc },
+        );
+      }
+
+      recipients?.emailsBcc?.forEach((email, index) => {
+        this.validateEmail(email, index);
+      });
+    }
+
+    // Validate senderConfig
+    if (!senderConfig || typeof senderConfig !== 'object') {
+      throw new BadRequestException(
+        'Sender configuration is required',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { senderConfig },
+      );
+    }
+
+    if (Array.isArray(senderConfig)) {
+      throw new BadRequestException(
+        'Sender configuration must be an object, not an array',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { senderConfig },
+      );
+    }
+
+    if (!senderConfig?.fromAddress || typeof senderConfig?.fromAddress !== 'string') {
+      throw new BadRequestException(
+        'Sender email address is required',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { fromAddress: senderConfig?.fromAddress },
+      );
+    }
+
+    if (!senderConfig?.senderName || typeof senderConfig?.senderName !== 'string') {
+      throw new BadRequestException(
+        'Sender name is required',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { senderName: senderConfig?.senderName },
+      );
+    }
+
+    // Validate subject
+    if (!subject || typeof subject !== 'string') {
+      throw new BadRequestException(
+        'Email subject is required and must be a string',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { subject, type: typeof subject },
+      );
+    }
+
+    if (subject?.trim() === '') {
+      throw new BadRequestException(
+        'Email subject cannot be empty',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { subject },
+      );
+    }
+
+    // Validate html content
+    if (!html || typeof html !== 'string') {
+      throw new BadRequestException(
+        'Email HTML content is required and must be a string',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { html: html ? 'provided' : 'missing', type: typeof html },
+      );
+    }
+
+    if (html?.trim() === '') {
+      throw new BadRequestException(
+        'Email HTML content cannot be empty',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { html: 'empty string' },
+      );
+    }
   }
 
   /**
