@@ -9,6 +9,7 @@ import {
   Logger,
   Headers,
   ParseUUIDPipe,
+  Inject
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -34,11 +35,9 @@ import { MESSAGES } from '../../../shared/constants/messages';
 import { ERROR_CODES } from 'src/shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
 import { ExternalPaymentGatewayEvents } from '../externals/enums';
-import { Inject } from '@nestjs/common';
 import { IEmailService, EMAIL_SERVICE_TOKEN } from '../../../shared/interfaces/email.interface';
-import { EmailTemplates } from '../../../shared/enums/email-templates.enum';
+import { EmailSubjects, EmailTemplates, AwsConfigKeys } from '../../../shared/enums';
 import { ConfigService } from '@nestjs/config';
-import { EmailSubjects } from '../../../shared/enums';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -499,9 +498,9 @@ export class SubscriptionController {
     try {
 
       const awsConfig = {
-        region: this.configService.get<string>('AWS_REGION') || 'us-east-1',
-        accessKeyId: this.configService.get<string>('AWS_SES_USER_ACCESS_KEY_ID'),
-        secretAccessKey: this.configService.get<string>('AWS_SES_USER_SECRET_ACCESS_KEY')
+        region: this.configService.get<string>(AwsConfigKeys.AWS_REGION) || 'us-east-1',
+        accessKeyId: this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_ACCESS_KEY_ID),
+        secretAccessKey: this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_SECRET_ACCESS_KEY)
       }
 
 
@@ -509,8 +508,8 @@ export class SubscriptionController {
         awsConfig,
         { emailsTo: ['info@atsfitt.com'] },
         { 
-          fromAddress: this.configService.get<string>('AWS_SES_FROM_EMAIL') || 'info@atsfitt.com',
-          senderName: this.configService.get<string>('AWS_SES_FROM_NAME') || 'ATS Fit'
+          fromAddress: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_EMAIL) || 'info@atsfitt.com',
+          senderName: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_NAME) || 'ATS Fit'
         },
         {
           templateKey: EmailTemplates.PAYMENT_FAILED,

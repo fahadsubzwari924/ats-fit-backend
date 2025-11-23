@@ -19,7 +19,7 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { EMAIL_SERVICE_TOKEN, IEmailService } from '../../../shared/interfaces/email.interface';
 import { SubscriptionPlan, User } from '../../../database/entities';
-import { EmailTemplates, EmailSubjects } from '../../../shared/enums';
+import { EmailTemplates, EmailSubjects, AwsConfigKeys } from '../../../shared/enums';
 import { IAwsEmailConfig, IRecipients } from '../../../shared/interfaces';
 
 
@@ -276,8 +276,8 @@ export class SubscriptionService {
         this.createAWSEmailConfig(),
         { emailsTo: [user?.email] },
         { 
-          fromAddress: this.configService.get<string>('AWS_SES_FROM_EMAIL') || 'info@atsfitt.com',
-          senderName: this.configService.get<string>('AWS_SES_FROM_NAME') || 'ATS Fit'
+          fromAddress: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_EMAIL) || 'info@atsfitt.com',
+          senderName: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_NAME) || 'ATS Fit'
         },
         {
           templateKey: EmailTemplates.PAYMENT_FAILED,
@@ -309,9 +309,9 @@ export class SubscriptionService {
   //#region Payment Gateway Event Processing (Decoupled)
 
   private createAWSEmailConfig(): IAwsEmailConfig {
-    const region = this.configService.get<string>('AWS_REGION') || 'us-east-1';
-    const accessKeyId = this.configService.get<string>('AWS_SES_USER_ACCESS_KEY_ID');
-    const secretAccessKey = this.configService.get<string>('AWS_SES_USER_SECRET_ACCESS_KEY');
+    const region = this.configService.get<string>(AwsConfigKeys.AWS_REGION) || 'us-east-1';
+    const accessKeyId = this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_ACCESS_KEY_ID);
+    const secretAccessKey = this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_SECRET_ACCESS_KEY);
     
     return {
       region,

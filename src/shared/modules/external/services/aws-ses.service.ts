@@ -16,6 +16,7 @@ import {
 } from '../../../exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../constants/error-codes';
 import { IRecipients, IAwsEmailConfig, IEmailSenderConfig } from '../../../interfaces';
+import { EmailSubjects } from '../../../enums';
 
 /**
  * AWS SES Email Service
@@ -82,25 +83,30 @@ export class AwsSesService implements IEmailService {
 
     try {
 
-      let html: string = '';
-      let subject = payload?.subject as string | undefined;
+      let subject = payload?.subject as string || EmailSubjects.NOTIFICATION_FROM_ATS_FIT;
 
       // Fetch template from S3 via provider
       const templateContent = await this.templateProvider.fetchTemplate({
         templateKey: payload?.templateKey,
       });
 
-      const rendered = await this.renderEmailTemplate(
+      // Validation: at least subject or html/text required
+      if (!templateContent) {
+        throw new BadRequestException(
+          'Email template not found',
+          ERROR_CODES.INVALID_TEMPLATE_KEY,
+          undefined,
+          { recipients: recipients.emailsTo, hasTemplateKey: !!payload.templateKey },
+        );
+      }
+      
+      const bindedHtmlTemplate = await this.buildEmailTemplate(
         templateContent,
         payload?.templateData,
       );
-      
-      // Use template content but allow payload overrides
-      html = rendered;
-    
 
       // Validation: at least subject or html/text required
-      if (!html) {
+      if (!bindedHtmlTemplate) {
         throw new BadRequestException(
           'Email must have subject, html, or text content',
           ERROR_CODES.BAD_REQUEST,
@@ -109,13 +115,9 @@ export class AwsSesService implements IEmailService {
         );
       }
 
-      // Default subject if not provided
-      if (!subject) {
-        subject = 'Notification from ATS Fit';
-      }
 
       // Send email via SES to all recipients
-      return await this.sendViaSes(recipients, senderConfig, subject, html);
+      return await this.sendViaSes(recipients, senderConfig, subject, bindedHtmlTemplate);
     } catch (error) {
       if (
         error instanceof BadRequestException ||
@@ -172,7 +174,7 @@ export class AwsSesService implements IEmailService {
   /**
    * Fetch template from S3 and render with data
    */
-  private async renderEmailTemplate(
+  private async buildEmailTemplate(
     templateContent: string,
     templateData: Record<string, unknown>,
   ): Promise<string> {

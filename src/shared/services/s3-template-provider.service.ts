@@ -12,6 +12,7 @@ import {
   BadRequestException,
 } from '../exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../constants/error-codes';
+import { AwsConfigKeys } from '../enums';
 
 /**
  * S3 Template Provider
@@ -35,7 +36,7 @@ export class S3TemplateProviderService implements ITemplateProvider {
     private readonly configService: ConfigService,
   ) {
     this.defaultBucket =
-      this.configService.get<string>('AWS_S3_EMAIL_TEMPLATES_BUCKET') ||
+      this.configService.get<string>(AwsConfigKeys.AWS_S3_EMAIL_TEMPLATES_BUCKET) ||
       'ats-fit-email-templates';
     this.defaultCacheTtl =
       this.configService.get<number>('TEMPLATE_CACHE_TTL') || 600000; // 10 minutes
@@ -60,7 +61,7 @@ export class S3TemplateProviderService implements ITemplateProvider {
     if (!templateKey) {
       throw new BadRequestException(
         'Template key is required',
-        ERROR_CODES.INVALID_TEMPLATE_KEY,
+        ERROR_CODES.TEMPLATE_KEY_REQUIRED,
       );
     }
 
@@ -95,42 +96,66 @@ export class S3TemplateProviderService implements ITemplateProvider {
 
       return content;
     } catch (error) {
-      // Fallback: try single file approach
+      this.logger.error(
+        `Failed to fetch template: ${templateKey} from bucket: ${bucket}`,
+        error,
+      );
+
+      throw new InternalServerErrorException(
+        'Failed to fetch email template from S3',
+        ERROR_CODES.TEMPLATE_FETCH_FAILED,
+        undefined,
+        {
+          templateKey,
+          bucket,
+          error,
+        },
+      );
     }
   }
 
   /**
-   * Fetch structured template (folder with subject.hbs, html.hbs, text.hbs)
+   * Validate fetch template parameters
    */
-  private async fetchStructuredTemplate(
-    bucket: string,
-    templateKey: string,
-  ): Promise<TemplateContent> {
-    const baseKey = `email-templates/${templateKey}`;
-    const content: TemplateContent = {};
-
-    // Try to fetch each file
-    const filePromises = [
-      this.fetchTemplateFile(bucket, `${baseKey}/subject.hbs`).then(
-        (data) => (content.subject = data),
-      ),
-      this.fetchTemplateFile(bucket, `${baseKey}/html.hbs`).then(
-        (data) => (content.html = data),
-      ),
-      this.fetchTemplateFile(bucket, `${baseKey}/text.hbs`).then(
-        (data) => (content.text = data),
-      ),
-    ];
-
-    // Wait for all files (ignore errors for optional files)
-    await Promise.allSettled(filePromises);
-
-    // At least one file should exist
-    if (!content.subject && !content.html && !content.text) {
-      throw new Error('No template files found');
+  private validateFetchTemplateParams(bucket: string, templateKey: string): void {
+    // Validate bucket
+    if (!bucket || typeof bucket !== 'string') {
+      throw new BadRequestException(
+        'S3 bucket name is required and must be a string',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { bucket, type: typeof bucket },
+      );
     }
 
-    return content;
+    if (bucket.trim() === '') {
+      throw new BadRequestException(
+        'S3 bucket name cannot be empty',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { bucket },
+      );
+    }
+
+    // Validate templateKey
+    if (!templateKey || typeof templateKey !== 'string') {
+      throw new BadRequestException(
+        'Template key is required and must be a string',
+        ERROR_CODES.INVALID_TEMPLATE_KEY,
+        undefined,
+        { templateKey, type: typeof templateKey },
+      );
+    }
+
+    if (templateKey.trim() === '') {
+      throw new BadRequestException(
+        'Template key cannot be empty',
+        ERROR_CODES.INVALID_TEMPLATE_KEY,
+        undefined,
+        { templateKey },
+      );
+    }
+
   }
 
   /**
@@ -140,6 +165,9 @@ export class S3TemplateProviderService implements ITemplateProvider {
     bucket: string,
     templateKey: string,
   ): Promise<string> {
+    // Validate parameters
+    this.validateFetchTemplateParams(bucket, templateKey);
+
     const key = `email-templates/${templateKey}.hbs`;
     return  await this.fetchTemplateFile(bucket, key);
   }
@@ -156,6 +184,7 @@ export class S3TemplateProviderService implements ITemplateProvider {
         bucketName: bucket,
         key,
       });
+      this.logger.debug(`Template buffer: ${buffer}`);
       return buffer.toString('utf-8');
     } catch (error) {
       this.logger.debug(`Template file not found: ${key}`);
@@ -164,9 +193,89 @@ export class S3TemplateProviderService implements ITemplateProvider {
   }
 
   /**
+   * Validate templateExists parameters
+   */
+  private validateTemplateExistsParams(params: TemplateFetchParams): void {
+    // Validate params object
+    if (!params || typeof params !== 'object') {
+      throw new BadRequestException(
+        'Template fetch parameters are required',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { params },
+      );
+    }
+
+    if (Array.isArray(params)) {
+      throw new BadRequestException(
+        'Template fetch parameters must be an object, not an array',
+        ERROR_CODES.BAD_REQUEST,
+        undefined,
+        { params },
+      );
+    }
+
+    // Validate templateKey
+    if (!params.templateKey || typeof params.templateKey !== 'string') {
+      throw new BadRequestException(
+        'Template key is required and must be a string',
+        ERROR_CODES.INVALID_TEMPLATE_KEY,
+        undefined,
+        { templateKey: params.templateKey, type: typeof params.templateKey },
+      );
+    }
+
+    if (params.templateKey.trim() === '') {
+      throw new BadRequestException(
+        'Template key cannot be empty',
+        ERROR_CODES.INVALID_TEMPLATE_KEY,
+        undefined,
+        { templateKey: params.templateKey },
+      );
+    }
+
+    // Validate bucketName if provided
+    if (params.bucketName !== undefined) {
+      if (typeof params.bucketName !== 'string') {
+        throw new BadRequestException(
+          'Bucket name must be a string',
+          ERROR_CODES.BAD_REQUEST,
+          undefined,
+          { bucketName: params.bucketName, type: typeof params.bucketName },
+        );
+      }
+
+      if (params.bucketName.trim() === '') {
+        throw new BadRequestException(
+          'Bucket name cannot be empty',
+          ERROR_CODES.BAD_REQUEST,
+          undefined,
+          { bucketName: params.bucketName },
+        );
+      }
+    }
+
+    // Validate cacheTtl if provided
+    if (params.cacheTtl !== undefined) {
+      if (typeof params.cacheTtl !== 'number') {
+        throw new BadRequestException(
+          'Cache TTL must be a number',
+          ERROR_CODES.BAD_REQUEST,
+          undefined,
+          { cacheTtl: params.cacheTtl, type: typeof params.cacheTtl },
+        );
+      }
+
+    }
+  }
+
+  /**
    * Check if template exists in S3
    */
   async templateExists(params: TemplateFetchParams): Promise<boolean> {
+    // Validate params
+    this.validateTemplateExistsParams(params);
+
     const { templateKey, bucketName } = params;
     const bucket = bucketName || this.defaultBucket;
 
@@ -189,10 +298,20 @@ export class S3TemplateProviderService implements ITemplateProvider {
       return singleFileExists;
     } catch (error) {
       this.logger.error(
-        `Error checking template existence: ${templateKey}`,
+        `Error checking template existence: ${templateKey} in bucket: ${bucket}`,
         error,
       );
-      return false;
+
+      throw new InternalServerErrorException(
+        'Failed to check template existence in S3',
+        ERROR_CODES.TEMPLATE_FETCH_FAILED,
+        undefined,
+        {
+          templateKey,
+          bucket,
+          error,
+        },
+      );
     }
   }
 

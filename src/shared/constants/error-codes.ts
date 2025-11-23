@@ -79,6 +79,7 @@ export const ERROR_CODES = {
 
   // S3 Template Provider errors
   INVALID_TEMPLATE_KEY: 'ERR_INVALID_TEMPLATE_KEY',
+  TEMPLATE_KEY_REQUIRED: 'ERR_TEMPLATE_KEY_REQUIRED'
 } as const;
 
 // Type for error codes
