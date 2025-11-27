@@ -261,7 +261,7 @@ export class SubscriptionController {
       this.logger.log(`Retrieving subscriptions for user ID: ${userId}`);
 
       // Get user subscriptions from database
-      const subscriptions = await this.paymentHistoryService.findByUserId(userId);
+      const subscriptions = await this.subscriptionService.findByUserId(userId);
 
       this.logger.log(`Retrieved ${subscriptions.length} subscriptions for user: ${userId}`);
       return subscriptions;

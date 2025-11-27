@@ -29,7 +29,7 @@ export class SubscriptionService {
 
   constructor(
     @InjectRepository(UserSubscription)
-    private readonly subscriptionRepository: Repository<UserSubscription>,
+    private readonly userSubscriptionRepository: Repository<UserSubscription>,
     private readonly configService: ConfigService,
     @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService
   ) {}
@@ -38,7 +38,7 @@ export class SubscriptionService {
     try {
       this.logger.debug('SubscriptionService.create() called with data:', data);
 
-      const subscription = this.subscriptionRepository.create({
+      const subscription = this.userSubscriptionRepository.create({
         payment_gateway_subscription_id:
           data.payment_gateway_subscription_id,
         subscription_plan_id: data.subscription_plan_id,
@@ -57,7 +57,7 @@ export class SubscriptionService {
       this.logger.debug('About to save to database...');
 
       const savedSubscription =
-        await this.subscriptionRepository.save(subscription);
+        await this.userSubscriptionRepository.save(subscription);
 
       this.logger.log('Subscription saved to database successfully', {
         subscriptionId: savedSubscription.id,
@@ -84,7 +84,7 @@ export class SubscriptionService {
   }
 
   async findById(id: string): Promise<UserSubscription> {
-    const subscription = await this.subscriptionRepository.findOne({
+    const subscription = await this.userSubscriptionRepository.findOne({
       where: { id },
     });
 
@@ -99,7 +99,7 @@ export class SubscriptionService {
   }
 
   async findByExternalId(externalId: string): Promise<UserSubscription | null> {
-    return await this.subscriptionRepository.findOne({
+    return await this.userSubscriptionRepository.findOne({
       where: { payment_gateway_subscription_id: externalId },
     });
   }
@@ -119,14 +119,14 @@ export class SubscriptionService {
   }
 
   async findByUserId(userId: string): Promise<UserSubscription[]> {
-    return await this.subscriptionRepository.find({
+    return await this.userSubscriptionRepository.find({
       where: { user_id: userId },
       order: { created_at: 'DESC' },
     });
   }
 
   async findActiveByUserId(userId: string): Promise<UserSubscription | null> {
-    return await this.subscriptionRepository.findOne({
+    return await this.userSubscriptionRepository.findOne({
       where: {
         user_id: userId,
         is_active: true,
@@ -147,7 +147,7 @@ export class SubscriptionService {
     await this.findById(id);
 
     // Use TypeORM's update method for partial updates (more efficient and safe)
-    const updateResult = await this.subscriptionRepository.update(id, data);
+    const updateResult = await this.userSubscriptionRepository.update(id, data);
 
     if (updateResult.affected === 0) {
       throw new NotFoundException(
@@ -183,7 +183,7 @@ export class SubscriptionService {
     }
 
     // Use TypeORM's update method for partial updates
-    const updateResult = await this.subscriptionRepository.update(
+    const updateResult = await this.userSubscriptionRepository.update(
       { payment_gateway_subscription_id: externalId },
       data,
     );
@@ -237,7 +237,7 @@ export class SubscriptionService {
    */
   private async performDeletion(id: string): Promise<void> {
     try {
-      const result = await this.subscriptionRepository.delete(id);
+      const result = await this.userSubscriptionRepository.delete(id);
 
       if (result?.affected === 0) {
         // This should not happen if findById passed, but defensive programming
@@ -255,7 +255,7 @@ export class SubscriptionService {
   }
 
   async countByUserId(userId: string): Promise<number> {
-    return await this.subscriptionRepository.count({
+    return await this.userSubscriptionRepository.count({
       where: { user_id: userId },
     });
   }
