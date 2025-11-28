@@ -213,7 +213,8 @@ export class PaymentHistoryService {
     const amountInCents =
       paymentGatewayData.data?.attributes?.total ||
       paymentGatewayData.data?.attributes?.subtotal ||
-      paymentGatewayData.data?.attributes?.total_usd;
+      paymentGatewayData.data?.attributes?.total_usd ||
+      paymentGatewayData.data?.attributes?.subtotal_formatted;
 
     if (amountInCents) {
       paymentHistory.amount = parseFloat((amountInCents / 100).toFixed(2));
@@ -290,7 +291,7 @@ export class PaymentHistoryService {
 
     return await this.paymentHistoryRepository.find({
       where: { user_id: userId.trim() },
-      relations: ['subscriptionPlan'],
+      relations: ['subscription_plan'],
       order: { created_at: orderBy },
     });
   }
@@ -519,6 +520,50 @@ export class PaymentHistoryService {
         error,
       );
       return null;
+    }
+  }
+
+  /**
+   * Extract failure reason from payment gateway notification payload
+   * Follows Single Responsibility Principle - only extracts failure information
+   * 
+   * @param paymentGatewayData - Payment gateway notification data
+   * @returns Failure reason string or null if not found
+   */
+  private extractFailureReason(paymentGatewayData: any): string | null {
+    try {
+      const payload = paymentGatewayData as any;
+
+      // Try different possible locations for failure information
+      const possibleFailureReasons = [
+        payload.data?.attributes?.failure_reason,
+        payload.data?.attributes?.status_reason,
+        payload.data?.attributes?.decline_reason,
+        payload.data?.attributes?.error_message,
+        payload.meta?.error_message,
+        payload.meta?.failure_reason,
+        payload.error?.message,
+      ];
+
+      for (const reason of possibleFailureReasons) {
+        if (reason && typeof reason === 'string' && reason.trim() !== '') {
+          this.logger.log(
+            `Found failure reason in payment gateway notification: ${reason}`,
+          );
+          return reason.trim();
+        }
+      }
+
+      this.logger.log(
+        'No specific failure reason found in payment gateway notification',
+      );
+      return 'Payment failed - reason not provided by payment gateway';
+    } catch (error) {
+      this.logger.error(
+        'Error extracting failure reason from payment gateway notification:',
+        error,
+      );
+      return 'Payment failed - unable to extract failure reason';
     }
   }
 }

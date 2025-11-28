@@ -23,6 +23,7 @@ export const validationSchema = Joi.object({
   AWS_SECRET_ACCESS_KEY: Joi.string().required(),
   AWS_S3_RESUME_TEMPLATES_BUCKET: Joi.string().required(),
   AWS_S3_GENERATED_RESUMES_BUCKET: Joi.string().optional(),
+  AWS_S3_EMAIL_TEMPLATES_BUCKET: Joi.string().optional(),
 
   // OpenAI configuration
   OPENAI_API_KEY: Joi.string().required(),
