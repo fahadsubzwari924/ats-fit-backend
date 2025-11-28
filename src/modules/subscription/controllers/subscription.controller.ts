@@ -282,6 +282,100 @@ export class SubscriptionController {
     }
   }
 
+  @Get('user/payment-history/:userId')
+  @ApiOperation({ summary: 'Get payment history for a specific user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns payment history for the specified user',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid user ID' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async getUserPaymentHistory(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Req() request: RequestWithUserContext,
+  ) {
+    try {
+      this.logger.log(`Retrieving payment history for user ID: ${userId}`);
+
+      // Verify user exists
+      const user = await this.userService.getUserById(userId);
+      if (!user) {
+        this.logger.warn(`User not found for ID: ${userId}`);
+        throw new NotFoundException(
+          'User not found',
+          ERROR_CODES.USER_NOT_FOUND,
+        );
+      }
+
+      // Get payment history from database
+      const paymentHistory = await this.paymentHistoryService.findByUserId(userId);
+
+      this.logger.log(
+        `Retrieved ${paymentHistory?.length || 0} payment history records for user: ${userId}`,
+      );
+
+      return paymentHistory || [];
+    } catch (error) {
+      this.logger.error('getUserPaymentHistory -> Error retrieving payment history:', {
+        error: error.message,
+        userId,
+        requestUserId: request?.userContext?.userId,
+        stack: error.stack,
+      });
+
+      // Re-throw known exceptions to maintain proper error responses
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+
+      // Handle unexpected errors (database connection issues, etc.)
+      throw new BadRequestException(
+        'Failed to retrieve payment history',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get('payment-history')
+  @ApiOperation({ summary: 'Get payment history for the authenticated user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns payment history for the authenticated user',
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  async getAuthenticatedUserPaymentHistory(
+    @Req() request: RequestWithUserContext,
+  ) {
+    try {
+      const userId = request?.userContext?.userId;
+      
+      this.logger.log(`Retrieving payment history for authenticated user: ${userId}`);
+
+      // Get payment history from database
+      const paymentHistory = await this.paymentHistoryService.findByUserId(userId);
+
+      this.logger.log(
+        `Retrieved ${paymentHistory?.length || 0} payment history records for authenticated user: ${userId}`,
+      );
+
+      return paymentHistory || [];
+    } catch (error) {
+      this.logger.error(
+        'getAuthenticatedUserPaymentHistory -> Error retrieving payment history:',
+        {
+          error: error.message,
+          userId: request?.userContext?.userId,
+          stack: error.stack,
+        },
+      );
+      // Handle unexpected errors
+      throw new BadRequestException(
+        'Failed to retrieve payment history',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+  }
+
   // Subscription Plan Endpoints
 
   @Get('plans')
