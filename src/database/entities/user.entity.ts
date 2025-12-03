@@ -20,6 +20,11 @@ export enum UserType {
   REGISTERED = 'registered',
 }
 
+export enum RegistrationType {
+  GENERAL = 'general',
+  GOOGLE = 'google',
+}
+
 @Entity({ name: 'users' })
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -47,6 +52,16 @@ export class User {
     default: UserType.REGISTERED,
   })
   user_type: UserType;
+
+  @Column({
+    type: 'enum',
+    enum: RegistrationType,
+    default: RegistrationType.GENERAL,
+  })
+  registration_type: RegistrationType;
+
+  @Column({ type: 'jsonb', nullable: true })
+  oauth_provider_data: Record<string, any>;
 
   @Column({ nullable: true })
   guest_id: string; // For tracking guest users
