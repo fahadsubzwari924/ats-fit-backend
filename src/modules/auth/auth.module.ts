@@ -12,6 +12,7 @@ import { PremiumUserGuard } from './guards/premium-user.guard';
 import { User } from '../../database/entities';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { UserModule } from '../user/user.module';
+import { GoogleService } from '../../shared/modules/external/services/google.service';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { UserModule } from '../user/user.module';
     BaseMapperService,
     JwtAuthGuard,
     PremiumUserGuard,
+    GoogleService
   ],
   controllers: [AuthController],
   exports: [

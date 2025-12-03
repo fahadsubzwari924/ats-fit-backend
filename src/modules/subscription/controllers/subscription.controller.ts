@@ -9,6 +9,7 @@ import {
   Logger,
   Headers,
   ParseUUIDPipe,
+  Inject
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,6 +21,7 @@ import { SubscriptionService } from '../services/subscription.service';
 import { SubscriptionPlanService } from '../services/subscription-plan.service';
 import { PaymentService } from '../../../shared/services/payment.service';
 import { PaymentHistoryService } from '../services/payment-history.service';
+import { UserService } from '../../user/user.service';
 import { CreateSubscriptionDto } from '../dtos/subscription.dto';
 import { SubscriptionPlanResponseDto } from '../dtos/subscription-plan.dto';
 import { CheckoutResponseDto } from '../dtos/checkout-response.dto';
@@ -32,6 +34,10 @@ import {
 import { MESSAGES } from '../../../shared/constants/messages';
 import { ERROR_CODES } from 'src/shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
+import { ExternalPaymentGatewayEvents } from '../externals/enums';
+import { IEmailService, EMAIL_SERVICE_TOKEN } from '../../../shared/interfaces/email.interface';
+import { EmailSubjects, EmailTemplates, AwsConfigKeys } from '../../../shared/enums';
+import { ConfigService } from '@nestjs/config';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -45,6 +51,9 @@ export class SubscriptionController {
     private readonly subscriptionService: SubscriptionService,
     private readonly paymentHistoryService: PaymentHistoryService, // ✅ Payment history handling
     private readonly subscriptionPlanService: SubscriptionPlanService,
+    private readonly userService: UserService,
+    private readonly configService: ConfigService,
+    @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService, // Inject email service via token
   ) {}
 
   @Post('checkout')
@@ -237,7 +246,7 @@ export class SubscriptionController {
     }
   }
 
-  @Get('user/:userId/subscriptions')
+  @Get('user/subscriptions/:userId')
   @ApiOperation({ summary: 'Get all subscriptions for a user from database' })
   @ApiResponse({
     status: 200,
@@ -268,6 +277,100 @@ export class SubscriptionController {
       // Handle unexpected errors (database connection issues, etc.)
       throw new BadRequestException(
         'Failed to retrieve user subscriptions',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get('user/payment-history/:userId')
+  @ApiOperation({ summary: 'Get payment history for a specific user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns payment history for the specified user',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid user ID' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async getUserPaymentHistory(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Req() request: RequestWithUserContext,
+  ) {
+    try {
+      this.logger.log(`Retrieving payment history for user ID: ${userId}`);
+
+      // Verify user exists
+      const user = await this.userService.getUserById(userId);
+      if (!user) {
+        this.logger.warn(`User not found for ID: ${userId}`);
+        throw new NotFoundException(
+          'User not found',
+          ERROR_CODES.USER_NOT_FOUND,
+        );
+      }
+
+      // Get payment history from database
+      const paymentHistory = await this.paymentHistoryService.findByUserId(userId);
+
+      this.logger.log(
+        `Retrieved ${paymentHistory?.length || 0} payment history records for user: ${userId}`,
+      );
+
+      return paymentHistory || [];
+    } catch (error) {
+      this.logger.error('getUserPaymentHistory -> Error retrieving payment history:', {
+        error: error.message,
+        userId,
+        requestUserId: request?.userContext?.userId,
+        stack: error.stack,
+      });
+
+      // Re-throw known exceptions to maintain proper error responses
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+
+      // Handle unexpected errors (database connection issues, etc.)
+      throw new BadRequestException(
+        'Failed to retrieve payment history',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get('payment-history')
+  @ApiOperation({ summary: 'Get payment history for the authenticated user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns payment history for the authenticated user',
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  async getAuthenticatedUserPaymentHistory(
+    @Req() request: RequestWithUserContext,
+  ) {
+    try {
+      const userId = request?.userContext?.userId;
+      
+      this.logger.log(`Retrieving payment history for authenticated user: ${userId}`);
+
+      // Get payment history from database
+      const paymentHistory = await this.paymentHistoryService.findByUserId(userId);
+
+      this.logger.log(
+        `Retrieved ${paymentHistory?.length || 0} payment history records for authenticated user: ${userId}`,
+      );
+
+      return paymentHistory || [];
+    } catch (error) {
+      this.logger.error(
+        'getAuthenticatedUserPaymentHistory -> Error retrieving payment history:',
+        {
+          error: error.message,
+          userId: request?.userContext?.userId,
+          stack: error.stack,
+        },
+      );
+      // Handle unexpected errors
+      throw new BadRequestException(
+        'Failed to retrieve payment history',
         ERROR_CODES.BAD_REQUEST,
       );
     }
@@ -379,15 +482,71 @@ export class SubscriptionController {
         payload,
       );
 
-      // Step 1: Create payment history record first (audit trail)
+      // Step 1: Get user by email from payload
+      const {email, plan_id} = payload?.meta?.custom_data;
+      
+      if (!email) {
+        this.logger.warn(
+          `🔥 DEBUG: Email not found in payment-confirmation payload`,
+        );
+        throw new BadRequestException(
+          'Email not found in payment payload',
+          ERROR_CODES.BAD_REQUEST,
+        );
+      }
+
+      this.logger.log(`🔥 DEBUG: Looking up user by email: ${email}`);
+      const user = await this.userService.getUserByEmail(email);
+
+      if (!user) {
+        this.logger.warn(
+          `🔥 DEBUG: User not found for email: ${email}`,
+        );
+        throw new NotFoundException(
+          'User not found',
+          ERROR_CODES.USER_NOT_FOUND,
+        );
+      }
+
+      this.logger.log(`🔥 DEBUG: User found - ID: ${user.id}, Name: ${user.full_name}`);
+
+      const subscriptionPlan = await this.subscriptionPlanService.findById(plan_id);
+
+      if (!subscriptionPlan) {
+        this.logger.warn(
+          `🔥 DEBUG: Subscription plan not found for ID: ${plan_id}`,
+        );
+        throw new NotFoundException(
+          'Subscription plan not found',
+          ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
+        );
+      }
+
+      this.logger.log(`🔥 DEBUG: Subscription plan found - ID: ${subscriptionPlan.id}, Name: ${subscriptionPlan.plan_name}`);
+
+      // Step 2: Process subscription logic (decoupled from payment history)
+      let subscriptionResult;
+      if (payload.meta?.event_name === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS) {
+        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload, user, subscriptionPlan);
+        
+        // subscriptionResult = await this.subscriptionService.handleSuccessfulPayment(payload);
+      } else {
+        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload, user, subscriptionPlan);
+      }
+
+      this.logger.log(
+        `🔥 DEBUG: Subscription processing result:`,
+        subscriptionResult,
+      );
+
+      // Step 3: Create payment history record first (audit trail)
       this.logger.log(`🔥 DEBUG: Creating payment history record...`);
-      const paymentHistory =
-        await this.paymentHistoryService.paymentConfirmation(payload);
+      const paymentHistory = await this.paymentHistoryService.paymentConfirmation(payload);
       this.logger.log(`🔥 DEBUG: Payment history created:`, {
         id: paymentHistory.id,
       });
 
-      // Step 2: Verify signature
+      // Step 4: Verify signature
       if (
         signature &&
         !(await this.subscriptionService.verifySignature(
@@ -404,52 +563,62 @@ export class SubscriptionController {
           ERROR_CODES.BAD_REQUEST,
         );
       }
+      
 
-      // Step 3: Process subscription logic (decoupled from payment history)
-      this.logger.log(`🔥 DEBUG: Processing subscription logic...`);
-      const subscriptionResult =
-        await this.subscriptionService.processPaymentGatewayEvent(payload);
-      this.logger.log(
-        `🔥 DEBUG: Subscription processing result:`,
-        subscriptionResult,
-      );
-
-      // Step 4: Mark payment as processed
+      // Step 5: Mark payment as processed
       await this.paymentHistoryService.markAsProcessed(paymentHistory.id);
 
-      const result = {
-        success: true,
-        message: 'Payment gateway notification processed successfully',
-        data: {
-          paymentHistory: {
-            id: paymentHistory.id,
-            status: paymentHistory.status,
-            paymentType: paymentHistory.payment_type,
-            amount: paymentHistory.amount,
-            currency: paymentHistory.currency,
-          },
-          ...subscriptionResult,
-        },
-      };
 
       // Log processing results
       this.logger.log(`🎯 NEW Subscription created in database:`, {
-        subscriptionId: result?.data?.subscription?.subscriptionId,
-        status: result?.data?.subscription?.status,
-        isActive: result?.data?.subscription?.isActive,
-        userId: result?.data?.subscription?.userId,
-        planId: result?.data?.subscription?.subscriptionPlanId,
-        paymentHistoryId: paymentHistory.id,
+        paymentHistory,
+        subscriptionResult,
       });
 
-      return result;
     } catch (error) {
       this.logger.error(
-        'Failed to process payment gateway notification',
+        'Webhook -> payment-confirmation -> Failed to process payment gateway notification',
         error,
       );
       throw error;
     }
   }
   //#endregion
+
+
+  @Public()
+  @Get('test-email')
+  async testEmail() {
+    try {
+
+      const awsConfig = {
+        region: this.configService.get<string>(AwsConfigKeys.AWS_REGION) || 'us-east-1',
+        accessKeyId: this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_ACCESS_KEY_ID),
+        secretAccessKey: this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_SECRET_ACCESS_KEY)
+      }
+
+
+      const response = await this.emailService.sendEmail(
+        awsConfig,
+        { emailsTo: ['info@atsfitt.com'] },
+        { 
+          fromAddress: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_EMAIL) || 'info@atsfitt.com',
+          senderName: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_NAME) || 'ATS Fit'
+        },
+        {
+          templateKey: EmailTemplates.PAYMENT_FAILED,
+          templateData: {
+            amount: 1000,
+            userName: 'Ahsan'
+          },
+          subject: EmailSubjects.PAYMENT_FAILED,
+        }
+      );
+
+      return response;
+    } catch (error) {
+      this.logger.error('Failed to send test email:', error);
+    }
+  }
+
 }
