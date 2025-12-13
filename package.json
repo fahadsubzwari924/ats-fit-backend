@@ -15,6 +15,7 @@
     "start:prod": "NODE_ENV=production node dist/main",
     "seed:resume-templates": "ts-node src/scripts/seed/index.ts",
     "seed:rate-limits": "ts-node src/scripts/seed/seed-rate-limits.ts",
+    "seed:email-templates": "ts-node src/scripts/seed/upload-email-templates-to-s3.ts",
     "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
     "migration:generate": "npm run typeorm -- migration:generate",
     "migration:run": "npm run typeorm -- migration:run",
@@ -69,6 +70,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.835.0",
+    "@aws-sdk/client-ses": "^3.932.0",
     "@aws-sdk/s3-request-presigner": "^3.835.0",
     "@lemonsqueezy/lemonsqueezy.js": "^4.0.0",
     "@nestjs/axios": "^4.0.0",
@@ -84,7 +86,6 @@
     "@ngrok/ngrok": "^1.5.2",
     "@types/bull": "^4.10.4",
     "@types/pdf-parse": "^1.1.5",
-    "aws-sdk": "^2.1692.0",
     "axios": "^1.9.0",
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",
