@@ -16,7 +16,26 @@ set -euo pipefail  # Exit on error, undefined vars, pipe failures
 # ========================================================================
 
 # Project Configuration
-readonly PROJECT_ID="ats-fit-backend"
+# Default project id (fallback). We prefer an explicit env var, then gcloud config, then this default.
+DEFAULT_PROJECT_ID="ats-fit-backend"
+# Allow overriding PROJECT_ID via environment (useful in CI or when deploying to multiple GCP projects)
+if [ -n "${PROJECT_ID:-}" ]; then
+    # honor already-set PROJECT_ID from environment
+    :
+else
+    # try to read from gcloud config (if available), otherwise fall back to default
+    if command -v gcloud >/dev/null 2>&1; then
+        PROJECT_ID_FROM_GCLOUD=$(gcloud config get-value project 2>/dev/null || echo "")
+        if [ -n "$PROJECT_ID_FROM_GCLOUD" ]; then
+            PROJECT_ID="$PROJECT_ID_FROM_GCLOUD"
+        else
+            PROJECT_ID="$DEFAULT_PROJECT_ID"
+        fi
+    else
+        PROJECT_ID="$DEFAULT_PROJECT_ID"
+    fi
+fi
+readonly PROJECT_ID
 readonly REGION="asia-south1"
 readonly SERVICE_NAME="ats-fit-backend"
 readonly REGISTRY="gcr.io"
@@ -187,26 +206,50 @@ build_and_push_image() {
     local image_url="${REGISTRY}/${PROJECT_ID}/${SERVICE_NAME}:${IMAGE_TAG}"
     local latest_url="${REGISTRY}/${PROJECT_ID}/${SERVICE_NAME}:latest"
     
-    log_info "Building Docker image..."
+    log_info "Building Docker image with BuildKit optimizations..."
     log_info "Image tag: $IMAGE_TAG"
     
-    # Build with proper caching and multi-stage optimization
-    docker build \
-        --target production \
-        --cache-from "${latest_url}" \
-        --tag "${image_url}" \
-        --tag "${latest_url}" \
-        --build-arg BUILDKIT_INLINE_CACHE=1 \
-        . || {
+    # Configure Docker for GCR FIRST (needed for cache pull)
+    log_info "Configuring Docker for Google Container Registry..."
+    gcloud auth configure-docker gcr.io --quiet
+    
+    # Enable Docker BuildKit for faster builds
+    export DOCKER_BUILDKIT=1
+    
+    # Try to pull latest image for layer caching (ignore failures if image doesn't exist yet)
+    log_info "Pulling latest image for cache reuse..."
+    local cache_available=false
+    if docker pull "${latest_url}" 2>/dev/null; then
+        log_success "Previous image found - will use cached layers"
+        cache_available=true
+    else
+        log_warning "No previous image found - this will be a full build (normal for first deployment)"
+    fi
+    
+    # Build with BuildKit, proper caching, and multi-stage optimization
+    log_info "Building for Cloud Run (linux/amd64 platform)..."
+    
+    # Build arguments
+    local build_args=(
+        "--platform" "linux/amd64"
+        "--target" "production"
+        "--tag" "${image_url}"
+        "--tag" "${latest_url}"
+        "--build-arg" "BUILDKIT_INLINE_CACHE=1"
+        "--progress=plain"
+    )
+    
+    # Add cache-from only if previous image exists
+    if [ "$cache_available" = true ]; then
+        build_args+=("--cache-from" "${latest_url}")
+    fi
+    
+    docker build "${build_args[@]}" . || {
         log_error "Docker build failed"
         exit 1
     }
     
     log_success "Docker image built successfully"
-    
-    # Configure Docker for GCR
-    log_info "Configuring Docker for Google Container Registry..."
-    gcloud auth configure-docker --quiet
     
     # Push images
     log_info "Pushing images to Container Registry..."
@@ -255,11 +298,18 @@ deploy_to_cloud_run() {
     env_vars+="AWS_ACCESS_KEY_ID=$(gcloud secrets versions access latest --secret="aws-access-key-id"),"
     env_vars+="AWS_SECRET_ACCESS_KEY=$(gcloud secrets versions access latest --secret="aws-secret-access-key"),"
     env_vars+="AWS_REGION=ap-south-1,"
+    env_vars+="AWS_BUCKET_REGION=ap-south-1,"
     env_vars+="AWS_S3_BUCKET=resume-tailor-dev-bucket,"
+    env_vars+="AWS_S3_RESUME_TEMPLATES_BUCKET=ats-friend-resume-templates-2025,"
+    env_vars+="AWS_S3_CANDIDATES_RESUMES_BUCKET=af-candidates-resumes,"
     env_vars+="CACHE_TTL=1800000,"
     env_vars+="MAX_CACHE_SIZE=1000,"
     env_vars+="PDF_TIMEOUT=15000,"
-    env_vars+="MAX_FILE_SIZE=5242880"
+    env_vars+="MAX_FILE_SIZE=5242880,"
+    env_vars+="LEMON_SQUEEZY_API_KEY=$(gcloud secrets versions access latest --secret="lemon-squeezy-api-key"),"
+    env_vars+="LEMON_SQUEEZY_STORE_ID=$(gcloud secrets versions access latest --secret="lemon-squeezy-store-id"),"
+    env_vars+="LEMON_SQUEEZY_WEBHOOK_SECRET=$(gcloud secrets versions access latest --secret="lemon-squeezy-webhook-secret"),"
+    env_vars+="APP_URL=https://ats-fit-backend-qdrc7pbnva-el.a.run.app"
     
     # Remove trailing comma
     env_vars=${env_vars%,}
@@ -311,13 +361,18 @@ verify_deployment() {
     log_info "Waiting for service to be ready..."
     local max_attempts=30
     local attempt=1
+    local health_url="${service_url}/health"
     
     while [ $attempt -le $max_attempts ]; do
-        if curl -s -f "$service_url" >/dev/null 2>&1; then
-            log_success "Service is responding"
+        # Check if service responds (any HTTP response, even 404, means it's running)
+        local http_code
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" "$health_url" 2>/dev/null || echo "000")
+        
+        if [ "$http_code" != "000" ] && [ "$http_code" != "502" ] && [ "$http_code" != "503" ]; then
+            log_success "Service is responding (HTTP $http_code)"
             break
         else
-            log_info "Attempt $attempt/$max_attempts - Service not ready yet..."
+            log_info "Attempt $attempt/$max_attempts - Service not ready yet (HTTP $http_code)..."
             sleep 10
             ((attempt++))
         fi
@@ -329,13 +384,15 @@ verify_deployment() {
     
     # Test basic connectivity
     log_info "Testing service connectivity..."
-    local response
-    response=$(curl -s "$service_url" || echo "failed")
+    local response_code
+    response_code=$(curl -s -o /dev/null -w "%{http_code}" "$service_url" 2>/dev/null || echo "000")
     
-    if [[ "$response" == *"error"* ]] && [[ "$response" == *"404"* ]]; then
-        log_success "Service is running (404 is expected for root path)"
+    if [ "$response_code" = "404" ]; then
+        log_success "Service is running (404 is normal for root path)"
+    elif [ "$response_code" = "200" ]; then
+        log_success "Service is running and responding with 200 OK"
     else
-        log_warning "Unexpected response from service"
+        log_warning "Service returned HTTP $response_code"
     fi
     
     export SERVICE_URL="$service_url"

@@ -17,6 +17,11 @@ spec:
         run.googleapis.com/memory: '2Gi'
         run.googleapis.com/cpu: '2000m'
         run.googleapis.com/execution-environment: gen2
+
+        # VPC connector for private resources (Redis Memorystore access)
+        run.googleapis.com/vpc-access-connector: projects/ats-fit-backend/locations/asia-south1/connectors/ats-fit-connector
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+
         run.googleapis.com/cloudsql-instances: ats-fit-backend:asia-south1:ats-fit-postgres
 
     spec:
@@ -35,8 +40,6 @@ spec:
             # Application environment
             - name: NODE_ENV
               value: 'production'
-            - name: PORT
-              value: '8080'
 
             # Database configuration
             - name: DATABASE_HOST
@@ -61,11 +64,6 @@ spec:
               value: '10.70.241.139' # Replace with actual Redis IP
             - name: REDIS_PORT
               value: '6379'
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: redis-password
-                  key: latest
 
             # JWT configuration
             - name: JWT_SECRET
@@ -163,20 +161,11 @@ spec:
           # Health checks
           livenessProbe:
             httpGet:
-              path: /health
+              path: /api/v1/health
               port: 8080
             initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 10
-            failureThreshold: 3
-
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
             failureThreshold: 3
 
       serviceAccountName: ats-fit-service-account@ats-fit-backend.iam.gserviceaccount.com
