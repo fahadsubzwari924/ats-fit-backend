@@ -125,6 +125,7 @@ migration.log
 *password*
 !scripts/**/create-secrets.sh
 !**/package-lock.json
+!src/shared/enums/*-key.enum.ts
 
 # Configuration files with sensitive data
 config/production.json
