@@ -7,3 +7,4 @@
 export * from './queue-message.enum';
 export * from './email-templates.enum';
 export * from './email-subjects.enum';
+export * from './aws-configuration-key.enum';
