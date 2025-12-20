@@ -1,11 +1,19 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class RenameSubscriptionsToUserSubscriptions1728518400000
-  implements MigrationInterface
-{
+export class RenameSubscriptionsToUserSubscriptions1728518400000 implements MigrationInterface {
   name = 'RenameSubscriptionsToUserSubscriptions1728518400000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Check if subscriptions table exists
+    const tableExists = await queryRunner.query(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'subscriptions')`,
+    );
+
+    if (!tableExists[0].exists) {
+      console.log('Table "subscriptions" does not exist, skipping migration');
+      return;
+    }
+
     // Rename the table from 'subscriptions' to 'user_subscriptions'
     await queryRunner.query(
       `ALTER TABLE "subscriptions" RENAME TO "user_subscriptions"`,

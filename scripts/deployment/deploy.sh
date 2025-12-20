@@ -1,8 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # ========================================================================
 # ATS Fit Backend - Manual Deployment Script
 # ========================================================================
+# Requires: bash 4.0+ (for associative arrays)
+# Usage: deploy.sh [environment]
+#   environment: dev, staging, or prod (default: prod)
+# ========================================================================
+
+# Check bash version
+if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    echo "ERROR: This script requires bash 4.0 or higher"
+    echo "Current version: ${BASH_VERSION}"
+    echo "On macOS, install with: brew install bash"
+    echo "Then update your PATH or run with: /opt/homebrew/bin/bash $0"
+    exit 1
+fi
 # Description: Complete manual deployment script for Google Cloud Run
 # Author: ATS Fit Team
 # Version: 1.0.0
@@ -12,8 +25,26 @@
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # ========================================================================
+# Fix gcloud Python environment
+# ========================================================================
+# Unset conda/anaconda Python variables that interfere with gcloud
+unset CLOUDSDK_PYTHON 2>/dev/null || true
+unset CONDA_PYTHON_EXE 2>/dev/null || true
+unset PYTHONPATH 2>/dev/null || true
+
+# ========================================================================
 # Configuration & Constants
 # ========================================================================
+
+# Environment selection (accept as first argument)
+readonly DEPLOY_ENVIRONMENT="${1:-prod}"
+
+# Validate environment
+if [[ ! "$DEPLOY_ENVIRONMENT" =~ ^(dev|staging|prod)$ ]]; then
+    echo "ERROR: Invalid environment '$DEPLOY_ENVIRONMENT'"
+    echo "Usage: $0 [dev|staging|prod]"
+    exit 1
+fi
 
 # Project Configuration
 # Default project id (fallback). We prefer an explicit env var, then gcloud config, then this default.
@@ -167,18 +198,48 @@ pre_deployment_checks() {
 # Environment Configuration
 # ========================================================================
 
+sync_and_load_environment() {
+    log_header "ENVIRONMENT SYNCHRONIZATION"
+    
+    # Run env-sync script to sync environment file to Secret Manager
+    local sync_script="$(dirname "${BASH_SOURCE[0]}")/env-sync.sh"
+    
+    if [ ! -f "$sync_script" ]; then
+        log_error "env-sync.sh not found: $sync_script"
+        exit 1
+    fi
+    
+    log_info "Syncing environment variables from src/config/.env.${DEPLOY_ENVIRONMENT} to Secret Manager..."
+    
+    # Execute env-sync.sh with environment parameter and capture the output
+    local sync_output
+    sync_output=$(/opt/homebrew/bin/bash "$sync_script" "$DEPLOY_ENVIRONMENT" 2>&1)
+    
+    # Check if sync was successful
+    if [ $? -ne 0 ]; then
+        log_error "Environment synchronization failed"
+        echo "$sync_output"
+        exit 1
+    fi
+    
+    # Parse the output to populate ENV_VARS and SECRET_VARS arrays
+    declare -gA ENV_VARS
+    declare -gA SECRET_VARS
+    
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^ENV_([^=]+)=(.*)$ ]]; then
+            ENV_VARS["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+        elif [[ "$line" =~ ^SECRET_([^=]+)=(.*)$ ]]; then
+            SECRET_VARS["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+        fi
+    done <<< "$sync_output"
+    
+    log_success "Environment synchronization completed: ${#ENV_VARS[@]} regular, ${#SECRET_VARS[@]} secrets"
+}
+
 load_environment_variables() {
     log_header "ENVIRONMENT CONFIGURATION"
     log_info "Loading environment variables from secrets..."
-    
-    # Database credentials
-    local db_password
-    db_password=$(gcloud secrets versions access latest --secret="database-password" 2>/dev/null || echo "")
-    
-    if [ -z "$db_password" ]; then
-        log_error "Failed to retrieve database password from Secret Manager"
-        exit 1
-    fi
     
     # Redis configuration
     local redis_host
@@ -190,7 +251,6 @@ load_environment_variables() {
     fi
     
     # Store in deployment variables
-    export DATABASE_PASSWORD="$db_password"
     export REDIS_HOST="$redis_host"
     
     log_success "Environment variables loaded successfully"
@@ -270,6 +330,87 @@ build_and_push_image() {
 }
 
 # ========================================================================
+# Run Database Migrations
+# ========================================================================
+
+run_migrations() {
+    log_header "RUNNING DATABASE MIGRATIONS"
+    
+    log_info "Fetching database credentials..."
+    local db_user db_pass
+    db_user=$(gcloud secrets versions access latest --secret="database-username" --project="$PROJECT_ID" 2>/dev/null)
+    db_pass=$(gcloud secrets versions access latest --secret="database-password" --project="$PROJECT_ID" 2>/dev/null)
+    
+    if [ -z "$db_user" ] || [ -z "$db_pass" ]; then
+        log_error "Failed to fetch database credentials from Secret Manager"
+        exit 1
+    fi
+    
+    # Check if cloud-sql-proxy is installed
+    if ! command -v cloud-sql-proxy &> /dev/null; then
+        log_warning "Cloud SQL Proxy not found. Installing..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            if [[ "$(uname -m)" == "arm64" ]]; then
+                curl -o /tmp/cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.darwin.arm64
+            else
+                curl -o /tmp/cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.darwin.amd64
+            fi
+        else
+            # Linux
+            curl -o /tmp/cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
+        fi
+        chmod +x /tmp/cloud-sql-proxy
+        sudo mv /tmp/cloud-sql-proxy /usr/local/bin/cloud-sql-proxy
+        log_success "Cloud SQL Proxy installed"
+    fi
+    
+    log_info "Starting Cloud SQL Proxy..."
+    local connection_name="${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
+    local proxy_port=5434
+    
+    # Start proxy in background
+    cloud-sql-proxy --port=$proxy_port "${connection_name}" > /tmp/cloud-sql-proxy.log 2>&1 &
+    local proxy_pid=$!
+    
+    # Wait for proxy to be ready
+    log_info "Waiting for Cloud SQL Proxy to be ready..."
+    sleep 3
+    
+    # Check if proxy started successfully
+    if ! kill -0 $proxy_pid 2>/dev/null; then
+        log_error "Cloud SQL Proxy failed to start. Check /tmp/cloud-sql-proxy.log"
+        cat /tmp/cloud-sql-proxy.log
+        exit 1
+    fi
+    
+    log_info "Running TypeORM migrations..."
+    
+    # Set environment variables for TypeORM
+    export DATABASE_HOST=localhost
+    export DATABASE_PORT=$proxy_port
+    export DATABASE_USERNAME="$db_user"
+    export DATABASE_PASSWORD="$db_pass"
+    export DATABASE_NAME="$DB_NAME"
+    export NODE_ENV=production
+    
+    # Run migrations
+    if npm run migration:run; then
+        log_success "Migrations completed successfully"
+    else
+        log_error "Migrations failed"
+        kill $proxy_pid 2>/dev/null || true
+        exit 1
+    fi
+    
+    # Stop proxy
+    log_info "Stopping Cloud SQL Proxy..."
+    kill $proxy_pid 2>/dev/null || true
+    
+    log_success "Database migrations completed"
+}
+
+# ========================================================================
 # Deploy to Cloud Run
 # ========================================================================
 
@@ -280,39 +421,60 @@ deploy_to_cloud_run() {
     log_info "Region: $REGION"
     log_info "Image: $DEPLOYMENT_IMAGE"
     
-    # Prepare environment variables
-    local env_vars=""
-    env_vars+="NODE_ENV=production,"
-    env_vars+="DATABASE_HOST=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE},"
-    env_vars+="DATABASE_NAME=${DB_NAME},"
-    env_vars+="DATABASE_USERNAME=postgres,"
-    env_vars+="DATABASE_PASSWORD=${DATABASE_PASSWORD},"
-    env_vars+="DATABASE_PORT=5432,"
-    env_vars+="REDIS_HOST=${REDIS_HOST},"
-    env_vars+="REDIS_PORT=6379,"
-    env_vars+="REDIS_PASSWORD=redis_password,"
-    env_vars+="JWT_SECRET=$(gcloud secrets versions access latest --secret="jwt-secret"),"
-    env_vars+="JWT_EXPIRES_IN=24h,"
-    env_vars+="OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="openai-api-key"),"
-    env_vars+="ANTHROPIC_API_KEY=$(gcloud secrets versions access latest --secret="anthropic-api-key"),"
-    env_vars+="AWS_ACCESS_KEY_ID=$(gcloud secrets versions access latest --secret="aws-access-key-id"),"
-    env_vars+="AWS_SECRET_ACCESS_KEY=$(gcloud secrets versions access latest --secret="aws-secret-access-key"),"
-    env_vars+="AWS_REGION=ap-south-1,"
-    env_vars+="AWS_BUCKET_REGION=ap-south-1,"
-    env_vars+="AWS_S3_BUCKET=resume-tailor-dev-bucket,"
-    env_vars+="AWS_S3_RESUME_TEMPLATES_BUCKET=ats-friend-resume-templates-2025,"
-    env_vars+="AWS_S3_CANDIDATES_RESUMES_BUCKET=af-candidates-resumes,"
-    env_vars+="CACHE_TTL=1800000,"
-    env_vars+="MAX_CACHE_SIZE=1000,"
-    env_vars+="PDF_TIMEOUT=15000,"
-    env_vars+="MAX_FILE_SIZE=5242880,"
-    env_vars+="LEMON_SQUEEZY_API_KEY=$(gcloud secrets versions access latest --secret="lemon-squeezy-api-key"),"
-    env_vars+="LEMON_SQUEEZY_STORE_ID=$(gcloud secrets versions access latest --secret="lemon-squeezy-store-id"),"
-    env_vars+="LEMON_SQUEEZY_WEBHOOK_SECRET=$(gcloud secrets versions access latest --secret="lemon-squeezy-webhook-secret"),"
-    env_vars+="APP_URL=https://ats-fit-backend-qdrc7pbnva-el.a.run.app"
+    # Build environment variables dynamically from synced configuration
+    log_info "Building environment variables from synced configuration..."
     
-    # Remove trailing comma
+    local env_vars=""
+    
+    # Add regular environment variables (parsed from .env.prod)
+    for key in "${!ENV_VARS[@]}"; do
+        # Skip PORT - it's reserved and automatically set by Cloud Run
+        if [ "$key" = "PORT" ]; then
+            continue
+        fi
+        
+        local value="${ENV_VARS[$key]}"
+        
+        # Apply production overrides for specific variables
+        case "$key" in
+            NODE_ENV)
+                value="production"
+                ;;
+            DATABASE_HOST)
+                value="/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
+                ;;
+            DATABASE_PORT)
+                value="5432"
+                ;;
+            REDIS_PORT)
+                value="6379"
+                ;;
+            APP_URL)
+                # Get current service URL or use default
+                value=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --format="value(status.url)" 2>/dev/null || echo "https://ats-fit-backend-345981571037.asia-south1.run.app")
+                ;;
+        esac
+        
+        env_vars+="${key}=${value},"
+    done
+    
+    # Build secret references for Cloud Run
+    local secret_refs=""
+    for key in "${!SECRET_VARS[@]}"; do
+        # SECRET_VARS already contains the secret name (e.g., "lemon-squeezy-api-key")
+        local secret_name="${SECRET_VARS[$key]}"
+        
+        # Format: ENV_VAR_NAME=secret-name:latest
+        if [ -n "$secret_refs" ]; then
+            secret_refs+=","
+        fi
+        secret_refs+="${key}=${secret_name}:latest"
+    done
+    
+    # Remove trailing comma from env_vars
     env_vars=${env_vars%,}
+    
+    log_success "Environment variables built: ${#ENV_VARS[@]} regular + ${#SECRET_VARS[@]} secrets"
     
     # Deploy with comprehensive configuration
     gcloud run deploy "$SERVICE_NAME" \
@@ -320,6 +482,7 @@ deploy_to_cloud_run() {
         --region="$REGION" \
         --platform=managed \
         --allow-unauthenticated \
+        --port=8080 \
         --memory="$MEMORY_LIMIT" \
         --cpu="$CPU_LIMIT" \
         --concurrency="$CONCURRENCY" \
@@ -327,8 +490,11 @@ deploy_to_cloud_run() {
         --timeout=900s \
         --no-cpu-throttling \
         --add-cloudsql-instances="${PROJECT_ID}:${REGION}:${DB_INSTANCE}" \
+        --vpc-connector="ats-fit-connector" \
+        --vpc-egress="private-ranges-only" \
         --service-account="ats-fit-service-account@${PROJECT_ID}.iam.gserviceaccount.com" \
         --set-env-vars="$env_vars" \
+        --update-secrets="$secret_refs" \
         --quiet || {
         log_error "Cloud Run deployment failed"
         exit 1
@@ -463,8 +629,10 @@ main() {
     
     # Execute deployment steps
     pre_deployment_checks
+    sync_and_load_environment  # Auto-sync .env to Secret Manager
     load_environment_variables
     build_and_push_image
+    run_migrations             # Run database migrations before deploying
     deploy_to_cloud_run
     verify_deployment
     cleanup
