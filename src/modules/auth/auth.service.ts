@@ -105,6 +105,7 @@ export class AuthService {
         'user.full_name',
         'user.plan',
         'user.user_type',
+        'user.registration_type',
         'user.is_active',
         'user.created_at',
         'user.updated_at',
@@ -174,7 +175,7 @@ export class AuthService {
   /**
    * Google authentication - handles both sign up and sign in
    * Follows Single Responsibility Principle by delegating to specific methods
-   * 
+   *
    * @param googlePayload Token payload from Google OAuth
    * @returns SignInResponse with user data and access token
    */
@@ -243,7 +244,7 @@ export class AuthService {
   /**
    * Validate that existing user is registered via Google
    * Follows Single Responsibility Principle - only validates Google registration
-   * 
+   *
    * @param user Existing user entity
    * @throws UnauthorizedException if user is not a Google user
    */
@@ -257,7 +258,10 @@ export class AuthService {
     }
 
     // Additional validation: Check if oauth_provider_data exists
-    if (!user.oauth_provider_data || Object.keys(user.oauth_provider_data).length === 0) {
+    if (
+      !user.oauth_provider_data ||
+      Object.keys(user.oauth_provider_data).length === 0
+    ) {
       throw new UnauthorizedException(
         'Google authentication data not found. Please contact support.',
         ERROR_CODES.GOOGLE_USER_NOT_AUTHENTICATED,
@@ -276,7 +280,7 @@ export class AuthService {
   /**
    * Create new user from Google authentication
    * Follows Single Responsibility Principle - only handles user creation
-   * 
+   *
    * @param email User email from Google
    * @param name User name from Google
    * @param googlePayload Full Google token payload
@@ -307,7 +311,7 @@ export class AuthService {
   /**
    * Generate a secure dummy password for Google users
    * Google users don't use password authentication, but field is required
-   * 
+   *
    * @returns Hashed random password
    */
   private async generateDummyPassword(): Promise<string> {
