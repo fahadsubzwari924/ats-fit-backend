@@ -86,11 +86,11 @@ export class JobAnalysisService {
       );
 
       const response = await this.openAIService.chatCompletion({
-        model: 'gpt-4-turbo',
+        model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: analysisPrompt }],
         response_format: { type: 'json_object' },
-        temperature: 0.05, // Lower temperature for faster processing
-        max_tokens: 3200, // Reduced for faster analysis while maintaining quality
+        temperature: 0.05,
+        max_tokens: 1500, // Sufficient for structured keyword/skills extraction
       });
 
       const result = this.parseAnalysisResponse(response);
@@ -193,7 +193,10 @@ export class JobAnalysisService {
    */
   private validateAnalysisResult(result: unknown): void {
     if (!result || typeof result !== 'object') {
-      throw new Error('Invalid result: must be an object');
+      throw new InternalServerErrorException(
+        'Invalid result: must be an object',
+        ERROR_CODES.INVALID_AI_RESPONSE_STRUCTURE,
+      );
     }
 
     const resultObj = result as Record<string, unknown>;
@@ -209,11 +212,13 @@ export class JobAnalysisService {
 
     for (const field of requiredFields) {
       if (!resultObj[field]) {
-        throw new Error(`Missing required field: ${field}`);
+        throw new InternalServerErrorException(
+          `Missing required field in AI response: ${field}`,
+          ERROR_CODES.MISSING_REQUIRED_AI_FIELD,
+        );
       }
     }
 
-    // Validate position level
     const validLevels = [
       'entry',
       'junior',
@@ -229,10 +234,12 @@ export class JobAnalysisService {
 
     if (!level || typeof level !== 'string' || !validLevels.includes(level)) {
       const levelStr = typeof level === 'string' ? level : 'unknown';
-      throw new Error(`Invalid position level: ${levelStr}`);
+      throw new BadRequestException(
+        `Invalid position level: ${levelStr}`,
+        ERROR_CODES.INVALID_POSITION_LEVEL,
+      );
     }
 
-    // Validate metadata scores
     const metadata = resultObj.metadata as Record<string, unknown>;
     const confidenceScore = metadata?.confidenceScore;
 
@@ -241,7 +248,10 @@ export class JobAnalysisService {
       confidenceScore < 0 ||
       confidenceScore > 100
     ) {
-      throw new Error('Invalid confidence score');
+      throw new BadRequestException(
+        'Invalid confidence score',
+        ERROR_CODES.INVALID_CONFIDENCE_SCORE,
+      );
     }
   }
 

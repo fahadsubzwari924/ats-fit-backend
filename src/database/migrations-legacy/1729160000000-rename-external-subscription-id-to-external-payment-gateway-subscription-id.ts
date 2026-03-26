@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class RenameExternalSubscriptionIdToExternalPaymentGatewaySubscriptionId1729160000000
-  implements MigrationInterface
-{
+export class RenameExternalSubscriptionIdToExternalPaymentGatewaySubscriptionId1729160000000 implements MigrationInterface {
   name =
     'RenameExternalSubscriptionIdToExternalPaymentGatewaySubscriptionId1729160000000';
 

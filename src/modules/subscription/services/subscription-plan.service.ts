@@ -39,7 +39,7 @@ export class SubscriptionPlanService {
       });
 
       return await this.subscriptionPlanRepository.save(subscriptionPlan);
-    } catch (error) {
+    } catch {
       throw new BadRequestException(
         'Failed to create subscription plan',
         ERROR_CODES.BAD_REQUEST,
@@ -185,12 +185,10 @@ export class SubscriptionPlanService {
       validatedId,
       'Subscription plan',
     );
-    return plan!;
+    return plan;
   }
 
-  async findByVariantId(
-    variantId: string,
-  ): Promise<SubscriptionPlan | null> {
+  async findByVariantId(variantId: string): Promise<SubscriptionPlan | null> {
     const validatedVariantId = IdValidator.validateId(
       variantId,
       'Payment gateway variant ID',

@@ -17,11 +17,17 @@ import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
 import { CreateSubscriptionFromPaymentGatewayDto } from '../dtos/create-subscription-from-payment-gateway.dto';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { EMAIL_SERVICE_TOKEN, IEmailService } from '../../../shared/interfaces/email.interface';
+import {
+  EMAIL_SERVICE_TOKEN,
+  IEmailService,
+} from '../../../shared/interfaces/email.interface';
 import { SubscriptionPlan, User } from '../../../database/entities';
-import { EmailTemplates, EmailSubjects, AwsConfigKeys } from '../../../shared/enums';
+import {
+  EmailTemplates,
+  EmailSubjects,
+  AwsConfigKeys,
+} from '../../../shared/enums';
 import { IAwsEmailConfig, IRecipients } from '../../../shared/interfaces';
-
 
 @Injectable()
 export class SubscriptionService {
@@ -31,7 +37,7 @@ export class SubscriptionService {
     @InjectRepository(UserSubscription)
     private readonly userSubscriptionRepository: Repository<UserSubscription>,
     private readonly configService: ConfigService,
-    @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService
+    @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService,
   ) {}
 
   async create(data: ICreateSubscriptionData): Promise<UserSubscription> {
@@ -39,8 +45,7 @@ export class SubscriptionService {
       this.logger.debug('SubscriptionService.create() called with data:', data);
 
       const subscription = this.userSubscriptionRepository.create({
-        payment_gateway_subscription_id:
-          data.payment_gateway_subscription_id,
+        payment_gateway_subscription_id: data.payment_gateway_subscription_id,
         subscription_plan_id: data.subscription_plan_id,
         user_id: data.user_id,
         status: data.status,
@@ -270,14 +275,17 @@ export class SubscriptionService {
   }
 
   async handleFailedPayment(payload: any, user: User, plan: SubscriptionPlan) {
-
     try {
       await this.emailService.sendEmail(
         this.createAWSEmailConfig(),
         { emailsTo: [user?.email] },
-        { 
-          fromAddress: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_EMAIL) || 'info@atsfitt.com',
-          senderName: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_NAME) || 'ATS Fit'
+        {
+          fromAddress:
+            this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_EMAIL) ||
+            'info@atsfitt.com',
+          senderName:
+            this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_NAME) ||
+            'ATS Fit',
         },
         {
           templateKey: EmailTemplates.PAYMENT_FAILED,
@@ -285,10 +293,10 @@ export class SubscriptionService {
             amount: payload?.data?.attributes?.total_formatted,
             userName: user.full_name,
             planName: plan?.plan_name,
-            attemptDate: payload?.data?.attributes?.created_at
+            attemptDate: payload?.data?.attributes?.created_at,
           },
           subject: EmailSubjects.PAYMENT_FAILED,
-        }
+        },
       );
 
       this.logger.log('Payment failed email sent successfully', {
@@ -302,25 +310,32 @@ export class SubscriptionService {
         timestamp: Date.now(),
       });
     }
-
-  
   }
 
   //#region Payment Gateway Event Processing (Decoupled)
 
   private createAWSEmailConfig(): IAwsEmailConfig {
-    const region = this.configService.get<string>(AwsConfigKeys.AWS_REGION) || 'us-east-1';
-    const accessKeyId = this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_ACCESS_KEY_ID);
-    const secretAccessKey = this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_SECRET_ACCESS_KEY);
-    
+    const region =
+      this.configService.get<string>(AwsConfigKeys.AWS_REGION) || 'us-east-1';
+    const accessKeyId = this.configService.get<string>(
+      AwsConfigKeys.AWS_SES_USER_ACCESS_KEY_ID,
+    );
+    const secretAccessKey = this.configService.get<string>(
+      AwsConfigKeys.AWS_SES_USER_SECRET_ACCESS_KEY,
+    );
+
     return {
       region,
       accessKeyId,
-      secretAccessKey
-    }
+      secretAccessKey,
+    };
   }
 
-  private createRecipients(emails: string[], emailsCc?: string[], emailsBcc?: string[]): IRecipients {
+  private createRecipients(
+    emails: string[],
+    emailsCc?: string[],
+    emailsBcc?: string[],
+  ): IRecipients {
     return {
       emailsTo: emails,
       emailsCc: emailsCc,
@@ -373,7 +388,8 @@ export class SubscriptionService {
       const eventType = payload?.meta?.event_name;
       let subscriptionInfo = null;
 
-      const subscription = await this.createSubscriptionFromPaymentGatewayEvent(payload);
+      const subscription =
+        await this.createSubscriptionFromPaymentGatewayEvent(payload);
 
       if (!subscription) {
         this.logger.warn(
@@ -414,7 +430,9 @@ export class SubscriptionService {
       this.logger.log(`🔥 DEBUG: Starting subscription creation process...`);
 
       // Transform payment gateway payload to subscription data using DTO
-      const subscriptionData = new CreateSubscriptionFromPaymentGatewayDto(payload);
+      const subscriptionData = new CreateSubscriptionFromPaymentGatewayDto(
+        payload,
+      );
 
       this.logger.log(
         `🔥 DEBUG: Subscription data to create:`,

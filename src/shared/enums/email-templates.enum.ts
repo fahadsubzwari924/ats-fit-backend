@@ -1,3 +1,3 @@
 export enum EmailTemplates {
-    PAYMENT_FAILED = 'payment-failed',
+  PAYMENT_FAILED = 'payment-failed',
 }

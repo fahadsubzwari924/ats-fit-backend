@@ -23,6 +23,23 @@ export type ContentSource =
   | 'database_existing';
 
 /**
+ * Tailoring mode for resume quality badge (v4 profile enrichment).
+ */
+export type TailoringModeResult =
+  | 'none'
+  | 'standard'
+  | 'enhanced'
+  | 'precision';
+
+/**
+ * User-verified fact from profile Q&A (source of truth for optimization prompts).
+ */
+export interface VerifiedFact {
+  originalBulletPoint: string;
+  userResponse: string;
+}
+
+/**
  * Resume content processing result
  *
  * Contains the processed resume content along with
@@ -32,6 +49,10 @@ export interface ResumeContentResult {
   content: any; // TailoredContent - keeping as any for now due to existing dependencies
   source: ContentSource;
   originalText: string;
+  /** v4: quality mode when using enriched profile */
+  tailoringMode?: TailoringModeResult;
+  /** Answered profile questions with non-empty userResponse (for precision optimization) */
+  verifiedFacts?: VerifiedFact[];
   metadata: {
     extractionMethod: string;
     processingTime?: number;

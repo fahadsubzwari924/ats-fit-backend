@@ -759,14 +759,8 @@ ${jobDescription}
   }
 
   /**
-   * Generate comprehensive resume optimization prompt for Claude AI
-   * Transforms candidate resume content based on job analysis and requirements
-   *
-   * @param jobAnalysis - Comprehensive job analysis result
-   * @param candidateContent - Current resume content structure
-   * @param companyName - Target company name
-   * @param jobPosition - Target job position
-   * @returns string - Formatted prompt for AI resume optimization
+   * Standard resume optimization: align resume to job (keywords, stack) without inventing facts.
+   * Used when the user has no profile Q&A facts yet. Same JSON shape as precision path.
    */
   getResumeOptimizationPrompt(
     jobAnalysis: Record<string, any>,
@@ -774,18 +768,24 @@ ${jobDescription}
     companyName: string,
     jobPosition: string,
   ): string {
-    // Safely extract values with proper type checking
     const technical = (jobAnalysis.technical as Record<string, any>) || {};
     const keywords = (jobAnalysis.keywords as Record<string, any>) || {};
 
     return `
-You are an expert resume optimization specialist. Your task is to transform a candidate's resume into a tailored, quantifiable, and job-specific version. Your output MUST be valid JSON matching the specified structure.
+You are an expert resume optimization specialist. Tailor the candidate's resume to the target job. Your output MUST be valid JSON matching the specified structure.
+
+**CRITICAL RULE: ZERO HALLUCINATION (NO INVENTED METRICS)**
+- Use ONLY facts, numbers, and metrics that already appear in the candidate resume JSON below
+- NEVER invent, estimate, or assume quantifiable data (percentages, dollar amounts, counts, team sizes) that are not explicitly present in the resume
+- You MAY rephrase, reorder, and emphasize existing content; you MAY align wording with job keywords when it truthfully reflects the candidate's experience
+- If a bullet has no numbers in the source material, write a strong qualitative achievement — do NOT fabricate metrics
+- Prefer a factual bullet without numbers over one with invented metrics
 
 **CRITICAL WORK EXPERIENCE INSTRUCTION:**
 - Extract and include ALL work experiences from the candidate's resume
-- For the most recent job, include ALL bullet points (all responsibilities/achievements)
+- For the most recent job, include ALL bullet points
 - For each older job, include UP TO 3 of the most relevant bullet points
-- **Do NOT copy bullet points verbatim.** For each selected bullet point, tailor it to the job description and rewrite it as a quantifiable, measurable achievement
+- **Do NOT copy bullet points verbatim.** Rewrite for clarity and job alignment while obeying the ZERO HALLUCINATION policy above
 - **MANDATORY DATE FIELDS:** Every experience entry MUST have valid startDate and endDate fields
 
 **TARGET JOB INFORMATION:**
@@ -800,30 +800,26 @@ You are an expert resume optimization specialist. Your task is to transform a ca
 ${JSON.stringify(candidateContent, null, 2)}
 
 **OPTIMIZATION INSTRUCTIONS:**
-1. **Transform Responsibilities into Achievements:**
-   - Convert every responsibility into a quantifiable achievement using the CAR method (Context, Action, Result)
-   - Prioritize existing numbers in the resume; enhance with context
-   - For missing numbers, add realistic mid-range metrics (e.g., 25-50% improvement, $50K-$300K impact, 3-8 team members)
-   - Tailor content to match job description keywords and focus areas
+1. **Achievements and responsibilities:**
+   - Use CAR framing (Context, Action, Result) only with information that already exists in the resume
+   - Mirror job-relevant keywords and tech stack where they match the candidate's stated experience
+   - Do NOT add "realistic" or placeholder metrics
 
-2. **Work Experience Requirements:**
-   - Latest job: Include all bullet points (all responsibilities/achievements)
-   - Older jobs: Include up to 3 of the most relevant bullet points
-   - **CRITICAL:** Every experience entry must have valid startDate and endDate fields in proper format
+2. **Work experience:**
+   - Latest job: include all bullet points
+   - Older jobs: up to 3 most relevant bullets each
+   - Every experience entry must have valid startDate and endDate
 
-3. **Date Format Requirements:**
-   - Use consistent date formats: "YYYY-MM-DD", "YYYY-MM", or "YYYY" 
-   - For current positions, use "Present" as endDate
-   - Never use "N/A" or invalid dates
-   - If original dates are unclear, derive reasonable dates from context
+3. **Date format:**
+   - Use "YYYY-MM-DD", "YYYY-MM", or "YYYY"; use "Present" for current roles
+   - Never use "N/A" or invalid dates; infer dates only from explicit resume content
 
-4. **Skills and Summary:**
-   - Write a quantifiable summary highlighting years of experience and key achievements
-   - Categorize skills into languages, frameworks, tools, databases, and concepts
-   - Align skills with job description requirements
+4. **Skills and summary:**
+   - Summary must reflect real experience from the resume; no invented metrics
+   - Include only skills present in the resume; prioritize ordering and grouping to match the job when truthful
 
 **OUTPUT REQUIREMENTS:**
-Return valid JSON with the EXACT structure below. Ensure every achievement includes measurable metrics.
+Return valid JSON with the EXACT structure below. Set achievementsQuantified to 0 if you did not introduce any new numeric claims beyond what was already in the resume.
 
 {
   "optimizedContent": {
@@ -837,7 +833,7 @@ Return valid JSON with the EXACT structure below. Ensure every achievement inclu
       "portfolio": "string",
       "github": "string"
     },
-    "summary": "string with quantifiable highlights",
+    "summary": "string",
     "skills": {
       "languages": ["string"],
       "frameworks": ["string"],
@@ -850,8 +846,8 @@ Return valid JSON with the EXACT structure below. Ensure every achievement inclu
       "position": "string",
       "duration": "string",
       "location": "string",
-      "responsibilities": ["quantifiable achievement"],
-      "achievements": ["quantifiable achievement"],
+      "responsibilities": ["string"],
+      "achievements": ["string"],
       "startDate": "string - MUST BE VALID DATE",
       "endDate": "string - MUST BE VALID DATE OR 'Present'",
       "technologies": "string"
@@ -872,7 +868,178 @@ Return valid JSON with the EXACT structure below. Ensure every achievement inclu
     }],
     "additionalSections": [{
       "title": "string",
-      "items": ["quantifiable item"]
+      "items": ["string"]
+    }]
+  },
+  "optimizationMetrics": {
+    "keywordsAdded": 5,
+    "sectionsOptimized": 3,
+    "achievementsQuantified": 0,
+    "skillsAligned": 8,
+    "confidenceScore": 85
+  },
+  "optimizationStrategy": {
+    "primaryFocus": ["keyword integration", "factual alignment"],
+    "improvementAreas": ["technical skills", "leadership experience"],
+    "atsOptimizations": ["keyword density", "format standardization"],
+    "recommendations": ["highlight relevant projects"]
+  },
+  "changesDiff": {
+    "totalChanges": 5,
+    "sectionsChanged": 3,
+    "changes": [
+      {
+        "section": "Professional Summary",
+        "changeType": "modified",
+        "original": "original text here",
+        "optimized": "optimized text here",
+        "addedKeywords": ["React", "TypeScript"]
+      }
+    ]
+  }
+}
+
+**CRITICAL VALIDATION REQUIREMENTS:**
+- EVERY experience entry MUST have valid startDate and endDate fields
+- NEVER use "N/A", "Unknown", or invalid values for dates
+- Include ALL work experiences from candidate resume (don't skip any)
+- Ensure experience array is complete and properly formatted
+- Do NOT invent metrics; changesDiff.changes must cover ALL sections that were modified: Summary, Skills, and each Experience entry
+- changeType must be one of: "modified", "added", "removed", "unchanged"
+`;
+  }
+
+  /**
+   * Precision / enhanced resume optimization: job alignment without inventing metrics.
+   * Same JSON output shape as getResumeOptimizationPrompt; includes user-verified Q&A as source of truth.
+   */
+  getPrecisionOptimizationPrompt(
+    jobAnalysis: Record<string, unknown>,
+    candidateContent: Record<string, unknown>,
+    companyName: string,
+    jobPosition: string,
+    verifiedFacts: Array<{ originalBulletPoint: string; userResponse: string }>,
+  ): string {
+    const technical = (jobAnalysis.technical as Record<string, unknown>) || {};
+    const keywords = (jobAnalysis.keywords as Record<string, unknown>) || {};
+
+    const factsBlock =
+      verifiedFacts.length > 0
+        ? verifiedFacts
+            .map((f, i) => {
+              const bullet = JSON.stringify(f.originalBulletPoint ?? '');
+              const response = JSON.stringify(f.userResponse ?? '');
+              return `${i + 1}. Original bullet: ${bullet}\n   User stated: ${response}`;
+            })
+            .join('\n\n')
+        : '(No separate Q&A entries with text responses. Use only numbers and metrics explicitly present in the candidate JSON below.)';
+
+    return `
+You are an expert resume optimization specialist. Your task is to tailor a candidate's resume to the target job while preserving factual integrity. Your output MUST be valid JSON matching the specified structure.
+
+**CRITICAL RULE: ZERO HALLUCINATION POLICY**
+- Use ONLY facts, numbers, and metrics that appear in the candidate resume JSON below OR in the USER-VERIFIED FACTS section
+- NEVER invent, estimate, round up, or assume quantifiable data (percentages, dollar amounts, counts, team sizes, timelines with numbers)
+- If a bullet has no numbers in the source material, write a strong qualitative achievement — do NOT fabricate metrics
+- Prefer a factual bullet without numbers over one with invented metrics
+- Preserve approximate user phrasing (e.g. "about 30%") when given in USER-VERIFIED FACTS
+
+**USER-VERIFIED FACTS (source of truth — preserve these exactly):**
+${factsBlock}
+
+Every number or metric listed under USER-VERIFIED FACTS was provided by the candidate. You MUST:
+- Keep those figures exactly as stated (do not round, inflate, or rephrase numbers)
+- Integrate them naturally into the relevant work experience bullets
+- Not add additional metrics beyond what appears in the candidate content or USER-VERIFIED FACTS
+
+**CRITICAL WORK EXPERIENCE INSTRUCTION:**
+- Extract and include ALL work experiences from the candidate's resume
+- For the most recent job, include ALL bullet points (all responsibilities/achievements)
+- For each older job, include UP TO 3 of the most relevant bullet points
+- **Do NOT copy bullet points verbatim.** Rewrite for clarity and job alignment while obeying the ZERO HALLUCINATION POLICY
+- **MANDATORY DATE FIELDS:** Every experience entry MUST have valid startDate and endDate fields
+
+**TARGET JOB INFORMATION:**
+- Position: ${jobPosition}
+- Company: ${companyName}
+- Mandatory Skills: ${Array.isArray(technical.mandatorySkills) ? (technical.mandatorySkills as string[]).join(', ') : 'None specified'}
+- Programming Languages: ${Array.isArray(technical.programmingLanguages) ? (technical.programmingLanguages as string[]).join(', ') : 'None specified'}
+- Frameworks: ${Array.isArray(technical.frameworks) ? (technical.frameworks as string[]).join(', ') : 'None specified'}
+- Primary Keywords: ${Array.isArray(keywords.primary) ? (keywords.primary as string[]).join(', ') : 'None specified'}
+
+**CURRENT CANDIDATE RESUME (may already include merged user facts):**
+${JSON.stringify(candidateContent, null, 2)}
+
+**OPTIMIZATION INSTRUCTIONS:**
+1. **Achievements and responsibilities:**
+   - Align wording with the job description and keywords where truthful
+   - Use the CAR method (Context, Action, Result) only with information that already exists — do not invent results
+   - Do NOT add "realistic mid-range" or placeholder metrics
+
+2. **Work experience:**
+   - Latest job: include all bullet points
+   - Older jobs: up to 3 most relevant bullets each
+   - **CRITICAL:** Every experience entry must have valid startDate and endDate
+
+3. **Date format:**
+   - Use "YYYY-MM-DD", "YYYY-MM", or "YYYY"; use "Present" for current roles
+   - Never use "N/A" or invalid dates; infer only from explicit resume content
+
+4. **Skills and summary:**
+   - Summary should reflect real experience from the resume; no invented metrics
+   - Align skill categories with the job when those skills appear in the resume
+
+**OUTPUT REQUIREMENTS:**
+Return valid JSON with the EXACT structure below. Metrics in optimizationMetrics are estimates of what you changed — use 0 for achievementsQuantified if you did not add new numbers.
+
+{
+  "optimizedContent": {
+    "title": "string",
+    "contactInfo": {
+      "name": "string",
+      "email": "string", 
+      "phone": "string",
+      "location": "string",
+      "linkedin": "string",
+      "portfolio": "string",
+      "github": "string"
+    },
+    "summary": "string",
+    "skills": {
+      "languages": ["string"],
+      "frameworks": ["string"],
+      "tools": ["string"],
+      "databases": ["string"],
+      "concepts": ["string"]
+    },
+    "experience": [{
+      "company": "string",
+      "position": "string",
+      "duration": "string",
+      "location": "string",
+      "responsibilities": ["string"],
+      "achievements": ["string"],
+      "startDate": "string - MUST BE VALID DATE",
+      "endDate": "string - MUST BE VALID DATE OR 'Present'",
+      "technologies": "string"
+    }],
+    "education": [{
+      "institution": "string",
+      "degree": "string",
+      "major": "string",
+      "startDate": "string - MUST BE VALID DATE",
+      "endDate": "string - MUST BE VALID DATE"
+    }],
+    "certifications": [{
+      "name": "string",
+      "issuer": "string",
+      "date": "string",
+      "expiryDate": "string",
+      "credentialId": "string"
+    }],
+    "additionalSections": [{
+      "title": "string",
+      "items": ["string"]
     }]
   },
   "optimizationMetrics": {
@@ -883,19 +1050,204 @@ Return valid JSON with the EXACT structure below. Ensure every achievement inclu
     "confidenceScore": 85
   },
   "optimizationStrategy": {
-    "primaryFocus": ["keyword integration", "achievement quantification"],
+    "primaryFocus": ["keyword integration", "factual alignment"],
     "improvementAreas": ["technical skills", "leadership experience"],
     "atsOptimizations": ["keyword density", "format standardization"],
-    "recommendations": ["add specific metrics", "highlight relevant projects"]
+    "recommendations": ["preserve user metrics", "highlight relevant projects"]
+  },
+  "changesDiff": {
+    "totalChanges": 5,
+    "sectionsChanged": 3,
+    "changes": [
+      {
+        "section": "Professional Summary",
+        "changeType": "modified",
+        "original": "original text here",
+        "optimized": "optimized text here",
+        "addedKeywords": ["React", "TypeScript"]
+      }
+    ]
   }
 }
 
 **CRITICAL VALIDATION REQUIREMENTS:**
 - EVERY experience entry MUST have valid startDate and endDate fields
 - NEVER use "N/A", "Unknown", or invalid values for dates
-- Include ALL work experiences from candidate resume (don't skip any)
-- Ensure experience array is complete and properly formatted
-- Use realistic, mid-range estimates for metrics; avoid exaggeration
+- Include ALL work experiences from candidate resume
+- Do not introduce new numerical claims
+- changesDiff.changes must cover ALL sections that were modified: Summary, Skills, and each Experience entry
+- changeType must be one of: "modified", "added", "removed", "unchanged"
+`;
+  }
+
+  /**
+   * Generate prompt for profile-level question generation (upload flow).
+   * One question per vague bullet point; cap 9-12 total. No job description.
+   */
+  getProfileQuestionGenerationPrompt(
+    bulletContexts: Array<{
+      workExperienceIndex: number;
+      bulletPointIndex: number;
+      originalBulletPoint: string;
+      positionTitle?: string;
+    }>,
+  ): string {
+    const bulletsFormatted = bulletContexts
+      .map(
+        (b, i) =>
+          `${i + 1}. [Experience ${b.workExperienceIndex}, Bullet ${b.bulletPointIndex}] "${b.originalBulletPoint}"${b.positionTitle ? ` (${b.positionTitle})` : ''}`,
+      )
+      .join('\n');
+
+    return `
+You are an expert resume consultant. For each resume bullet point below, generate exactly ONE question that will help the candidate provide the most impactful missing fact: a metric, scope, or outcome.
+
+**Bullet points to question (already pre-selected; do not add more):**
+${bulletsFormatted}
+
+**RULES:**
+- Generate exactly one question per bullet point above.
+- Question should target: metric (numbers, %), scope (team size, users, scale), or outcome (result, impact).
+- Use categories: metrics | impact | scope | technology | outcome.
+- Keep questions conversational and easy to answer.
+- Do not invent or assume; ask for what the candidate would know.
+
+**RESPONSE FORMAT (JSON only):**
+{
+  "questions": [
+    {
+      "workExperienceIndex": 0,
+      "bulletPointIndex": 0,
+      "originalBulletPoint": "exact bullet text from above",
+      "questionText": "One clear question for the candidate",
+      "questionCategory": "metrics"
+    }
+  ]
+}
+`;
+  }
+
+  /**
+   * Prompt for profile enrichment: merge answered profile questions into original
+   * structured resume. No job description. Rewrite only bullets that have answers;
+   * unanswered/skipped pass through unchanged. Zero hallucination.
+   */
+  getProfileEnrichmentPrompt(
+    originalStructuredContentJson: string,
+    questionsAndResponses: Array<{
+      workExperienceIndex: number;
+      bulletPointIndex: number;
+      originalBulletPoint: string;
+      questionText: string;
+      userResponse: string;
+    }>,
+  ): string {
+    const qrFormatted = questionsAndResponses
+      .map(
+        (qr, i) =>
+          `${i + 1}. Experience[${qr.workExperienceIndex}] Bullet[${qr.bulletPointIndex}]: "${qr.originalBulletPoint}"\n   Q: ${qr.questionText}\n   A: ${qr.userResponse}`,
+      )
+      .join('\n\n');
+
+    return `
+You are an expert resume writer. Merge the user's factual answers into their resume structured content. There is NO job description; this is profile-level enrichment only.
+
+**ZERO HALLUCINATION:** Use ONLY the facts from the user's responses. Never invent metrics or numbers. Unanswered bullets stay exactly as in the original.
+
+**Original structured resume (JSON):**
+${originalStructuredContentJson}
+
+**User's answers (only these bullets should be rewritten):**
+${qrFormatted}
+
+**Instructions:**
+1. For each bullet that has a user answer above: rewrite that single bullet using ONLY the user's stated facts (CAR method). Keep the same position in the same experience.
+2. For all other bullets: output them UNCHANGED from the original JSON.
+3. Keep contactInfo, summary, skills, education, certifications, additionalSections identical to the original unless a user answer clearly relates to them (rare).
+4. Return valid JSON with the same structure as the original. Only the "experience[].achievements" array may differ for bullets that had answers.
+
+**Output (JSON only):**
+{
+  "optimizedContent": { ... same shape as original experience/skills/contactInfo/summary/education/certifications/additionalSections ... }
+}
+`;
+  }
+
+  /**
+   * Generate a targeted cover letter based on job analysis and candidate content.
+   * Zero hallucination policy: only use facts present in the candidateContent or verifiedFacts.
+   */
+  getCoverLetterGenerationPrompt(
+    jobAnalysis: Record<string, unknown>,
+    candidateContent: Record<string, unknown>,
+    companyName: string,
+    jobPosition: string,
+    verifiedFacts?: Array<{ originalBulletPoint: string; userResponse: string }>,
+  ): string {
+    const technical = (jobAnalysis.technical as Record<string, unknown>) ?? {};
+    const keywords = (jobAnalysis.keywords as Record<string, unknown>) ?? {};
+    const context = (jobAnalysis.context as Record<string, unknown>) ?? {};
+    const contactInfo =
+      (candidateContent.contactInfo as Record<string, unknown>) ?? {};
+    const candidateName =
+      typeof contactInfo.name === 'string' ? contactInfo.name : 'Candidate';
+
+    const factsBlock =
+      verifiedFacts && verifiedFacts.length > 0
+        ? verifiedFacts
+            .map(
+              (f, i) =>
+                `${i + 1}. ${JSON.stringify(f.originalBulletPoint)} → ${JSON.stringify(f.userResponse)}`,
+            )
+            .join('\n')
+        : '(No separate Q&A facts provided — use only data present in the candidate resume.)';
+
+    return `
+You are an expert cover letter writer. Write a concise, impactful cover letter for the candidate below.
+Keep it under 380 words. Avoid generic openers like "I am writing to express my interest in...".
+
+**ZERO HALLUCINATION POLICY:** Only use facts, numbers, and achievements that are explicitly present in the CANDIDATE RESUME or USER-VERIFIED FACTS below. Never invent metrics.
+
+**TARGET ROLE:**
+- Position: ${jobPosition}
+- Company: ${companyName}
+- Mandatory Skills: ${Array.isArray(technical.mandatorySkills) ? (technical.mandatorySkills as string[]).join(', ') : 'Not specified'}
+- Primary Keywords: ${Array.isArray(keywords.primary) ? (keywords.primary as string[]).join(', ') : 'Not specified'}
+- Key Responsibilities: ${Array.isArray(context.keyResponsibilities) ? (context.keyResponsibilities as string[]).slice(0, 4).join('; ') : 'Not specified'}
+
+**CANDIDATE RESUME:**
+${JSON.stringify(candidateContent, null, 2)}
+
+**USER-VERIFIED FACTS (source of truth):**
+${factsBlock}
+
+**WRITING GUIDELINES:**
+1. Open with a strong hook that references the specific role and a concrete achievement from the resume
+2. Body paragraph 1: Highlight 2-3 technical skills / achievements most relevant to the mandatory skills
+3. Body paragraph 2: Show cultural / team fit or leadership (use resume evidence only)
+4. Closing: Express genuine interest, reference company name specifically, and invite next steps
+5. Professional but confident tone — avoid filler phrases
+6. Reference specific job requirements by name (pulled from Primary Keywords / Mandatory Skills)
+
+**OUTPUT (JSON only, no markdown outside the JSON block):**
+{
+  "coverLetter": {
+    "greeting": "Dear Hiring Manager,",
+    "opening": "string — 2-3 sentences, strong hook with a specific achievement",
+    "body": [
+      "string — paragraph 1, technical fit (2-4 sentences)",
+      "string — paragraph 2, team/culture fit or leadership (2-3 sentences)"
+    ],
+    "closing": "string — 2 sentences expressing genuine interest and call to action",
+    "signoff": "Sincerely,",
+    "candidateName": "${candidateName}"
+  },
+  "metadata": {
+    "keyThemesAddressed": ["string"],
+    "toneProfile": "professional-confident",
+    "wordCount": 0
+  }
+}
 `;
   }
 }

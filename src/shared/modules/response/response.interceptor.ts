@@ -11,9 +11,10 @@ import { Request } from '@nestjs/common';
 import { ApiResponseDto } from './response.dto';
 
 @Injectable()
-export class ResponseInterceptor<T>
-  implements NestInterceptor<T, ApiResponseDto<T>>
-{
+export class ResponseInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponseDto<T>
+> {
   constructor(private readonly responseService: ResponseService) {}
 
   intercept(

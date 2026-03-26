@@ -12,6 +12,8 @@ import {
   ExtractedResumeContent,
   ResumeGenerationResult,
   QueueMessage,
+  TailoringQuestion,
+  EnrichedResumeProfile,
 } from '../../database/entities';
 import { HandlebarsService } from '../../shared/services/handlebars.service';
 import {
@@ -29,6 +31,12 @@ import { ResumeContentService } from './services/resume-content.service';
 import { ResumeValidationService } from './services/resume-validation.service';
 import { ResumeGenerationResultService } from './services/resume-generation-result.service';
 import { ResumeQueueService } from './services/resume-queue.service';
+import { ResumeProfileEnrichmentService } from './services/resume-profile-enrichment.service';
+import { ProfileQuestionSelectionService } from './services/profile-question-selection.service';
+import { ProfileQuestionGenerationService } from './services/profile-question-generation.service';
+import { CoverLetterGenerationService } from './services/cover-letter-generation.service';
+import { TailoredResumePdfStorageService } from './services/tailored-resume-pdf-storage.service';
+import { ProfileQuestionsController } from './controllers/profile-questions.controller';
 import { BasicInputValidationRule } from './validation/basic-input-validation.rule';
 import { UserContextValidationRule } from './validation/user-context-validation.rule';
 import { TemplateValidationRule } from './validation/template-validation.rule';
@@ -55,6 +63,8 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
       ExtractedResumeContent,
       ResumeGenerationResult,
       QueueMessage,
+      TailoringQuestion,
+      EnrichedResumeProfile,
     ]),
     ConfigModule,
     SharedModule,
@@ -87,9 +97,16 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
     ResumeContentProcessorService,
     ResumeOptimizerService,
     PdfGenerationOrchestratorService,
+    TailoredResumePdfStorageService,
     ResumeGenerationOrchestratorService,
     ResumeGenerationResultService,
     ResumeQueueService,
+    // Profile enrichment & profile questions
+    ProfileQuestionSelectionService,
+    ProfileQuestionGenerationService,
+    ResumeProfileEnrichmentService,
+    // Cover Letter Generation
+    CoverLetterGenerationService,
     // Queue Processors (Domain-specific)
     ResumeGenerationProcessor,
     ResumeExtractionProcessor,
@@ -99,7 +116,11 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
       useClass: TransformUserContextInterceptor,
     },
   ],
-  controllers: [ResumeTailoringController, ResumeTailoringAsyncController],
+  controllers: [
+    ResumeTailoringController,
+    ResumeTailoringAsyncController,
+    ProfileQuestionsController,
+  ],
   exports: [
     ResumeTemplateService,
     ResumeService,
@@ -118,6 +139,7 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
     ResumeGenerationOrchestratorService,
     ResumeGenerationResultService,
     ResumeQueueService,
+    ResumeProfileEnrichmentService,
   ],
 })
 export class ResumeTailoringModule {}

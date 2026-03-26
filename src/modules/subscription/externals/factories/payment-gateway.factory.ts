@@ -7,10 +7,10 @@ import {
   InternalServerErrorException,
 } from '../../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../../shared/constants/error-codes';
-import { 
-  PaymentProvider, 
-  getAllPaymentProviders, 
-  isValidPaymentProvider 
+import {
+  PaymentProvider,
+  getAllPaymentProviders,
+  isValidPaymentProvider,
 } from '../../enums/payment-provider.enum';
 
 /**

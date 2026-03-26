@@ -1,20 +1,20 @@
 /**
  * Email Templates S3 Upload Seed Script
- * 
+ *
  * This script uploads all email template files from src/email-templates to the S3 bucket.
- * 
+ *
  * Bucket: ats-fit-email-templates
- * 
+ *
  * Usage:
  *   npm run seed:email-templates
- * 
+ *
  * The script will:
  *   - Recursively scan src/email-templates for .hbs and .html files
  *   - Preserve directory structure in S3 (e.g., subdirs/template.hbs → email-templates/subdirs/template.hbs)
  *   - Set appropriate content types (text/x-handlebars-template or text/html)
  *   - Add metadata (originalName, uploadedAt, source)
  *   - Display upload progress and summary
- * 
+ *
  * Environment Variables Required:
  *   - AWS_BUCKET_REGION: The AWS region for the S3 bucket
  *   - AWS_ACCESS_KEY_ID: AWS credentials (loaded from .env.dev or .env.prod)
@@ -106,7 +106,7 @@ async function uploadEmailTemplates(): Promise<void> {
   for (const relativeFilePath of files) {
     const filePath = path.join(templatesBaseDir, relativeFilePath);
     const fileContent = fs.readFileSync(filePath, 'utf-8');
-    
+
     // Preserve directory structure in S3 key, but normalize path separators
     const normalizedPath = relativeFilePath.replace(/\\/g, '/');
     const key = `email-templates/${normalizedPath}`;

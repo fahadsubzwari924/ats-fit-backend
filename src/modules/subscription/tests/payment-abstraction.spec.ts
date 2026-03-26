@@ -149,8 +149,10 @@ describe('Payment Abstraction Layer', () => {
   describe('Provider Switching Simulation', () => {
     it('should return LemonSqueezy provider name', async () => {
       // Mock the provider name
-      mockPaymentGateway.getProviderName.mockReturnValue(PaymentProvider.LEMONSQUEEZY);
-      
+      mockPaymentGateway.getProviderName.mockReturnValue(
+        PaymentProvider.LEMONSQUEEZY,
+      );
+
       const providerName = await paymentService.getProviderName();
       expect(providerName).toBe(PaymentProvider.LEMONSQUEEZY);
     });
@@ -158,8 +160,10 @@ describe('Payment Abstraction Layer', () => {
     it('should work with different payment providers (Stripe example)', async () => {
       // This demonstrates how the abstraction allows switching providers
       // Mock Stripe-like behavior
-      mockPaymentGateway.getProviderName.mockReturnValue(PaymentProvider.STRIPE);
-      
+      mockPaymentGateway.getProviderName.mockReturnValue(
+        PaymentProvider.STRIPE,
+      );
+
       const providerName = await paymentService.getProviderName();
       expect(providerName).toBe(PaymentProvider.STRIPE);
     });
@@ -167,8 +171,10 @@ describe('Payment Abstraction Layer', () => {
     it('should work with different payment providers (Paddle example)', async () => {
       // This demonstrates provider-agnostic design
       // Mock Paddle-like behavior
-      mockPaymentGateway.getProviderName.mockReturnValue(PaymentProvider.PADDLE);
-      
+      mockPaymentGateway.getProviderName.mockReturnValue(
+        PaymentProvider.PADDLE,
+      );
+
       const providerName = await paymentService.getProviderName();
       expect(providerName).toBe(PaymentProvider.PADDLE);
     });

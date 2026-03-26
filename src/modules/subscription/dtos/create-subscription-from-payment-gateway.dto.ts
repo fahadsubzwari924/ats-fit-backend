@@ -24,8 +24,11 @@ export class CreateSubscriptionFromPaymentGatewayDto implements ICreateSubscript
     this.user_id = payload?.meta?.custom_data?.user_id;
     this.status = this.mapStatus(payload?.data?.attributes?.status);
     this.amount = payload?.data?.attributes?.total || 0;
-    this.currency = (payload?.data?.attributes?.currency as Currency) || Currency.USD;
-    this.starts_at = new Date(payload?.data?.attributes?.created_at || Date.now());
+    this.currency =
+      (payload?.data?.attributes?.currency as Currency) || Currency.USD;
+    this.starts_at = new Date(
+      payload?.data?.attributes?.created_at || Date.now(),
+    );
     this.ends_at = new Date(
       payload?.data?.attributes?.renews_at ||
         payload?.data?.attributes?.ends_at ||

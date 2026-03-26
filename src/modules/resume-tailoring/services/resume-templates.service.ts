@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  InternalServerErrorException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ResumeTemplate } from '../../../database/entities/resume-templates.entity';
@@ -16,6 +11,8 @@ import {
 } from '../interfaces/resume-extracted-keywords.interface';
 import { ConfigService } from '@nestjs/config';
 import { getTemplateS3Key } from '../utils/s3.util';
+import { InternalServerErrorException } from '../../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../../shared/constants/error-codes';
 
 @Injectable()
 export class ResumeTemplateService {
@@ -97,7 +94,10 @@ export class ResumeTemplateService {
       );
 
       if (!bucketName) {
-        throw new Error('AWS_S3_RESUME_TEMPLATES_BUCKET is not configured');
+        throw new InternalServerErrorException(
+          'AWS_S3_RESUME_TEMPLATES_BUCKET is not configured',
+          ERROR_CODES.AWS_S3_NOT_CONFIGURED,
+        );
       }
 
       // Retry logic for S3 operations to handle socket timeouts
@@ -213,16 +213,21 @@ export class ResumeTemplateService {
 
       if (error instanceof Error) {
         if (error.message.includes('not defined')) {
-          throw new Error(
+          throw new InternalServerErrorException(
             `Template error: Missing required variable - ${error.message}`,
+            ERROR_CODES.TEMPLATE_RENDERING_FAILED,
           );
         }
-        throw new Error(
+        throw new InternalServerErrorException(
           `Failed to generate resume from template: ${error.message}`,
+          ERROR_CODES.TEMPLATE_RENDERING_FAILED,
         );
       }
 
-      throw new Error(`Failed to generate resume from template: ${formatted}`);
+      throw new InternalServerErrorException(
+        `Failed to generate resume from template: ${formatted}`,
+        ERROR_CODES.TEMPLATE_RENDERING_FAILED,
+      );
     }
   }
 

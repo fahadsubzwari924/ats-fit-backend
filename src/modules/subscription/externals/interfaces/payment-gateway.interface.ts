@@ -5,7 +5,6 @@
  * Controllers depend on this abstraction, not concrete implementations.
  */
 
-import { Currency } from '../../enums';
 import { PaymentProvider } from '../../enums/payment-provider.enum';
 import { SubscriptionStatus } from '../../enums/subscription-status.enum';
 

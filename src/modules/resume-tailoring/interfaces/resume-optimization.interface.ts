@@ -1,6 +1,27 @@
 import type { TailoredContent } from './resume-extracted-keywords.interface';
 
 /**
+ * Raw AI-generated resume response structure (e.g. from Claude/OpenAI).
+ * Used for parsing and validation before mapping to ResumeOptimizationResult.
+ */
+export interface AIResumeResponse {
+  optimizedContent: TailoredContent;
+  enhancementMetrics?: {
+    keywordsAdded?: number;
+    sectionsOptimized?: number;
+    achievementsQuantified?: number;
+    skillsAligned?: number;
+    confidenceScore?: number;
+  };
+  enhancementSummary?: {
+    factsUsed?: string[];
+    improvementAreas?: string[];
+    atsOptimizations?: string[];
+    recommendations?: string[];
+  };
+}
+
+/**
  * Resume optimization metrics from AI processing
  *
  * Quantifies the improvements made during the optimization process.
@@ -37,6 +58,26 @@ export interface AIProcessingMetadata {
 }
 
 /**
+ * A single section-level change produced by the AI optimizer.
+ */
+export interface SectionDiff {
+  section: string;
+  changeType: 'modified' | 'added' | 'removed' | 'unchanged';
+  original: string;
+  optimized: string;
+  addedKeywords: string[];
+}
+
+/**
+ * Structured diff returned by the AI alongside the optimized resume.
+ */
+export interface ResumeDiff {
+  totalChanges: number;
+  sectionsChanged: number;
+  changes: SectionDiff[];
+}
+
+/**
  * Complete resume optimization result from Claude 3.5 Sonnet
  *
  * Contains optimized content along with detailed metrics and strategy information.
@@ -46,4 +87,5 @@ export interface ResumeOptimizationResult {
   optimizationMetrics: OptimizationMetrics;
   optimizationStrategy: OptimizationStrategy;
   processingMetadata: AIProcessingMetadata;
+  changesDiff?: ResumeDiff;
 }

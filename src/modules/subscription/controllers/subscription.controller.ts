@@ -9,7 +9,7 @@ import {
   Logger,
   Headers,
   ParseUUIDPipe,
-  Inject
+  Inject,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -35,8 +35,15 @@ import { MESSAGES } from '../../../shared/constants/messages';
 import { ERROR_CODES } from 'src/shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
 import { ExternalPaymentGatewayEvents } from '../externals/enums';
-import { IEmailService, EMAIL_SERVICE_TOKEN } from '../../../shared/interfaces/email.interface';
-import { EmailSubjects, EmailTemplates, AwsConfigKeys } from '../../../shared/enums';
+import {
+  IEmailService,
+  EMAIL_SERVICE_TOKEN,
+} from '../../../shared/interfaces/email.interface';
+import {
+  EmailSubjects,
+  EmailTemplates,
+  AwsConfigKeys,
+} from '../../../shared/enums';
 import { ConfigService } from '@nestjs/config';
 
 @ApiTags('Subscriptions')
@@ -80,7 +87,9 @@ export class SubscriptionController {
       );
 
       // Step 2: Validate user eligibility for new subscription
-      await this.validateUserSubscriptionEligibility(request?.userContext?.userId);
+      await this.validateUserSubscriptionEligibility(
+        request?.userContext?.userId,
+      );
 
       // Step 3: Create checkout session with payment service
       const checkoutResponse = await this.createPaymentCheckout(
@@ -98,7 +107,10 @@ export class SubscriptionController {
       });
 
       // Re-throw known exceptions to maintain proper error responses
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -113,7 +125,7 @@ export class SubscriptionController {
   /**
    * Validates and retrieves subscription plan by ID
    * Follows Single Responsibility Principle - only handles plan validation
-   * 
+   *
    * @param planId - The subscription plan ID to validate and retrieve
    * @returns Promise<SubscriptionPlan> - The validated and active subscription plan
    * @throws NotFoundException - When plan is not found
@@ -121,7 +133,8 @@ export class SubscriptionController {
    */
   private async validateAndRetrieveSubscriptionPlan(planId: string) {
     // Retrieve subscription plan from database
-    const subscriptionPlan = await this.subscriptionPlanService.findById(planId);
+    const subscriptionPlan =
+      await this.subscriptionPlanService.findById(planId);
 
     // Validate plan exists
     if (!subscriptionPlan) {
@@ -139,20 +152,25 @@ export class SubscriptionController {
       );
     }
 
-    this.logger.log(`Subscription plan validated successfully: ${subscriptionPlan.id}`);
+    this.logger.log(
+      `Subscription plan validated successfully: ${subscriptionPlan.id}`,
+    );
     return subscriptionPlan;
   }
 
   /**
    * Validates user eligibility for creating a new subscription
    * Follows Single Responsibility Principle - only handles user subscription eligibility
-   * 
+   *
    * @param userId - The user ID to check for existing active subscriptions
    * @throws BadRequestException - When user already has an active subscription
    */
-  private async validateUserSubscriptionEligibility(userId: string): Promise<void> {
+  private async validateUserSubscriptionEligibility(
+    userId: string,
+  ): Promise<void> {
     // Retrieve user's existing subscriptions
-    const existingSubscriptions = await this.subscriptionService.findByUserId(userId);
+    const existingSubscriptions =
+      await this.subscriptionService.findByUserId(userId);
 
     // Check for active, non-cancelled subscriptions
     const activeSubscription = existingSubscriptions.find(
@@ -176,7 +194,7 @@ export class SubscriptionController {
   /**
    * Creates checkout session with payment service
    * Follows Single Responsibility Principle - only handles checkout creation
-   * 
+   *
    * @param subscriptionPlan - The validated subscription plan
    * @param createSubscriptionDto - The subscription creation data
    * @param userId - The user ID for the checkout
@@ -197,7 +215,9 @@ export class SubscriptionController {
       },
     };
 
-    this.logger.log(`Creating checkout session for user ${userId} with plan ${subscriptionPlan.id}`);
+    this.logger.log(
+      `Creating checkout session for user ${userId} with plan ${subscriptionPlan.id}`,
+    );
 
     return await this.paymentService.createCheckout(checkoutRequest);
   }
@@ -217,7 +237,7 @@ export class SubscriptionController {
     try {
       this.logger.log(`Retrieving subscription details for ID: ${id}`);
 
-  // Get subscription from database
+      // Get subscription from database
       const subscription = await this.subscriptionService.findById(id);
 
       if (!subscription) {
@@ -228,15 +248,20 @@ export class SubscriptionController {
         );
       }
 
-      this.logger.log(`Subscription retrieved successfully: ${subscription.id}`);
+      this.logger.log(
+        `Subscription retrieved successfully: ${subscription.id}`,
+      );
       return subscription;
     } catch (error) {
-      this.logger.error('getSubscriptionById -> Error retrieving subscription:', {
-        error: error.message,
-        subscriptionId: id,
-        userId: request?.userContext?.userId,
-        stack: error.stack,
-      });
+      this.logger.error(
+        'getSubscriptionById -> Error retrieving subscription:',
+        {
+          error: error.message,
+          subscriptionId: id,
+          userId: request?.userContext?.userId,
+          stack: error.stack,
+        },
+      );
 
       // Handle unexpected errors (database connection issues, etc.)
       throw new BadRequestException(
@@ -263,16 +288,20 @@ export class SubscriptionController {
       // Get user subscriptions from database
       const subscriptions = await this.subscriptionService.findByUserId(userId);
 
-      this.logger.log(`Retrieved ${subscriptions.length} subscriptions for user: ${userId}`);
+      this.logger.log(
+        `Retrieved ${subscriptions.length} subscriptions for user: ${userId}`,
+      );
       return subscriptions;
     } catch (error) {
-      this.logger.error('getUserSubscriptions -> Error retrieving user subscriptions:', {
-        error: error.message,
-        userId,
-        requestUserId: request?.userContext?.userId,
-        stack: error.stack,
-      });
-
+      this.logger.error(
+        'getUserSubscriptions -> Error retrieving user subscriptions:',
+        {
+          error: error.message,
+          userId,
+          requestUserId: request?.userContext?.userId,
+          stack: error.stack,
+        },
+      );
 
       // Handle unexpected errors (database connection issues, etc.)
       throw new BadRequestException(
@@ -308,7 +337,8 @@ export class SubscriptionController {
       }
 
       // Get payment history from database
-      const paymentHistory = await this.paymentHistoryService.findByUserId(userId);
+      const paymentHistory =
+        await this.paymentHistoryService.findByUserId(userId);
 
       this.logger.log(
         `Retrieved ${paymentHistory?.length || 0} payment history records for user: ${userId}`,
@@ -316,15 +346,21 @@ export class SubscriptionController {
 
       return paymentHistory || [];
     } catch (error) {
-      this.logger.error('getUserPaymentHistory -> Error retrieving payment history:', {
-        error: error.message,
-        userId,
-        requestUserId: request?.userContext?.userId,
-        stack: error.stack,
-      });
+      this.logger.error(
+        'getUserPaymentHistory -> Error retrieving payment history:',
+        {
+          error: error.message,
+          userId,
+          requestUserId: request?.userContext?.userId,
+          stack: error.stack,
+        },
+      );
 
       // Re-throw known exceptions to maintain proper error responses
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -348,11 +384,14 @@ export class SubscriptionController {
   ) {
     try {
       const userId = request?.userContext?.userId;
-      
-      this.logger.log(`Retrieving payment history for authenticated user: ${userId}`);
+
+      this.logger.log(
+        `Retrieving payment history for authenticated user: ${userId}`,
+      );
 
       // Get payment history from database
-      const paymentHistory = await this.paymentHistoryService.findByUserId(userId);
+      const paymentHistory =
+        await this.paymentHistoryService.findByUserId(userId);
 
       this.logger.log(
         `Retrieved ${paymentHistory?.length || 0} payment history records for authenticated user: ${userId}`,
@@ -395,13 +434,19 @@ export class SubscriptionController {
       this.logger.log(`Retrieved ${plans.length} active subscription plans`);
       return plans;
     } catch (error) {
-      this.logger.error('getSubscriptionPlans -> Error retrieving subscription plans:', {
-        error: error.message,
-        stack: error.stack,
-      });
+      this.logger.error(
+        'getSubscriptionPlans -> Error retrieving subscription plans:',
+        {
+          error: error.message,
+          stack: error.stack,
+        },
+      );
 
       // Re-throw known exceptions to maintain proper error responses
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -437,17 +482,25 @@ export class SubscriptionController {
         );
       }
 
-      this.logger.log(`Subscription plan retrieved successfully: ${subscriptionPlan.id}`);
+      this.logger.log(
+        `Subscription plan retrieved successfully: ${subscriptionPlan.id}`,
+      );
       return subscriptionPlan;
     } catch (error) {
-      this.logger.error('getSubscriptionPlanById -> Error retrieving subscription plan:', {
-        error: error.message,
-        planId: id,
-        stack: error.stack,
-      });
+      this.logger.error(
+        'getSubscriptionPlanById -> Error retrieving subscription plan:',
+        {
+          error: error.message,
+          planId: id,
+          stack: error.stack,
+        },
+      );
 
       // Re-throw known exceptions to maintain proper error responses
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -483,8 +536,12 @@ export class SubscriptionController {
       );
 
       // Step 1: Get user by email from payload
-      const {email, plan_id} = payload?.meta?.custom_data;
-      
+      const customData = payload?.meta?.custom_data ?? {};
+      const { email, plan_id } = customData as {
+        email?: string;
+        plan_id?: number;
+      };
+
       if (!email) {
         this.logger.warn(
           `🔥 DEBUG: Email not found in payment-confirmation payload`,
@@ -495,22 +552,31 @@ export class SubscriptionController {
         );
       }
 
+      if (plan_id == null) {
+        throw new BadRequestException(
+          'Plan ID not found in payment payload',
+          ERROR_CODES.BAD_REQUEST,
+        );
+      }
+
       this.logger.log(`🔥 DEBUG: Looking up user by email: ${email}`);
       const user = await this.userService.getUserByEmail(email);
 
       if (!user) {
-        this.logger.warn(
-          `🔥 DEBUG: User not found for email: ${email}`,
-        );
+        this.logger.warn(`🔥 DEBUG: User not found for email: ${email}`);
         throw new NotFoundException(
           'User not found',
           ERROR_CODES.USER_NOT_FOUND,
         );
       }
 
-      this.logger.log(`🔥 DEBUG: User found - ID: ${user.id}, Name: ${user.full_name}`);
+      this.logger.log(
+        `🔥 DEBUG: User found - ID: ${user.id}, Name: ${user.full_name}`,
+      );
 
-      const subscriptionPlan = await this.subscriptionPlanService.findById(plan_id);
+      const subscriptionPlan = await this.subscriptionPlanService.findById(
+        String(plan_id),
+      );
 
       if (!subscriptionPlan) {
         this.logger.warn(
@@ -522,16 +588,29 @@ export class SubscriptionController {
         );
       }
 
-      this.logger.log(`🔥 DEBUG: Subscription plan found - ID: ${subscriptionPlan.id}, Name: ${subscriptionPlan.plan_name}`);
+      this.logger.log(
+        `🔥 DEBUG: Subscription plan found - ID: ${subscriptionPlan.id}, Name: ${subscriptionPlan.plan_name}`,
+      );
 
       // Step 2: Process subscription logic (decoupled from payment history)
       let subscriptionResult;
-      if (payload.meta?.event_name === ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS) {
-        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload, user, subscriptionPlan);
-        
+      if (
+        payload.meta?.event_name ===
+        ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS
+      ) {
+        subscriptionResult = await this.subscriptionService.handleFailedPayment(
+          payload,
+          user,
+          subscriptionPlan,
+        );
+
         // subscriptionResult = await this.subscriptionService.handleSuccessfulPayment(payload);
       } else {
-        subscriptionResult = await this.subscriptionService.handleFailedPayment(payload, user, subscriptionPlan);
+        subscriptionResult = await this.subscriptionService.handleFailedPayment(
+          payload,
+          user,
+          subscriptionPlan,
+        );
       }
 
       this.logger.log(
@@ -541,7 +620,8 @@ export class SubscriptionController {
 
       // Step 3: Create payment history record first (audit trail)
       this.logger.log(`🔥 DEBUG: Creating payment history record...`);
-      const paymentHistory = await this.paymentHistoryService.paymentConfirmation(payload);
+      const paymentHistory =
+        await this.paymentHistoryService.paymentConfirmation(payload);
       this.logger.log(`🔥 DEBUG: Payment history created:`, {
         id: paymentHistory.id,
       });
@@ -563,18 +643,15 @@ export class SubscriptionController {
           ERROR_CODES.BAD_REQUEST,
         );
       }
-      
 
       // Step 5: Mark payment as processed
       await this.paymentHistoryService.markAsProcessed(paymentHistory.id);
-
 
       // Log processing results
       this.logger.log(`🎯 NEW Subscription created in database:`, {
         paymentHistory,
         subscriptionResult,
       });
-
     } catch (error) {
       this.logger.error(
         'Webhook -> payment-confirmation -> Failed to process payment gateway notification',
@@ -585,34 +662,41 @@ export class SubscriptionController {
   }
   //#endregion
 
-
   @Public()
   @Get('test-email')
   async testEmail() {
     try {
-
       const awsConfig = {
-        region: this.configService.get<string>(AwsConfigKeys.AWS_REGION) || 'us-east-1',
-        accessKeyId: this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_ACCESS_KEY_ID),
-        secretAccessKey: this.configService.get<string>(AwsConfigKeys.AWS_SES_USER_SECRET_ACCESS_KEY)
-      }
-
+        region:
+          this.configService.get<string>(AwsConfigKeys.AWS_REGION) ||
+          'us-east-1',
+        accessKeyId: this.configService.get<string>(
+          AwsConfigKeys.AWS_SES_USER_ACCESS_KEY_ID,
+        ),
+        secretAccessKey: this.configService.get<string>(
+          AwsConfigKeys.AWS_SES_USER_SECRET_ACCESS_KEY,
+        ),
+      };
 
       const response = await this.emailService.sendEmail(
         awsConfig,
         { emailsTo: ['info@atsfitt.com'] },
-        { 
-          fromAddress: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_EMAIL) || 'info@atsfitt.com',
-          senderName: this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_NAME) || 'ATS Fit'
+        {
+          fromAddress:
+            this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_EMAIL) ||
+            'info@atsfitt.com',
+          senderName:
+            this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_NAME) ||
+            'ATS Fit',
         },
         {
           templateKey: EmailTemplates.PAYMENT_FAILED,
           templateData: {
             amount: 1000,
-            userName: 'Ahsan'
+            userName: 'Ahsan',
           },
           subject: EmailSubjects.PAYMENT_FAILED,
-        }
+        },
       );
 
       return response;
@@ -620,5 +704,4 @@ export class SubscriptionController {
       this.logger.error('Failed to send test email:', error);
     }
   }
-
 }

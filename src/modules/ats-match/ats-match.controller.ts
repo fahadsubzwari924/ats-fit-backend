@@ -30,10 +30,7 @@ import { HelperUtil } from '../../shared/utils/helper.util';
 import { IResumeContentProvider } from '../../shared/interfaces/resume-content-provider.interface';
 import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-provider.token';
 import { Inject } from '@nestjs/common';
-import {
-  BadRequestException,
-  NotFoundException,
-} from '../../shared/exceptions/custom-http-exceptions';
+import { BadRequestException } from '../../shared/exceptions/custom-http-exceptions';
 
 @Controller('ats-match')
 export class AtsMatchController {
@@ -152,20 +149,10 @@ export class AtsMatchController {
 
     const allowedDays = rateLimitConfig?.monthly_limit || 0;
 
-    const atsMatchHistory =
-      await this.atsMatchHistoryService.getAtsMatchHistoryByUserId(
-        userId,
-        fields,
-        allowedDays,
-      );
-
-    if (!atsMatchHistory.length) {
-      throw new NotFoundException(
-        'No ATS match history found for the user',
-        ERROR_CODES.ATS_MATCH_HISTORY_NOT_FOUND,
-      );
-    }
-
-    return atsMatchHistory;
+    return await this.atsMatchHistoryService.getAtsMatchHistoryByUserId(
+      userId,
+      fields,
+      allowedDays,
+    );
   }
 }

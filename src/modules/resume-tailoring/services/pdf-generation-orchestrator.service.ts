@@ -196,7 +196,10 @@ export class PdfGenerationOrchestratorService {
       );
 
       if (!htmlContent || htmlContent.trim() === '') {
-        throw new Error('Generated HTML content is empty');
+        throw new InternalServerErrorException(
+          'Generated HTML content is empty',
+          ERROR_CODES.EMPTY_HTML_CONTENT,
+        );
       }
 
       return htmlContent;

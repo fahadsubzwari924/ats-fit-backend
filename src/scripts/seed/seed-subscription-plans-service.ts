@@ -98,4 +98,4 @@ async function seedSubscriptionPlans() {
   }
 }
 
-seedSubscriptionPlans();
+void seedSubscriptionPlans();

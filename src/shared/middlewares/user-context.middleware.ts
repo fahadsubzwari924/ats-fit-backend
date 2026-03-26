@@ -4,8 +4,6 @@ import { UserService } from '../../modules/user/user.service';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import { UserContext } from '../../modules/auth/types/user-context.type';
-import { ForbiddenException } from '../exceptions/custom-http-exceptions';
-import { ERROR_CODES } from '../constants/error-codes';
 import { shouldSkipUserContext } from '../constants/middleware-config';
 
 @Injectable()
@@ -18,7 +16,6 @@ export class UserContextMiddleware implements NestMiddleware {
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
-    // Check if this path should skip user context middleware
     const fullPath = req.originalUrl || req.url;
     this.logger.debug(
       'Checking path:',
@@ -38,40 +35,11 @@ export class UserContextMiddleware implements NestMiddleware {
     let userContext: UserContext | null = null;
 
     try {
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.split(' ')[1];
-        try {
-          const secret =
-            this.configService.get<string>('JWT_SECRET') ||
-            process.env.JWT_SECRET;
-          const payload = jwt.verify(token, secret) as { sub?: string };
-          if (payload && payload.sub) {
-            userContext = await this.userService.getAuthenticatedUserContext(
-              payload.sub,
-            );
-            if (!userContext || !userContext.isActive) {
-              throw new ForbiddenException(
-                'Invalid user context',
-                ERROR_CODES.INVALID_USER_CONTEXT,
-              );
-            }
-            userContext.ipAddress = req.ip;
-            userContext.userAgent = req.headers['user-agent'] || '';
-            await this.userService.updateUserSessionInfo(
-              payload.sub,
-              userContext.ipAddress,
-              userContext.userAgent,
-            );
-          } else {
-            this.logger.warn(
-              'JWT valid but no userId (sub) found, treating as guest user',
-            );
-          }
-        } catch {
-          this.logger.warn(
-            'JWT invalid or verification failed, treating as guest user',
-          );
-        }
+      if (authHeader?.startsWith('Bearer ')) {
+        userContext = await this.buildAuthenticatedContext(
+          req,
+          authHeader.split(' ')[1],
+        );
       }
 
       if (!userContext) {
@@ -85,7 +53,6 @@ export class UserContextMiddleware implements NestMiddleware {
     } catch (error) {
       this.logger.error('Failed to build user context:', error);
 
-      // For paths that should skip user context, continue without context rather than failing
       if (shouldSkipUserContext(req)) {
         this.logger.warn(
           'User context failed for skip-auth path, continuing without context',
@@ -96,5 +63,77 @@ export class UserContextMiddleware implements NestMiddleware {
 
       next(error);
     }
+  }
+
+  /**
+   * Attempts to build an authenticated UserContext from a Bearer token.
+   *
+   * Separation of concerns:
+   * - JWT verification errors (invalid signature, expired, malformed) are caught
+   *   here and result in null — the caller falls back to guest context.
+   * - Application errors (user not found, inactive account) are thrown so the
+   *   outer handler can respond with the appropriate HTTP error.
+   * - Session update is fire-and-forget; a DB hiccup must never block a valid
+   *   authenticated request.
+   *
+   * Returns null when the token cannot be verified, so the request is treated
+   * as an unauthenticated (guest) request rather than an error.
+   */
+  private async buildAuthenticatedContext(
+    req: Request,
+    token: string,
+  ): Promise<UserContext | null> {
+    const secret =
+      this.configService.get<string>('JWT_SECRET') || process.env.JWT_SECRET;
+
+    let payload: { sub?: string };
+    try {
+      payload = jwt.verify(token, secret) as { sub?: string };
+    } catch (jwtError) {
+      const reason =
+        jwtError instanceof jwt.TokenExpiredError
+          ? 'expired'
+          : jwtError instanceof jwt.JsonWebTokenError
+            ? 'invalid'
+            : 'verification failed';
+      this.logger.warn(`JWT ${reason}, treating request as guest`, {
+        reason: (jwtError as Error).message,
+      });
+      return null;
+    }
+
+    if (!payload?.sub) {
+      this.logger.warn(
+        'JWT verified but missing sub claim, treating as guest user',
+      );
+      return null;
+    }
+
+    // getAuthenticatedUserContext queries with is_active: true and throws
+    // NotFoundException if the user does not exist or is inactive — no
+    // redundant isActive check is needed here.
+    const userContext = await this.userService.getAuthenticatedUserContext(
+      payload.sub,
+    );
+
+    userContext.ipAddress = req.ip;
+    userContext.userAgent = req.headers['user-agent'] || '';
+
+    // Fire-and-forget: a session update failure is non-critical and must not
+    // interrupt an otherwise valid authenticated request.
+    this.userService
+      .updateUserSessionInfo(
+        payload.sub,
+        userContext.ipAddress,
+        userContext.userAgent,
+      )
+      .catch((err: Error) =>
+        this.logger.warn('Failed to update user session info (non-critical)', {
+          userId: payload.sub,
+          error: err?.message,
+        }),
+      );
+
+    return userContext;
   }
 }

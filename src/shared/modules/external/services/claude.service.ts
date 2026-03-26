@@ -22,9 +22,16 @@ export class ClaudeService {
     reject: (reason: any) => void;
   }> = [];
 
+  /** Default model resolved once at startup from env; callers may override per-request. */
+  readonly defaultModel: string;
+
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
     this.baseUrl = this.configService.get<string>('CLAUDE_CHAT_API_ENDPOINT');
+    this.defaultModel = this.configService.get<string>(
+      'CLAUDE_MODEL',
+      'claude-sonnet-4-5-20250929',
+    );
     this.maxConcurrentRequests = this.configService.get<number>(
       'CLAUDE_MAX_CONCURRENT',
       5,
@@ -119,7 +126,7 @@ export class ClaudeService {
 
     // Optimize request body for better performance
     const requestBody: any = {
-      model: params.model || 'claude-3-5-sonnet-20241022',
+      model: params.model || this.defaultModel,
       messages: params.messages,
       max_tokens: params.max_tokens || 4000,
       temperature: params.temperature || 0.1,
@@ -240,19 +247,31 @@ export class ClaudeService {
       const optimizedPrompt = this.optimizeAtsPrompt(params.prompt);
 
       const result = await this.chatCompletion({
-        model: 'claude-3-5-sonnet-20241022',
         messages: [{ role: 'user', content: optimizedPrompt }],
         temperature: 0.1, // Low temperature for consistent scoring
         max_tokens: 3000, // Reduced for faster response
       });
 
-      const content = result.choices?.[0]?.message?.content;
-      if (!content) {
+      const raw = result.choices?.[0]?.message?.content;
+      if (!raw) {
         throw new Error('No content in Claude ATS evaluation response');
       }
 
+      // Strip markdown fences first, then extract the outermost JSON object.
+      // Claude occasionally wraps the response in ```json fences and/or appends
+      // explanatory text after the closing brace — both break JSON.parse directly.
+      const stripped = raw
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```\s*$/i, '')
+        .trim();
+
+      const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON object found in Claude ATS evaluation response');
+      }
+
       this.logger.log('Claude ATS evaluation completed successfully');
-      return JSON.parse(content);
+      return JSON.parse(jsonMatch[0]);
     } catch (error) {
       this.logger.error('Claude ATS evaluation failed', error);
 

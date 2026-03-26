@@ -7,6 +7,8 @@ import {
   PdfServiceResult,
   PdfServiceStats,
 } from '../interfaces/pdf-service.interface';
+import { InternalServerErrorException } from '../../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../../shared/constants/error-codes';
 
 /**
  * Consolidated PDF Generation Service
@@ -394,21 +396,23 @@ export class PdfGenerationService implements OnModuleDestroy {
         { ...errorContext, stack: error.stack },
       );
 
-      // Enhanced error classification
       if (error.message.includes('timeout')) {
-        throw new Error(
+        throw new InternalServerErrorException(
           `PDF generation timeout in ${performanceMode} mode after ${totalTime}ms: ${error.message}`,
+          ERROR_CODES.HTML_GENERATION_FAILED,
         );
       }
 
       if (error.message.includes('navigation')) {
-        throw new Error(
+        throw new InternalServerErrorException(
           `PDF navigation error in ${performanceMode} mode: ${error.message}`,
+          ERROR_CODES.HTML_GENERATION_FAILED,
         );
       }
 
-      throw new Error(
+      throw new InternalServerErrorException(
         `PDF generation failed in ${performanceMode} mode after ${totalTime}ms: ${error.message}`,
+        ERROR_CODES.HTML_GENERATION_FAILED,
       );
     }
 
@@ -417,8 +421,9 @@ export class PdfGenerationService implements OnModuleDestroy {
       errorContext,
     );
 
-    throw new Error(
+    throw new InternalServerErrorException(
       `PDF generation failed in ${performanceMode} mode after ${totalTime}ms: Unknown error`,
+      ERROR_CODES.HTML_GENERATION_FAILED,
     );
   }
 }

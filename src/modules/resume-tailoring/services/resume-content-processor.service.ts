@@ -12,6 +12,7 @@ import {
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { ResumeService } from './resume.service';
+import { ResumeProfileEnrichmentService } from './resume-profile-enrichment.service';
 import { UserType, UserPlan } from '../../../database/entities/user.entity';
 import * as pdf from 'pdf-parse';
 
@@ -39,6 +40,7 @@ export class ResumeContentProcessorService {
     private readonly resumeSelectionService: ResumeSelectionService,
     private readonly aiContentService: AIContentService,
     private readonly resumeService: ResumeService,
+    private readonly resumeProfileEnrichmentService: ResumeProfileEnrichmentService,
   ) {}
 
   /**
@@ -126,6 +128,7 @@ export class ResumeContentProcessorService {
         content: structuredContent,
         source: 'file_upload',
         originalText: resumeText,
+        tailoringMode: 'standard',
         metadata: {
           extractionMethod: 'ai_extraction_from_file',
           processingTime: processingTime,
@@ -213,6 +216,7 @@ export class ResumeContentProcessorService {
         content: structuredContent,
         source: 'file_upload',
         originalText: resumeText,
+        tailoringMode: 'standard',
         metadata: {
           extractionMethod: 'ai_extraction_from_file',
           processingTime: processingTime,
@@ -232,7 +236,8 @@ export class ResumeContentProcessorService {
   }
 
   /**
-   * Process resume from database (for registered users using existing resumes)
+   * Process resume from database (for registered users using existing resumes).
+   * Priority: enrichedContent (EnrichedResumeProfile) → structuredContent → extractedText.
    */
   private async processFromDatabase(
     userContext: UserContext,
@@ -250,6 +255,40 @@ export class ResumeContentProcessorService {
         },
       );
 
+      const userId = userContext.userId;
+      const extractedResumeContentId = selectionResult.resumeId;
+
+      const profileCtx =
+        await this.resumeProfileEnrichmentService.resolveTailoringContextForResume(
+          userId,
+          extractedResumeContentId,
+        );
+
+      // v4: Prefer enriched profile content when available
+      const enrichedProfile =
+        await this.resumeProfileEnrichmentService.getProfile(
+          userId,
+          extractedResumeContentId,
+        );
+      if (enrichedProfile?.enrichedContent) {
+        const processingTime = Date.now() - startTime;
+        this.logger.log(
+          `Resume content from enriched profile in ${processingTime}ms (resume ID: ${extractedResumeContentId}, mode: ${profileCtx.tailoringMode})`,
+        );
+        return {
+          content: enrichedProfile.enrichedContent,
+          source: 'database_existing',
+          originalText: selectionResult.extractedText,
+          tailoringMode: profileCtx.tailoringMode,
+          verifiedFacts: profileCtx.verifiedFacts,
+          metadata: {
+            extractionMethod: 'database_enriched_profile',
+            processingTime,
+            resumeId: extractedResumeContentId,
+          },
+        };
+      }
+
       // Check if we have structured content in database
       if (selectionResult.structuredContent) {
         const processingTime = Date.now() - startTime;
@@ -262,6 +301,8 @@ export class ResumeContentProcessorService {
           content: selectionResult.structuredContent as TailoredContent,
           source: 'database_existing',
           originalText: selectionResult.extractedText,
+          tailoringMode: profileCtx.tailoringMode,
+          verifiedFacts: profileCtx.verifiedFacts,
           metadata: {
             extractionMethod: 'database_existing_structured',
             processingTime: processingTime,
@@ -286,6 +327,8 @@ export class ResumeContentProcessorService {
         content: structuredContent,
         source: 'database_extraction',
         originalText: selectionResult.extractedText,
+        tailoringMode: profileCtx.tailoringMode,
+        verifiedFacts: profileCtx.verifiedFacts,
         metadata: {
           extractionMethod: 'ai_extraction_from_database',
           processingTime: processingTime,

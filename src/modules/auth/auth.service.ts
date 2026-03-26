@@ -1,5 +1,5 @@
 import { User, RegistrationType } from './../../database/entities/user.entity';
-import { Injectable, Res } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -180,7 +180,7 @@ export class AuthService {
    * @returns SignInResponse with user data and access token
    */
   async googleAuth(googlePayload: TokenPayload): Promise<SignInResponse> {
-    const { email, name, sub: googleId } = googlePayload;
+    const { email, name } = googlePayload;
 
     if (!email) {
       throw new BadRequestException(

@@ -3,27 +3,27 @@ import Handlebars from 'handlebars';
 import {
   ITemplateRenderer,
   RenderContext,
-  RenderedTemplate,
 } from '../interfaces/template-renderer.interface';
 import { InternalServerErrorException } from '../exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../constants/error-codes';
 
 /**
  * Handlebars Template Renderer
- * 
+ *
  * Renders templates using Handlebars templating engine
  * Provides custom helpers for common email formatting needs
- * 
+ *
  * Following Single Responsibility Principle (SRP):
  * - Only responsible for rendering templates
  * - Template fetching is delegated to provider service
  */
 @Injectable()
 export class HandlebarsTemplateRendererService implements ITemplateRenderer {
-  private readonly logger = new Logger(
-    HandlebarsTemplateRendererService.name,
-  );
-  private readonly compiledCache = new Map<string, Handlebars.TemplateDelegate>();
+  private readonly logger = new Logger(HandlebarsTemplateRendererService.name);
+  private readonly compiledCache = new Map<
+    string,
+    Handlebars.TemplateDelegate
+  >();
 
   constructor() {
     this.registerHelpers();
@@ -33,29 +33,35 @@ export class HandlebarsTemplateRendererService implements ITemplateRenderer {
   /**
    * Render template with context data
    */
-  async bindTemplate(emailTemplate: string, emailTemplateContext: RenderContext): Promise<string> {
+  async bindTemplate(
+    emailTemplate: string,
+    emailTemplateContext: RenderContext,
+  ): Promise<string> {
     try {
-        // Validate inputs before rendering
-        this.validateEmailTemplateContent(emailTemplate, emailTemplateContext);
+      await Promise.resolve(); // satisfy require-await
+      // Validate inputs before rendering
+      this.validateEmailTemplateContent(emailTemplate, emailTemplateContext);
 
-        // Render HTML
-        const compiledHtml = Handlebars.compile(emailTemplate);
-        return compiledHtml(emailTemplateContext);
-
+      // Render HTML
+      const compiledHtml = Handlebars.compile(emailTemplate);
+      return compiledHtml(emailTemplateContext);
     } catch (error) {
-        this.logger.error('Failed to complie template', error);
-        throw new InternalServerErrorException(
-            'Failed to complie email template',
-            ERROR_CODES.INTERNAL_SERVER,
-            undefined,
-            {
-                error: error instanceof Error ? error.message : 'Unknown error',
-            },
-        );
+      this.logger.error('Failed to complie template', error);
+      throw new InternalServerErrorException(
+        'Failed to complie email template',
+        ERROR_CODES.INTERNAL_SERVER,
+        undefined,
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      );
     }
   }
 
-  private validateEmailTemplateContent(emailTemplate: string, emailTemplateContext: RenderContext): void {
+  private validateEmailTemplateContent(
+    emailTemplate: string,
+    emailTemplateContext: RenderContext,
+  ): void {
     // Validate email template
     if (!emailTemplate) {
       throw new InternalServerErrorException(
@@ -71,7 +77,7 @@ export class HandlebarsTemplateRendererService implements ITemplateRenderer {
         'Email template must be a string',
         ERROR_CODES.INTERNAL_SERVER,
         undefined,
-        { 
+        {
           reason: 'Invalid template type',
           receivedType: typeof emailTemplate,
         },
@@ -84,7 +90,7 @@ export class HandlebarsTemplateRendererService implements ITemplateRenderer {
         'Email template context must be a valid object',
         ERROR_CODES.INTERNAL_SERVER,
         undefined,
-        { 
+        {
           reason: 'Invalid context type',
           receivedType: typeof emailTemplateContext,
         },
@@ -108,14 +114,14 @@ export class HandlebarsTemplateRendererService implements ITemplateRenderer {
    */
   compile(templateSource: string): Handlebars.TemplateDelegate {
     const cacheKey = this.generateCacheKey(templateSource);
-    
+
     if (this.compiledCache.has(cacheKey)) {
-      return this.compiledCache.get(cacheKey)!;
+      return this.compiledCache.get(cacheKey);
     }
 
     const compiled = Handlebars.compile(templateSource);
     this.compiledCache.set(cacheKey, compiled);
-    
+
     return compiled;
   }
 

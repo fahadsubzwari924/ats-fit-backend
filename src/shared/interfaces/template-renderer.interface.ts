@@ -1,6 +1,6 @@
 /**
  * Template Renderer Interface
- * 
+ *
  * Abstraction for template rendering engines (Handlebars, EJS, Pug, etc.)
  * Following Interface Segregation Principle (ISP) and Single Responsibility Principle (SRP)
  */
@@ -26,10 +26,7 @@ export interface ITemplateRenderer {
    * @param context Data to bind to template
    * @returns Rendered template content
    */
-  bindTemplate(
-    templateSource: string,
-    context: RenderContext,
-  ): Promise<string>;
+  bindTemplate(templateSource: string, context: RenderContext): Promise<string>;
 
   /**
    * Compile template for better performance (optional)

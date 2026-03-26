@@ -1,4 +1,4 @@
 export interface IEmailSenderConfig {
-    fromAddress: string;
-    senderName: string;
+  fromAddress: string;
+  senderName: string;
 }
