@@ -60,6 +60,8 @@ export interface ResumeGenerationResult {
   // Processing metadata
   processingMetrics: ProcessingMetrics;
   contentSource: 'file_upload' | 'database_extraction' | 'database_existing';
+  /** v4: quality mode (standard | enhanced | precision) for badge display */
+  tailoringMode?: 'none' | 'standard' | 'enhanced' | 'precision';
 
   // PDF metadata
   pdfSizeBytes: number;

@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import {
   ITemplateProvider,
   TemplateFetchParams,
-  TemplateContent,
 } from '../interfaces/template-provider.interface';
 import { S3Service } from '../modules/external/services/s3.service';
 import {
@@ -16,10 +15,10 @@ import { AwsConfigKeys } from '../enums';
 
 /**
  * S3 Template Provider
- * 
+ *
  * Fetches email templates from S3 bucket
  * Implements caching for performance optimization
- * 
+ *
  * Following Single Responsibility Principle (SRP):
  * - Only responsible for fetching templates from S3
  * - Rendering is delegated to separate renderer service
@@ -27,7 +26,10 @@ import { AwsConfigKeys } from '../enums';
 @Injectable()
 export class S3TemplateProviderService implements ITemplateProvider {
   private readonly logger = new Logger(S3TemplateProviderService.name);
-  private readonly cache = new Map<string,{ content: string; timestamp: number }>();
+  private readonly cache = new Map<
+    string,
+    { content: string; timestamp: number }
+  >();
   private readonly defaultBucket: string;
   private readonly defaultCacheTtl: number;
 
@@ -36,8 +38,9 @@ export class S3TemplateProviderService implements ITemplateProvider {
     private readonly configService: ConfigService,
   ) {
     this.defaultBucket =
-      this.configService.get<string>(AwsConfigKeys.AWS_S3_EMAIL_TEMPLATES_BUCKET) ||
-      'ats-fit-email-templates';
+      this.configService.get<string>(
+        AwsConfigKeys.AWS_S3_EMAIL_TEMPLATES_BUCKET,
+      ) || 'ats-fit-email-templates';
     this.defaultCacheTtl =
       this.configService.get<number>('TEMPLATE_CACHE_TTL') || 600000; // 10 minutes
 
@@ -80,14 +83,14 @@ export class S3TemplateProviderService implements ITemplateProvider {
 
       if (!content) {
         this.logger.log(
-            `fetchSingleFileTemplate -> S3 Template content not found in bucket: ${this.defaultBucket} and templateKey: ${templateKey}`,
+          `fetchSingleFileTemplate -> S3 Template content not found in bucket: ${this.defaultBucket} and templateKey: ${templateKey}`,
         );
         throw new NotFoundException(
           'Email template not found',
           ERROR_CODES.TEMPLATE_NOT_FOUND,
         );
       }
-      
+
       // Cache the result
       this.cache.set(cacheKey, {
         content,
@@ -117,7 +120,10 @@ export class S3TemplateProviderService implements ITemplateProvider {
   /**
    * Validate fetch template parameters
    */
-  private validateFetchTemplateParams(bucket: string, templateKey: string): void {
+  private validateFetchTemplateParams(
+    bucket: string,
+    templateKey: string,
+  ): void {
     // Validate bucket
     if (!bucket || typeof bucket !== 'string') {
       throw new BadRequestException(
@@ -155,7 +161,6 @@ export class S3TemplateProviderService implements ITemplateProvider {
         { templateKey },
       );
     }
-
   }
 
   /**
@@ -169,7 +174,7 @@ export class S3TemplateProviderService implements ITemplateProvider {
     this.validateFetchTemplateParams(bucket, templateKey);
 
     const key = `email-templates/${templateKey}.hbs`;
-    return  await this.fetchTemplateFile(bucket, key);
+    return await this.fetchTemplateFile(bucket, key);
   }
 
   /**
@@ -265,7 +270,6 @@ export class S3TemplateProviderService implements ITemplateProvider {
           { cacheTtl: params.cacheTtl, type: typeof params.cacheTtl },
         );
       }
-
     }
   }
 
@@ -318,10 +322,7 @@ export class S3TemplateProviderService implements ITemplateProvider {
   /**
    * Get cached template if valid
    */
-  private getCachedTemplate(
-    cacheKey: string,
-    ttl: number,
-  ): string | null {
+  private getCachedTemplate(cacheKey: string, ttl: number): string | null {
     const cached = this.cache.get(cacheKey);
     if (!cached) return null;
 

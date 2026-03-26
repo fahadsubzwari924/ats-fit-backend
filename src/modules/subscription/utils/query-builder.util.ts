@@ -25,8 +25,8 @@ export class SubscriptionPlanQueryBuilder {
     const mergedOptions = this.mergeWithDefaults(options);
 
     return {
-      where: this.buildWhereClause(mergedOptions.where!),
-      order: this.buildOrderClause(mergedOptions.orderBy!),
+      where: this.buildWhereClause(mergedOptions.where),
+      order: this.buildOrderClause(mergedOptions.orderBy),
     };
   }
 
@@ -90,8 +90,7 @@ export class SubscriptionPlanQueryBuilder {
     // Validate payment_gateway_variant_id if provided
     if (validatedWhere.payment_gateway_variant_id !== undefined) {
       if (
-        typeof validatedWhere.payment_gateway_variant_id !==
-          'string' ||
+        typeof validatedWhere.payment_gateway_variant_id !== 'string' ||
         validatedWhere.payment_gateway_variant_id.trim().length === 0
       ) {
         throw new BadRequestException(

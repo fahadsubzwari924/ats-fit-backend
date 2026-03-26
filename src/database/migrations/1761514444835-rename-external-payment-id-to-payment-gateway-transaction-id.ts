@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class RenameExternalPaymentIdToPaymentGatewayTransactionId1761514444835
-  implements MigrationInterface
-{
+export class RenameExternalPaymentIdToPaymentGatewayTransactionId1761514444835 implements MigrationInterface {
   name = 'RenameExternalPaymentIdToPaymentGatewayTransactionId1761514444835';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

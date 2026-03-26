@@ -23,9 +23,9 @@ import { ValidationOrchestrator } from './validation-orchestrator.service';
  * 4. Call validate() with your context
  */
 @Injectable()
-export class GenericValidationService<TContext extends IValidationContext = any>
-  implements IValidationService<TContext>
-{
+export class GenericValidationService<
+  TContext extends IValidationContext = any,
+> implements IValidationService<TContext> {
   private readonly orchestrator: ValidationOrchestrator<TContext>;
 
   constructor(config?: ValidationOrchestratorConfig) {

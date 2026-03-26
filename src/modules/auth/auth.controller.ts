@@ -45,10 +45,7 @@ export class AuthController {
 
   @Public()
   @Post('google/webhook')
-  async googleWebhook(
-    @Body() payload: any,
-  ): Promise<void> {
-    console.log('Google Sign-In Webhook called with data:', payload)
+  googleWebhook(@Body() payload: unknown): void {
+    console.log('Google Sign-In Webhook called with data:', payload);
   }
-
 }

@@ -9,13 +9,13 @@ import { ResumeValidationService } from './resume-validation.service';
 import { AtsEvaluationService } from '../../../shared/services/ats-evaluation.service';
 import { PromptService } from '../../../shared/services/prompt.service';
 import { AIContentService } from '../../../shared/services/ai-content.service';
+import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import {
   ResumeGenerationInput,
   ResumeGenerationResult,
 } from '../interfaces/resume-generation.interface';
-import { PremiumAtsEvaluation } from '../../ats-match/interfaces/ats-evaluation.interface';
 import {
   BadRequestException,
   InternalServerErrorException,
@@ -48,6 +48,7 @@ export class ResumeGenerationOrchestratorService {
     private readonly atsEvaluationService: AtsEvaluationService,
     private readonly promptService: PromptService,
     private readonly aiContentService: AIContentService,
+    private readonly tailoredResumePdfStorageService: TailoredResumePdfStorageService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
   ) {}
@@ -128,6 +129,8 @@ export class ResumeGenerationOrchestratorService {
           resumeContent.content as TailoredContent,
           input.companyName,
           input.jobPosition,
+          resumeContent.tailoringMode,
+          resumeContent.verifiedFacts,
         );
       const optimizationTime = Date.now() - optimizationStart;
 
@@ -153,8 +156,16 @@ export class ResumeGenerationOrchestratorService {
           `Generated ${pdfResult.generationMetadata.pdfSizeBytes} byte PDF.`,
       );
 
-      // Step 4.5: Save resume generation record (following V1 pattern)
+      // Step 4.5: Save resume generation record and upload PDF to S3
       const dbStart = Date.now();
+
+      const pdfBuffer = Buffer.from(pdfResult.pdfContent, 'base64');
+      const pdfS3Key =
+        await this.tailoredResumePdfStorageService.uploadGeneratedPdf(
+          pdfBuffer,
+          input.userContext.userId || input.userContext.guestId || 'guest',
+        );
+
       const savedGeneration = await this.saveResumeGenerationRecord({
         user_id: input.userContext.userId,
         guest_id: input.userContext.guestId,
@@ -166,7 +177,19 @@ export class ResumeGenerationOrchestratorService {
         template_id: input.templateId,
         job_description: input.jobDescription,
         company_name: input.companyName,
+        job_position: input.jobPosition,
         analysis: optimizationResult.optimizedContent,
+        keywords_added: optimizationResult.optimizationMetrics.keywordsAdded,
+        sections_optimized:
+          optimizationResult.optimizationMetrics.sectionsOptimized,
+        achievements_quantified:
+          optimizationResult.optimizationMetrics.achievementsQuantified,
+        optimization_confidence:
+          optimizationResult.optimizationMetrics.confidenceScore,
+        pdf_s3_key: pdfS3Key,
+        job_analysis: jobAnalysis,
+        candidate_content: resumeContent.content,
+        changes_diff: optimizationResult.changesDiff ?? null,
       });
       const dbTime = Date.now() - dbStart;
 
@@ -174,17 +197,15 @@ export class ResumeGenerationOrchestratorService {
         `Resume generation record saved in ${dbTime}ms with ID: ${savedGeneration.id}`,
       );
 
-      // Step 5: Start ATS evaluation in background (non-blocking)
+      // Step 5: Fire ATS evaluation in background — do NOT await, PDF is already ready
       const atsEvaluationStart = Date.now();
 
-      // Convert structured content to text for ATS evaluation
       const resumeTextForAts = this.convertOptimizedContentToText(
         optimizationResult.optimizedContent,
       );
 
-      // Calculating ats score of newly generated resume
-      const atsEvaluationPromise =
-        this.atsEvaluationService.performAtsEvaluation(
+      void this.atsEvaluationService
+        .performAtsEvaluation(
           input.jobDescription,
           resumeTextForAts,
           this.promptService,
@@ -197,69 +218,29 @@ export class ResumeGenerationOrchestratorService {
             companyName: input.companyName,
             resumeContent: resumeTextForAts,
           },
-        );
-
-      // For immediate response, use cached/estimated values if available
-      let atsEvaluation: PremiumAtsEvaluation;
-      let atsMatchHistoryId: string;
-      let atsEvaluationTime: number;
-
-      // Check if we have a quick cached result (with timeout)
-      try {
-        const quickResult = await Promise.race([
-          atsEvaluationPromise,
-          new Promise((_, reject) =>
-            setTimeout(
-              () => reject(new Error('ATS timeout')),
-              45000, // 45 second timeout to allow for Claude overload + OpenAI fallback
-            ),
-          ),
-        ]);
-
-        const result = quickResult as {
-          evaluation: PremiumAtsEvaluation;
-          atsMatchHistoryId: string;
-        };
-
-        atsEvaluation = result.evaluation;
-        atsMatchHistoryId = result.atsMatchHistoryId;
-        atsEvaluationTime = Date.now() - atsEvaluationStart;
-
-        this.logger.debug(
-          `ATS evaluation completed quickly in ${atsEvaluationTime}ms. ` +
-            `Overall score: ${atsEvaluation.overallScore}%, ` +
-            `Confidence: ${atsEvaluation.confidence}%`,
-        );
-      } catch (error) {
-        // ATS evaluation failed or timed out - throw proper error
-        atsEvaluationTime = 5000; // Timeout time
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : 'Unknown ATS evaluation error';
-
-        this.logger.error('ATS evaluation failed or timed out', {
-          error: errorMessage,
-          userId: input.userContext.userId,
-          guestId: input.userContext.guestId,
-          timeoutMs: 45000,
+        )
+        .then((result) => {
+          this.logger.log(
+            `[Background] ATS evaluation completed in ${Date.now() - atsEvaluationStart}ms. ` +
+              `Score: ${result.evaluation.overallScore}%, History ID: ${result.atsMatchHistoryId}`,
+          );
+        })
+        .catch((error: unknown) => {
+          this.logger.warn(
+            '[Background] ATS evaluation failed — resume PDF already delivered to user',
+            error,
+          );
         });
-
-        // Throw proper error instead of returning fake data
-        throw new Error(
-          `ATS evaluation failed: ${errorMessage}. Please try again or contact support if the issue persists.`,
-        );
-      }
 
       const totalProcessingTime = Date.now() - startTime;
 
       this.logger.log(
-        `Resume generation completed successfully in ${totalProcessingTime}ms ` +
-          `(Validation: ${validationTime}ms, Parallel Operations: ${parallelOperationsTime}ms, ` +
-          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, ATS: ${atsEvaluationTime}ms)`,
+        `Resume generation completed in ${totalProcessingTime}ms ` +
+          `(Validation: ${validationTime}ms, Parallel: ${parallelOperationsTime}ms, ` +
+          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, ATS: background)`,
       );
 
-      // Build comprehensive result
+      // Build comprehensive result — ATS score available after background task completes
       return {
         // Primary outputs
         pdfContent: pdfResult.pdfContent,
@@ -268,10 +249,10 @@ export class ResumeGenerationOrchestratorService {
         // Generation tracking
         resumeGenerationId: savedGeneration.id,
 
-        // ATS evaluation results
-        atsScore: atsEvaluation.overallScore,
-        atsConfidence: atsEvaluation.confidence,
-        atsMatchHistoryId: atsMatchHistoryId || 'unknown',
+        // ATS scores are computed in the background; 0 indicates "pending"
+        atsScore: 0,
+        atsConfidence: 0,
+        atsMatchHistoryId: 'pending',
 
         // Optimization metrics
         keywordsAdded: optimizationResult.optimizationMetrics.keywordsAdded,
@@ -289,10 +270,11 @@ export class ResumeGenerationOrchestratorService {
           optimizationTimeMs: optimizationTime,
           pdfGenerationTimeMs: pdfGenerationTime,
           dbSaveTimeMs: dbTime,
-          atsEvaluationTimeMs: atsEvaluationTime,
+          atsEvaluationTimeMs: 0, // ATS evaluation runs in background
           totalProcessingTimeMs: totalProcessingTime,
         },
         contentSource: resumeContent.source,
+        tailoringMode: resumeContent.tailoringMode,
 
         // PDF metadata
         pdfSizeBytes: pdfResult.generationMetadata.pdfSizeBytes,

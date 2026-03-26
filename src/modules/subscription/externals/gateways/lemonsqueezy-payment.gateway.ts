@@ -39,7 +39,8 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       const sanitizedRequest = this.validateAndSanitizeCheckoutRequest(request);
 
       // Step 2: Create checkout session via LemonSqueezy service
-      const checkoutData = await this.lemonSqueezyService.createCheckoutSession(sanitizedRequest);
+      const checkoutData =
+        await this.lemonSqueezyService.createCheckoutSession(sanitizedRequest);
 
       // Step 3: Log successful creation
       this.logger.log(
@@ -70,12 +71,14 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
   /**
    * Validates and sanitizes checkout request
    * Follows Single Responsibility Principle - only handles request validation and sanitization
-   * 
+   *
    * @param request - The checkout request to validate and sanitize
    * @returns CreateCheckoutRequest - The validated and sanitized request object
    * @throws BadRequestException - When request is invalid
    */
-  private validateAndSanitizeCheckoutRequest(request: CreateCheckoutRequest): CreateCheckoutRequest {
+  private validateAndSanitizeCheckoutRequest(
+    request: CreateCheckoutRequest,
+  ): CreateCheckoutRequest {
     // Validate request object exists and is properly typed
     if (!request || typeof request !== 'object') {
       throw new BadRequestException(
@@ -85,7 +88,11 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
     }
 
     // Validate variant ID exists, is string, and not empty
-    if (!request.variantId || typeof request.variantId !== 'string' || request.variantId.trim() === '') {
+    if (
+      !request.variantId ||
+      typeof request.variantId !== 'string' ||
+      request.variantId.trim() === ''
+    ) {
       throw new BadRequestException(
         'Variant ID is required and must be a non-empty string',
         ERROR_CODES.BAD_REQUEST,
@@ -108,7 +115,7 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
   /**
    * Builds structured checkout response from LemonSqueezy data
    * Follows Single Responsibility Principle - only handles response construction
-   * 
+   *
    * @param checkoutData - The checkout data from LemonSqueezy service
    * @returns CheckoutResponse - The structured response object
    */
@@ -125,7 +132,7 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       // Validate subscription ID
       const validatedSubscriptionId = IdValidator.validateId(
         subscriptionId,
-        'Subscription ID'
+        'Subscription ID',
       );
 
       this.logger.log(
@@ -133,7 +140,9 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       );
 
       const subscription =
-        await this.lemonSqueezyService.getSubscriptionDetails(validatedSubscriptionId);
+        await this.lemonSqueezyService.getSubscriptionDetails(
+          validatedSubscriptionId,
+        );
 
       return new LemonSqueezySubscription(subscription);
     } catch (error) {
@@ -159,7 +168,8 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
   ): Promise<CancelSubscriptionResponse> {
     try {
       // Step 1: Validate and sanitize cancel subscription request
-      const validatedSubscriptionId = this.validateCancelSubscriptionRequest(request);
+      const validatedSubscriptionId =
+        this.validateCancelSubscriptionRequest(request);
 
       // Step 2: Execute cancellation via LemonSqueezy service
       const result = await this.lemonSqueezyService.cancelSubscription(
@@ -172,7 +182,10 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       );
 
       // Step 4: Return structured response
-      return this.buildCancelSubscriptionResponse(validatedSubscriptionId, result);
+      return this.buildCancelSubscriptionResponse(
+        validatedSubscriptionId,
+        result,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to cancel LemonSqueezy subscription: ${request?.subscriptionId}`,
@@ -194,12 +207,14 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
   /**
    * Validates cancel subscription request and returns validated subscription ID
    * Follows Single Responsibility Principle - only handles request validation
-   * 
+   *
    * @param request - The cancel subscription request to validate
    * @returns string - The validated and sanitized subscription ID
    * @throws BadRequestException - When request is invalid
    */
-  private validateCancelSubscriptionRequest(request: CancelSubscriptionRequest): string {
+  private validateCancelSubscriptionRequest(
+    request: CancelSubscriptionRequest,
+  ): string {
     // Validate request object exists and is properly typed
     if (!request || typeof request !== 'object') {
       throw new BadRequestException(
@@ -211,7 +226,7 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
     // Validate and sanitize subscription ID using existing validator
     const validatedSubscriptionId = IdValidator.validateId(
       request.subscriptionId,
-      'Subscription ID'
+      'Subscription ID',
     );
 
     // Log validation success
@@ -225,7 +240,7 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
   /**
    * Builds structured cancel subscription response
    * Follows Single Responsibility Principle - only handles response construction
-   * 
+   *
    * @param subscriptionId - The validated subscription ID
    * @param lemonSqueezyResult - The result from LemonSqueezy service
    * @returns CancelSubscriptionResponse - The structured response object
@@ -238,7 +253,9 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       subscriptionId,
       status: SubscriptionStatus.CANCELLED,
       cancelledAt: new Date(),
-      endsAt: lemonSqueezyResult.ends_at ? new Date(lemonSqueezyResult.ends_at) : undefined,
+      endsAt: lemonSqueezyResult.ends_at
+        ? new Date(lemonSqueezyResult.ends_at)
+        : undefined,
     };
   }
 
@@ -250,9 +267,10 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       const validatedCustomerId = this.validateCustomerPortalRequest(request);
 
       // Step 2: Get portal URL from LemonSqueezy service
-      const portalUrl = await this.lemonSqueezyService.getCustomerPortalUrl(
-        validatedCustomerId,
-      );
+      const portalUrl =
+        await this.lemonSqueezyService.getCustomerPortalUrl(
+          validatedCustomerId,
+        );
 
       // Step 3: Build and return structured response
       return this.buildCustomerPortalResponse(portalUrl);
@@ -277,12 +295,14 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
   /**
    * Validates customer portal request and returns validated customer ID
    * Follows Single Responsibility Principle - only handles request validation
-   * 
+   *
    * @param request - The customer portal request to validate
    * @returns string - The validated customer ID
    * @throws BadRequestException - When request is invalid
    */
-  private validateCustomerPortalRequest(request: CustomerPortalRequest): string {
+  private validateCustomerPortalRequest(
+    request: CustomerPortalRequest,
+  ): string {
     // Validate request object exists and is properly typed
     if (!request || typeof request !== 'object') {
       throw new BadRequestException(
@@ -294,7 +314,7 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
     // Validate and sanitize customer ID using existing validator
     const validatedCustomerId = IdValidator.validateId(
       request.customerId,
-      'Customer ID'
+      'Customer ID',
     );
 
     this.logger.log(
@@ -307,11 +327,13 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
   /**
    * Builds structured customer portal response
    * Follows Single Responsibility Principle - only handles response construction
-   * 
+   *
    * @param portalUrl - The portal URL from LemonSqueezy
    * @returns CustomerPortalResponse - The structured response object
    */
-  private buildCustomerPortalResponse(portalUrl: string): CustomerPortalResponse {
+  private buildCustomerPortalResponse(
+    portalUrl: string,
+  ): CustomerPortalResponse {
     return {
       portalUrl: portalUrl || '',
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
@@ -325,13 +347,13 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
       // Validate customer ID
       const validatedCustomerId = IdValidator.validateId(
         customerId,
-        'Customer ID'
+        'Customer ID',
       );
 
       this.logger.warn(
         `LemonSqueezy getCustomerSubscriptions not implemented for: ${validatedCustomerId}`,
       );
-      
+
       // LemonSqueezy doesn't have a direct method for this, so return empty array
       // This would need to be implemented based on your specific requirements
       return [];
@@ -356,14 +378,22 @@ export class LemonSqueezyPaymentGateway implements IPaymentGateway {
   verifyWebhookSignature(signature: string, payload: string): boolean {
     try {
       // Validate signature parameter
-      if (!signature || typeof signature !== 'string' || signature.trim() === '') {
-        this.logger.warn('Invalid webhook signature provided: signature is required');
+      if (
+        !signature ||
+        typeof signature !== 'string' ||
+        signature.trim() === ''
+      ) {
+        this.logger.warn(
+          'Invalid webhook signature provided: signature is required',
+        );
         return false;
       }
 
       // Validate payload parameter
       if (!payload || typeof payload !== 'string') {
-        this.logger.warn('Invalid webhook payload provided: payload must be a string');
+        this.logger.warn(
+          'Invalid webhook payload provided: payload must be a string',
+        );
         return false;
       }
 

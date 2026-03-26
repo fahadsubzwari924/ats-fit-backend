@@ -36,7 +36,7 @@ import { GoogleService } from '../../shared/modules/external/services/google.ser
     BaseMapperService,
     JwtAuthGuard,
     PremiumUserGuard,
-    GoogleService
+    GoogleService,
   ],
   controllers: [AuthController],
   exports: [

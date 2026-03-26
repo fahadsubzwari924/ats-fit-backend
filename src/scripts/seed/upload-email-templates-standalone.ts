@@ -3,7 +3,7 @@
 /**
  * Standalone script to upload email templates to S3
  * Run this script independently without needing the full NestJS application context
- * 
+ *
  * Usage:
  *   npm run seed:email-templates
  *   or

@@ -63,7 +63,9 @@ export class SubscriptionPlanValidator {
 
     // Validate payment gateway variant ID
     if (!this.isValidString(data.payment_gateway_variant_id)) {
-      validationErrors.push(this.VALIDATION_RULES.PAYMENT_GATEWAY_VARIANT_ID.message);
+      validationErrors.push(
+        this.VALIDATION_RULES.PAYMENT_GATEWAY_VARIANT_ID.message,
+      );
     }
 
     if (validationErrors.length > 0) {
@@ -94,8 +96,7 @@ export class SubscriptionPlanValidator {
       ...data,
       plan_name: data.plan_name?.trim(),
       description: data.description?.trim(),
-      payment_gateway_variant_id:
-        data.payment_gateway_variant_id?.trim(),
+      payment_gateway_variant_id: data.payment_gateway_variant_id?.trim(),
       currency: data.currency || Currency.USD,
     };
   }

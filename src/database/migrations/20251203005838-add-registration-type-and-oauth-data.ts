@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddRegistrationTypeAndOauthData20251203005838
-  implements MigrationInterface
-{
+export class AddRegistrationTypeAndOauthData20251203005838 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create the registration_type enum type
     await queryRunner.query(`

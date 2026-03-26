@@ -1,9 +1,8 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class RenameExternalPaymentGatewayVariantIdToPaymentGatewayVariantId1730000000000
-  implements MigrationInterface
-{
-  name = 'RenameExternalPaymentGatewayVariantIdToPaymentGatewayVariantId1730000000000';
+export class RenameExternalPaymentGatewayVariantIdToPaymentGatewayVariantId1730000000000 implements MigrationInterface {
+  name =
+    'RenameExternalPaymentGatewayVariantIdToPaymentGatewayVariantId1730000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Drop the existing unique constraint first

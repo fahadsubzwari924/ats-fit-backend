@@ -12,9 +12,7 @@ import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
  * - Auto-expires after 7 days
  * - Optimized indexes for fast lookups
  */
-export class CreateResumeGenerationResultsTable1704825600000
-  implements MigrationInterface
-{
+export class CreateResumeGenerationResultsTable1704825600000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create resume_generation_results table
     await queryRunner.createTable(

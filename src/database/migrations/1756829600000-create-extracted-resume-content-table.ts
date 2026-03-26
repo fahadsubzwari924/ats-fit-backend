@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateExtractedResumeContentTable1756829600000
-  implements MigrationInterface
-{
+export class CreateExtractedResumeContentTable1756829600000 implements MigrationInterface {
   name = 'CreateExtractedResumeContentTable1756829600000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

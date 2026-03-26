@@ -6,7 +6,10 @@ import { CacheService } from '../../../shared/services/cache.service';
 import { AIErrorUtil } from '../../../shared/utils/ai-error.util';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import { JobAnalysisResult } from '../interfaces/job-analysis.interface';
-import { ResumeOptimizationResult } from '../interfaces/resume-optimization.interface';
+import {
+  ResumeOptimizationResult,
+  ResumeDiff,
+} from '../interfaces/resume-optimization.interface';
 import {
   InternalServerErrorException,
   BadRequestException,
@@ -15,6 +18,10 @@ import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { ClaudeResponse } from '../../../shared/modules/external/interfaces';
 import { ChatCompletionResponse } from '../../../shared/modules/external/interfaces/open-ai-chat.interface';
 import { get, head } from 'lodash';
+import {
+  TailoringModeResult,
+  VerifiedFact,
+} from '../interfaces/user-context.interface';
 
 /**
  * AI Resume Optimizer Service V2
@@ -54,6 +61,8 @@ export class ResumeOptimizerService {
    * @param candidateContent - Current resume content structure
    * @param companyName - Target company name
    * @param jobPosition - Target job position
+   * @param tailoringMode - When precision/enhanced with verified facts, uses zero-hallucination prompt
+   * @param verifiedFacts - User Q&A facts (source of truth) from profile questions
    * @returns Promise<ResumeOptimizationResult> - Optimized resume with metrics
    */
   async optimizeResumeContent(
@@ -61,6 +70,8 @@ export class ResumeOptimizerService {
     candidateContent: TailoredContent,
     companyName: string,
     jobPosition: string,
+    tailoringMode?: TailoringModeResult,
+    verifiedFacts?: VerifiedFact[],
   ): Promise<ResumeOptimizationResult> {
     const startTime = Date.now();
 
@@ -72,6 +83,14 @@ export class ResumeOptimizerService {
         jobPosition,
       );
 
+      const usePrecisionPrompt = this.shouldUsePrecisionOptimizationPrompt(
+        tailoringMode,
+        verifiedFacts,
+      );
+
+      // Always key on facts digest so partial-answer updates never hit a stale cache entry
+      const verifiedFactsDigest = JSON.stringify(verifiedFacts ?? []);
+
       // Use shared cache for optimization results
       const cacheKeyData = {
         jobSkills: jobAnalysis.technical.mandatorySkills.sort(),
@@ -81,6 +100,9 @@ export class ResumeOptimizerService {
         experience: candidateContent.experience,
         skills: candidateContent.skills,
         education: candidateContent.education,
+        tailoringMode: tailoringMode ?? 'standard',
+        precisionPrompt: usePrecisionPrompt,
+        verifiedFactsDigest,
       };
 
       // Check cache first
@@ -110,8 +132,10 @@ export class ResumeOptimizerService {
           candidateContent,
           companyName,
           jobPosition,
+          usePrecisionPrompt,
+          verifiedFacts,
         );
-        aiModel = 'claude-3-5-sonnet-20241022';
+        aiModel = this.claudeService.defaultModel;
         this.logger.log('Successfully used Claude for resume optimization');
       } catch (error) {
         this.logger.debug(
@@ -133,6 +157,8 @@ export class ResumeOptimizerService {
             candidateContent,
             companyName,
             jobPosition,
+            usePrecisionPrompt,
+            verifiedFacts,
           );
           aiModel = 'gpt-4-turbo';
           this.logger.log(
@@ -201,30 +227,92 @@ export class ResumeOptimizerService {
     }
 
     try {
-      // Extract JSON from response (Claude might include explanatory text)
+      // Check for truncated response (token limit hit mid-JSON)
+      const stopReason = response.choices?.[0]?.finish_reason;
+      if (stopReason === 'max_tokens') {
+        this.logger.error(
+          'Claude response was truncated — max_tokens limit hit. Increase max_tokens.',
+          { contentLength: content.length },
+        );
+        throw new InternalServerErrorException(
+          'AI response was truncated. Please try again.',
+          ERROR_CODES.AI_RESPONSE_PARSING_FAILED,
+        );
+      }
+
+      // Extract JSON from response (Claude might include explanatory text or markdown fences)
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+        throw new InternalServerErrorException(
+          'No JSON found in response',
+          ERROR_CODES.AI_RESPONSE_PARSING_FAILED,
+        );
       }
 
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const parsedResult = JSON.parse(jsonMatch[0]);
       this.validateOptimizationResult(parsedResult);
 
-      return parsedResult as Omit<
-        ResumeOptimizationResult,
-        'processingMetadata'
-      >;
-    } catch (error: any) {
+      const changesDiff = this.normalizeChangesDiff(parsedResult);
+
+      return {
+        ...(parsedResult as Omit<ResumeOptimizationResult, 'processingMetadata'>),
+        changesDiff,
+      };
+    } catch (error: unknown) {
       this.logger.error('Failed to parse optimization response', {
         content: content.substring(0, 500),
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         error,
       });
+      if (
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         'Failed to parse optimization response',
-        ERROR_CODES.INTERNAL_SERVER,
+        ERROR_CODES.AI_RESPONSE_PARSING_FAILED,
       );
+    }
+  }
+
+  /**
+   * Normalize and validate the changesDiff field from AI response.
+   * This field is optional — if missing or malformed we return undefined gracefully.
+   */
+  private normalizeChangesDiff(result: any): ResumeDiff | undefined {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const diff = result?.changesDiff;
+      if (!diff || typeof diff !== 'object') return undefined;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const changes = Array.isArray(diff.changes) ? diff.changes : [];
+      return {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        totalChanges: typeof diff.totalChanges === 'number' ? diff.totalChanges : changes.length,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        sectionsChanged: typeof diff.sectionsChanged === 'number' ? diff.sectionsChanged : changes.length,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        changes: changes.map((c: any) => ({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          section: String(c.section ?? ''),
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          changeType: (['modified', 'added', 'removed', 'unchanged'] as const).includes(c.changeType)
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            ? c.changeType
+            : 'modified',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          original: String(c.original ?? ''),
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          optimized: String(c.optimized ?? ''),
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+          addedKeywords: Array.isArray(c.addedKeywords) ? c.addedKeywords.map(String) : [],
+        })),
+      };
+    } catch {
+      return undefined;
     }
   }
 
@@ -241,7 +329,10 @@ export class ResumeOptimizerService {
     for (const field of requiredFields) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       if (!result[field]) {
-        throw new Error(`Missing required field: ${field}`);
+        throw new InternalServerErrorException(
+          `Missing required field in AI response: ${field}`,
+          ERROR_CODES.MISSING_REQUIRED_AI_FIELD,
+        );
       }
     }
 
@@ -259,7 +350,10 @@ export class ResumeOptimizerService {
     for (const field of contentFields) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       if (result.optimizedContent[field] === undefined) {
-        throw new Error(`Missing optimizedContent field: ${field}`);
+        throw new InternalServerErrorException(
+          `Missing required field in AI response: optimizedContent.${field}`,
+          ERROR_CODES.MISSING_REQUIRED_AI_FIELD,
+        );
       }
     }
 
@@ -275,19 +369,64 @@ export class ResumeOptimizerService {
     for (const field of metricsFields) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       if (typeof result.optimizationMetrics[field] !== 'number') {
-        throw new Error(`Invalid metric field: ${field}`);
+        throw new BadRequestException(
+          `Invalid metric field: ${field}`,
+          ERROR_CODES.INVALID_METRIC_FIELD,
+        );
       }
     }
 
-    // Validate confidence score range
     if (
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       result.optimizationMetrics.confidenceScore < 0 ||
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       result.optimizationMetrics.confidenceScore > 100
     ) {
-      throw new Error('Confidence score must be between 0 and 100');
+      throw new BadRequestException(
+        'Invalid confidence score',
+        ERROR_CODES.INVALID_CONFIDENCE_SCORE,
+      );
     }
+  }
+
+  private shouldUsePrecisionOptimizationPrompt(
+    tailoringMode?: TailoringModeResult,
+    verifiedFacts?: VerifiedFact[],
+  ): boolean {
+    const hasFacts = (verifiedFacts?.length ?? 0) > 0;
+    const isEnrichedMode =
+      tailoringMode === 'precision' || tailoringMode === 'enhanced';
+    if (isEnrichedMode && !hasFacts) {
+      this.logger.warn(
+        'Tailoring mode is precision/enhanced but no verified Q&A responses; using standard optimization prompt',
+      );
+    }
+    return hasFacts && isEnrichedMode;
+  }
+
+  private buildOptimizationPrompt(
+    jobAnalysis: JobAnalysisResult,
+    candidateContent: TailoredContent,
+    companyName: string,
+    jobPosition: string,
+    usePrecisionPrompt: boolean,
+    verifiedFacts?: VerifiedFact[],
+  ): string {
+    if (usePrecisionPrompt && verifiedFacts?.length) {
+      return this.promptService.getPrecisionOptimizationPrompt(
+        jobAnalysis as unknown as Record<string, unknown>,
+        candidateContent as unknown as Record<string, unknown>,
+        companyName,
+        jobPosition,
+        verifiedFacts,
+      );
+    }
+    return this.promptService.getResumeOptimizationPrompt(
+      jobAnalysis,
+      candidateContent,
+      companyName,
+      jobPosition,
+    );
   }
 
   /**
@@ -298,24 +437,27 @@ export class ResumeOptimizerService {
     candidateContent: TailoredContent,
     companyName: string,
     jobPosition: string,
+    usePrecisionPrompt: boolean,
+    verifiedFacts?: VerifiedFact[],
   ): Promise<Omit<ResumeOptimizationResult, 'processingMetadata'>> {
-    const optimizationPrompt = this.promptService.getResumeOptimizationPrompt(
+    const optimizationPrompt = this.buildOptimizationPrompt(
       jobAnalysis,
       candidateContent,
       companyName,
       jobPosition,
+      usePrecisionPrompt,
+      verifiedFacts,
     );
 
     const response = await this.claudeService.chatCompletion({
-      model: 'claude-3-5-sonnet-20241022',
       messages: [
         {
           role: 'user',
           content: optimizationPrompt,
         },
       ],
-      max_tokens: 3500, // Reduced from 4000 for faster processing
-      temperature: 0.2, // Lower temperature for faster, more deterministic output
+      max_tokens: 5000, // Increased to accommodate changesDiff section in response
+      temperature: 0.2,
     });
 
     return this.parseOptimizationResponse(response);
@@ -329,20 +471,24 @@ export class ResumeOptimizerService {
     candidateContent: TailoredContent,
     companyName: string,
     jobPosition: string,
+    usePrecisionPrompt: boolean,
+    verifiedFacts?: VerifiedFact[],
   ): Promise<Omit<ResumeOptimizationResult, 'processingMetadata'>> {
-    const optimizationPrompt = this.promptService.getResumeOptimizationPrompt(
+    const optimizationPrompt = this.buildOptimizationPrompt(
       jobAnalysis,
       candidateContent,
       companyName,
       jobPosition,
+      usePrecisionPrompt,
+      verifiedFacts,
     );
 
     const response = await this.openAIService.chatCompletion({
       model: 'gpt-4-turbo',
       messages: [{ role: 'user', content: optimizationPrompt }],
       response_format: { type: 'json_object' },
-      temperature: 0.2, // Lower temperature for consistent output
-      max_tokens: 3500, // Match Claude's token limit
+      temperature: 0.2,
+      max_tokens: 5000, // Increased to accommodate changesDiff section in response
     });
 
     // Parse OpenAI response (similar structure to Claude)
@@ -371,10 +517,11 @@ export class ResumeOptimizerService {
     try {
       const parsedResult: unknown = JSON.parse(content);
       this.validateOptimizationResult(parsedResult);
-      return parsedResult as Omit<
-        ResumeOptimizationResult,
-        'processingMetadata'
-      >;
+      const changesDiff = this.normalizeChangesDiff(parsedResult);
+      return {
+        ...(parsedResult as Omit<ResumeOptimizationResult, 'processingMetadata'>),
+        changesDiff,
+      };
     } catch (error) {
       this.logger.error('Failed to parse OpenAI optimization response', {
         content: content.substring(0, 500),

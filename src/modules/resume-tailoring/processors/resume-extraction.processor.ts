@@ -7,22 +7,16 @@ import { ExtractedResumeContent } from '../../../database/entities/extracted-res
 import { QueueMessage } from '../../../database/entities/queue-message.entity';
 import { QueueMessageStatus } from '../../../shared/enums/queue-message.enum';
 import { ResumeService } from '../services/resume.service';
-import * as crypto from 'crypto';
-
-export interface ResumeExtractionJobData {
-  queueMessageId: string;
-  userId: string;
-  fileName: string;
-  fileBuffer: Buffer;
-  fileSize: number;
-  resumeId: string;
-}
+import { ProfileQuestionGenerationService } from '../services/profile-question-generation.service';
+import { ResumeExtractionJobData } from '../interfaces/resume-extraction.interface';
+import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 
 /**
  * Resume Extraction Processor
  *
- * Handles async extraction of resume content from uploaded files.
- * Extracts both raw text and structured data.
+ * Single responsibility: orchestrate the extract_resume_content job.
+ * Delegates text extraction, structured extraction, and profile question
+ * generation to dedicated services. Follows SRP and clean code.
  *
  * Domain: Resume Tailoring
  * Queue: resume_processing
@@ -38,6 +32,7 @@ export class ResumeExtractionProcessor implements OnModuleInit {
     @InjectRepository(QueueMessage)
     private readonly queueMessageRepository: Repository<QueueMessage>,
     private readonly resumeService: ResumeService,
+    private readonly profileQuestionGenerationService: ProfileQuestionGenerationService,
   ) {
     this.logger.log('ResumeExtractionProcessor constructor called');
   }
@@ -52,83 +47,50 @@ export class ResumeExtractionProcessor implements OnModuleInit {
   async handleResumeExtraction(
     job: Job<ResumeExtractionJobData>,
   ): Promise<void> {
-    this.logger.log(`🔥 PROCESSOR METHOD CALLED! Job ID: ${job.id}`, {
-      jobData: job.data,
-    });
-
     const { queueMessageId, userId, fileName, fileBuffer, fileSize, resumeId } =
       job.data;
     const startTime = Date.now();
 
     this.logger.log(
       `Starting resume extraction for user ${userId}, file: ${fileName}`,
-      {
-        queueMessageId,
-        resumeId,
-        jobId: job.id,
-      },
+      { queueMessageId, resumeId, jobId: job.id },
     );
 
     try {
-      // Update queue message status to processing
+      this.assertJobData(job.data);
       await this.updateQueueMessageStatus(
         queueMessageId,
         QueueMessageStatus.PROCESSING,
       );
-
-      // Update job progress
       await job.progress(10);
 
-      // Create a temporary file object for processing
-      const tempFile: Express.Multer.File = {
-        fieldname: 'resumeFile',
-        originalname: fileName,
-        encoding: '7bit',
-        mimetype: 'application/pdf',
-        buffer: fileBuffer,
-        size: fileSize,
-        stream: null,
-        destination: '',
-        filename: '',
-        path: '',
-      };
-
+      const tempFile = this.createTempFile(fileName, fileBuffer, fileSize);
       await job.progress(20);
 
-      // Extract text from resume using existing service
-      this.logger.log(`Extracting text from resume: ${fileName}`, {
-        queueMessageId,
-      });
       const extractedText =
         await this.resumeService.extractTextFromResume(tempFile);
-
       await job.progress(50);
-
-      // Generate structured content using dedicated extraction service
-      this.logger.log(`Generating structured content for: ${fileName}`, {
-        queueMessageId,
-      });
 
       const structuredContent =
         await this.resumeService.extractStructuredContentFromResume(
           extractedText,
         );
-
       await job.progress(80);
 
-      // Calculate processing duration
       const processingDuration = Date.now() - startTime;
 
-      // Update the business entity with extracted content
       await this.extractedResumeRepository.update(
         { id: resumeId },
-        {
-          extractedText,
-          structuredContent,
-        },
+        { extractedText, structuredContent },
+      );
+      await job.progress(85);
+
+      const questionsTotal = await this.runProfileQuestionGeneration(
+        userId,
+        resumeId,
+        structuredContent,
       );
 
-      // Update queue message status to completed
       await this.updateQueueMessageStatus(
         queueMessageId,
         QueueMessageStatus.COMPLETED,
@@ -139,19 +101,15 @@ export class ResumeExtractionProcessor implements OnModuleInit {
             resumeId,
             extractedContentSize: extractedText.length,
             hasStructuredContent: Object.keys(structuredContent).length > 0,
+            questionsTotal,
           },
         },
       );
-
       await job.progress(100);
 
       this.logger.log(
         `Successfully processed resume ${fileName} for user ${userId} in ${processingDuration}ms`,
-        {
-          queueMessageId,
-          resumeId,
-          processingDurationMs: processingDuration,
-        },
+        { queueMessageId, resumeId, processingDurationMs: processingDuration },
       );
     } catch (error) {
       const processingDuration = Date.now() - startTime;
@@ -168,7 +126,6 @@ export class ResumeExtractionProcessor implements OnModuleInit {
         },
       );
 
-      // Update queue message status to failed
       await this.updateQueueMessageStatus(
         queueMessageId,
         QueueMessageStatus.FAILED,
@@ -183,20 +140,83 @@ export class ResumeExtractionProcessor implements OnModuleInit {
   }
 
   /**
-   * Update queue message status with proper audit trail
+   * Validates job data at the queue boundary. Throws if required fields are missing.
+   * Ensures fail-fast before any async work; caught by handleResumeExtraction try/catch.
    */
+  private assertJobData(data: ResumeExtractionJobData): void {
+    const requiredStrings: (keyof ResumeExtractionJobData)[] = [
+      'queueMessageId',
+      'userId',
+      'fileName',
+      'resumeId',
+    ];
+    for (const field of requiredStrings) {
+      if (!data[field] || typeof data[field] !== 'string') {
+        throw new Error(
+          `Invalid job data: '${field}' is required and must be a non-empty string`,
+        );
+      }
+    }
+    if (!data.fileBuffer || !data.fileSize) {
+      throw new Error('Invalid job data: fileBuffer and fileSize are required');
+    }
+  }
+
+  /**
+   * Run Step 3 (profile question generation). Non-blocking: on failure
+   * we log and return 0 so the user is not blocked.
+   */
+  private async runProfileQuestionGeneration(
+    userId: string,
+    extractedResumeContentId: string,
+    structuredContent: TailoredContent,
+  ): Promise<number> {
+    try {
+      return await this.profileQuestionGenerationService.generateAndSaveProfileQuestions(
+        userId,
+        extractedResumeContentId,
+        structuredContent,
+      );
+    } catch (step3Error) {
+      const errMsg =
+        step3Error instanceof Error ? step3Error.message : String(step3Error);
+      this.logger.error(
+        `Step 3 profile question generation failed for user ${userId}, resume ${extractedResumeContentId}: ${errMsg}`,
+        step3Error instanceof Error ? step3Error.stack : undefined,
+      );
+      return 0;
+    }
+  }
+
+  private createTempFile(
+    fileName: string,
+    fileBuffer: Buffer,
+    fileSize: number,
+  ): Express.Multer.File {
+    return {
+      fieldname: 'resumeFile',
+      originalname: fileName,
+      encoding: '7bit',
+      mimetype: 'application/pdf',
+      buffer: fileBuffer,
+      size: fileSize,
+      stream: null,
+      destination: '',
+      filename: '',
+      path: '',
+    };
+  }
+
   private async updateQueueMessageStatus(
     queueMessageId: string,
     status: QueueMessageStatus,
     additionalData?: {
-      result?: Record<string, any>;
+      result?: Record<string, unknown>;
       errorDetails?: string;
       processingDurationMs?: number;
     },
   ): Promise<void> {
-    const updateData: Partial<QueueMessage> = {
-      status,
-    };
+    const updateData: Partial<QueueMessage> = { status };
 
     if (status === QueueMessageStatus.PROCESSING) {
       updateData.startedAt = new Date();
@@ -215,12 +235,10 @@ export class ResumeExtractionProcessor implements OnModuleInit {
     if (additionalData?.result) {
       updateData.result = additionalData.result;
     }
-
     if (additionalData?.errorDetails) {
       updateData.errorDetails = additionalData.errorDetails;
     }
 
-    // Update the queue message
     await this.queueMessageRepository
       .createQueryBuilder()
       .update(QueueMessage)
@@ -228,7 +246,6 @@ export class ResumeExtractionProcessor implements OnModuleInit {
       .where('id = :id', { id: queueMessageId })
       .execute();
 
-    // Increment attempts separately
     await this.queueMessageRepository
       .createQueryBuilder()
       .update(QueueMessage)
@@ -239,12 +256,5 @@ export class ResumeExtractionProcessor implements OnModuleInit {
     this.logger.log(
       `Updated queue message ${queueMessageId} status to ${status}`,
     );
-  }
-
-  /**
-   * Generate file hash for deduplication
-   */
-  static generateFileHash(buffer: Buffer): string {
-    return crypto.createHash('sha256').update(buffer).digest('hex');
   }
 }

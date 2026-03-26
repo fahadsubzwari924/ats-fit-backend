@@ -1,6 +1,6 @@
 // claude.interface.ts
 export interface ClaudeRequestParams {
-  model: string;
+  model?: string;
   messages: Array<{
     role: 'user' | 'assistant';
     content: string;
@@ -15,6 +15,7 @@ export interface ClaudeResponse {
     message: {
       content: string;
     };
+    finish_reason?: string;
   }>;
 }
 

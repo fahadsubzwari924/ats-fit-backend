@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddCancelledAtToUserSubscriptions1729170000000
-  implements MigrationInterface
-{
+export class AddCancelledAtToUserSubscriptions1729170000000 implements MigrationInterface {
   name = 'AddCancelledAtToUserSubscriptions1729170000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

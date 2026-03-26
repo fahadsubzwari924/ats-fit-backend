@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -178,7 +176,6 @@ export class PaymentHistoryService {
 
     // Try from custom data first
     if (customData?.plan_id) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const plan = await this.findSubscriptionPlanSafely(customData.plan_id);
       if (plan) {
         paymentHistory.subscription_plan_id = plan.id;
@@ -194,7 +191,7 @@ export class PaymentHistoryService {
       paymentGatewayData.data?.attributes?.first_order_item?.variant_id;
     if (variantId) {
       const plan = await this.findSubscriptionPlanByVariantSafely(
-        variantId?.toString()
+        variantId?.toString(),
       );
       if (plan) {
         paymentHistory.subscription_plan_id = plan.id;
@@ -249,8 +246,7 @@ export class PaymentHistoryService {
   private async findSubscriptionPlanByVariantSafely(
     variantId: string,
   ): Promise<any | null> {
-    const plan =
-      await this.subscriptionPlanService.findByVariantId(variantId);
+    const plan = await this.subscriptionPlanService.findByVariantId(variantId);
     return plan;
   }
 
@@ -502,12 +498,12 @@ export class PaymentHistoryService {
         payload.data?.attributes?.checkout_data?.custom_string;
 
       if (customDataString) {
-          const parsed = JSON.parse(customDataString);
-          this.logger.log(
-            `Found custom data string in payment gateway notification:`,
-            parsed,
-          );
-          return parsed;
+        const parsed = JSON.parse(customDataString);
+        this.logger.log(
+          `Found custom data string in payment gateway notification:`,
+          parsed,
+        );
+        return parsed;
       }
 
       this.logger.log(
@@ -526,13 +522,13 @@ export class PaymentHistoryService {
   /**
    * Extract failure reason from payment gateway notification payload
    * Follows Single Responsibility Principle - only extracts failure information
-   * 
+   *
    * @param paymentGatewayData - Payment gateway notification data
    * @returns Failure reason string or null if not found
    */
   private extractFailureReason(paymentGatewayData: any): string | null {
     try {
-      const payload = paymentGatewayData as any;
+      const payload = paymentGatewayData;
 
       // Try different possible locations for failure information
       const possibleFailureReasons = [

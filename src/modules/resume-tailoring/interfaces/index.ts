@@ -10,6 +10,8 @@ export * from './job-analysis.interface';
 export * from './resume-optimization.interface';
 export * from './pdf-generation.interface';
 export * from './pdf-service.interface';
+export * from './resume-extraction.interface';
+export * from './resume-profile-enrichment.interface';
 
 // Legacy interfaces
 export * from './resume-extracted-keywords.interface';

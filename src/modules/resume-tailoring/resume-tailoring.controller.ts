@@ -2,33 +2,49 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
   Logger,
   Req,
   Res,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { ResumeTemplateService } from './services/resume-templates.service';
+import { ResumeService } from './services/resume.service';
+import { CoverLetterGenerationService } from './services/cover-letter-generation.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { GenerateTailoredResumeDto } from './dtos/generate-tailored-resume.dto';
+import { GenerateCoverLetterDto } from './dtos/generate-cover-letter.dto';
+import {
+  BatchGenerateDto,
+  BatchGenerateResponse,
+  BatchJobResult,
+} from './dtos/batch-generate.dto';
 import { FileValidationPipe } from '../../shared/pipes/file-validation.pipe';
 import { ResumeGenerationOrchestratorService } from './services/resume-generation-orchestrator.service';
-import type { UserContext as ResumeUserContext } from './interfaces/user-context.interface';
+import type {
+  UserContext as ResumeUserContext,
+} from './interfaces/user-context.interface';
 import { ValidationLoggingInterceptor } from './interceptors/validation-logging.interceptor';
 import {
   NotFoundException,
   BadRequestException,
 } from '../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { RateLimitFeature } from '../rate-limit/rate-limit.guard';
 import { FeatureType } from '../../database/entities/usage-tracking.entity';
 import { Public } from '../auth/decorators/public.decorator';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
 import { TransformUserContext } from '../../shared/decorators/transform-user-context.decorator';
 import { Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 
 @ApiTags('Resume Tailoring')
 @Controller('resume-tailoring')
@@ -40,6 +56,8 @@ export class ResumeTailoringController {
   constructor(
     private readonly resumeTemplateService: ResumeTemplateService,
     private readonly resumeGenerationOrchestratorService: ResumeGenerationOrchestratorService,
+    private readonly resumeService: ResumeService,
+    private readonly coverLetterGenerationService: CoverLetterGenerationService,
   ) {}
 
   @Get('templates')
@@ -47,6 +65,82 @@ export class ResumeTailoringController {
   async getTemplates() {
     const templates = await this.resumeTemplateService.getResumeTemplates();
     return templates;
+  }
+
+  @Get('history')
+  @TransformUserContext()
+  async getResumeHistory(
+    @Req() req: RequestWithUserContext,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
+  ) {
+    const userId = req.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+
+    if (page !== undefined) {
+      return this.resumeService.getResumeGenerationHistoryPaginated(userId, {
+        page: parseInt(page, 10) || 1,
+        limit: parseInt(limit ?? '10', 10) || 10,
+        search,
+        sortOrder: sortOrder ?? 'DESC',
+      });
+    }
+
+    return this.resumeService.getResumeGenerationHistory(
+      userId,
+      parseInt(limit ?? '10', 10) || 10,
+    );
+  }
+
+  @Get('history/:generationId')
+  @TransformUserContext()
+  async getResumeHistoryDetail(
+    @Param('generationId') generationId: string,
+    @Req() req: RequestWithUserContext,
+  ) {
+    const userId = req.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+    return this.resumeService.getResumeGenerationDetail(generationId, userId);
+  }
+
+  @Get('download/:generationId')
+  @TransformUserContext()
+  async downloadResume(
+    @Param('generationId') generationId: string,
+    @Req() req: RequestWithUserContext,
+    @Res({ passthrough: false }) res: Response,
+  ): Promise<void> {
+    const userId = req.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+
+    const pdfBuffer = await this.resumeService.downloadResumeGeneration(
+      generationId,
+      userId,
+    );
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=tailored-resume.pdf`,
+      'Content-Length': pdfBuffer.length.toString(),
+    });
+    res.end(pdfBuffer);
   }
 
   /**
@@ -102,11 +196,15 @@ export class ResumeTailoringController {
       // Convert base64 to buffer for PDF download
       const pdfBuffer = Buffer.from(result.pdfContent, 'base64');
 
-      // Prepare response object for headers (matching V1 structure)
       const responseForHeaders = {
         filename: result.filename,
         resumeGenerationId: result.resumeGenerationId,
         atsScore: result.atsScore,
+        tailoringMode: result.tailoringMode,
+        keywordsAdded: result.keywordsAdded,
+        sectionsOptimized: result.sectionsOptimized,
+        achievementsQuantified: result.achievementsQuantified,
+        optimizationConfidence: result.optimizationConfidence,
       };
 
       // Set headers for PDF download
@@ -141,6 +239,147 @@ export class ResumeTailoringController {
       // All other errors are wrapped as InternalServerErrorException by the orchestrator
       throw error;
     }
+  }
+
+  /**
+   * GET /resume-tailoring/diff/:generationId
+   * Returns the AI-generated before/after diff for a resume generation.
+   */
+  @Get('diff/:generationId')
+  @TransformUserContext()
+  async getResumeDiff(
+    @Param('generationId') generationId: string,
+    @Req() req: RequestWithUserContext,
+  ) {
+    const userId = req.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+    const diff = await this.resumeService.getChangesDiff(generationId, userId);
+    return { changesDiff: diff };
+  }
+
+  /**
+   * POST /resume-tailoring/cover-letter
+   * Generate a tailored cover letter for a given job and candidate.
+   */
+  @Post('cover-letter')
+  @HttpCode(HttpStatus.OK)
+  @TransformUserContext()
+  @RateLimitFeature(FeatureType.COVER_LETTER)
+  async generateCoverLetter(
+    @Body() dto: GenerateCoverLetterDto,
+    @Req() req: RequestWithUserContext,
+  ) {
+    const userId = req.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+
+    if (dto.resumeGenerationId) {
+      return this.coverLetterGenerationService.generateFromResumeGeneration(
+        dto.resumeGenerationId,
+        userId,
+      );
+    }
+
+    if (!dto.jobPosition || !dto.companyName || !dto.jobDescription) {
+      throw new BadRequestException(
+        'Either resumeGenerationId or jobPosition + companyName + jobDescription are required',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+
+    return this.coverLetterGenerationService.generateStandalone(
+      dto.jobPosition,
+      dto.companyName,
+      dto.jobDescription,
+      req.userContext as unknown as ResumeUserContext,
+    );
+  }
+
+  /**
+   * POST /resume-tailoring/batch-generate
+   * Sequentially generates tailored resumes for multiple jobs in one request.
+   * Premium-only feature.
+   */
+  @Post('batch-generate')
+  @HttpCode(HttpStatus.OK)
+  @TransformUserContext()
+  @RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)
+  async batchGenerateTailoredResumes(
+    @Body() dto: BatchGenerateDto,
+    @Req() request: RequestWithUserContext,
+  ): Promise<BatchGenerateResponse> {
+    const userId = request.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+
+    const startTime = Date.now();
+    const userContext = request.userContext as ResumeUserContext;
+    const results: BatchJobResult[] = [];
+
+    for (const job of dto.jobs) {
+      try {
+        const result =
+          await this.resumeGenerationOrchestratorService.generateOptimizedResume(
+            {
+              jobDescription: job.jobDescription,
+              jobPosition: job.jobPosition,
+              companyName: job.companyName,
+              templateId: dto.templateId,
+              resumeId: dto.resumeId,
+              userContext,
+            },
+          );
+
+        results.push({
+          jobPosition: job.jobPosition,
+          companyName: job.companyName,
+          status: 'success',
+          resumeGenerationId: result.resumeGenerationId,
+          pdfContent: result.pdfContent,
+          filename: result.filename,
+          optimizationConfidence: result.optimizationConfidence,
+          keywordsAdded: result.keywordsAdded,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Batch job failed for ${job.jobPosition} @ ${job.companyName}`,
+          error,
+        );
+        results.push({
+          jobPosition: job.jobPosition,
+          companyName: job.companyName,
+          status: 'failed',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Resume generation failed',
+        });
+      }
+    }
+
+    return {
+      batchId: uuidv4(),
+      results,
+      summary: {
+        total: dto.jobs.length,
+        succeeded: results.filter((r) => r.status === 'success').length,
+        failed: results.filter((r) => r.status === 'failed').length,
+        totalProcessingTimeMs: Date.now() - startTime,
+      },
+    };
   }
 
   /**
@@ -187,6 +426,11 @@ export class ResumeTailoringController {
       filename: string;
       resumeGenerationId: string;
       atsScore: number;
+      tailoringMode?: string;
+      keywordsAdded: number;
+      sectionsOptimized: number;
+      achievementsQuantified: number;
+      optimizationConfidence: number;
     },
     contentLength: number,
   ) {
@@ -194,10 +438,14 @@ export class ResumeTailoringController {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename=${response.filename}`,
       'Content-Length': contentLength.toString(),
-      // Custom headers for metadata
       'X-Resume-Generation-Id': response.resumeGenerationId,
       'X-ATS-Score': response.atsScore.toString(),
       'X-Filename': response.filename,
+      'X-Tailoring-Mode': response.tailoringMode ?? 'standard',
+      'X-Keywords-Added': response.keywordsAdded.toString(),
+      'X-Sections-Optimized': response.sectionsOptimized.toString(),
+      'X-Achievements-Quantified': response.achievementsQuantified.toString(),
+      'X-Optimization-Confidence': response.optimizationConfidence.toString(),
     });
   }
 }

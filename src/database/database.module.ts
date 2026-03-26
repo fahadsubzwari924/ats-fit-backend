@@ -16,6 +16,8 @@ import {
   SubscriptionPlan,
   UserSubscription,
   PaymentHistory,
+  TailoringQuestion,
+  EnrichedResumeProfile,
 } from './entities';
 
 @Module({
@@ -44,6 +46,8 @@ import {
           SubscriptionPlan,
           UserSubscription,
           PaymentHistory,
+          TailoringQuestion,
+          EnrichedResumeProfile,
         ],
         synchronize: false, // Disabled to use migrations instead
         logging: process.env.NODE_ENV !== 'production',

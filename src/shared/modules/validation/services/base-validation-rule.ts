@@ -20,8 +20,7 @@ import {
  */
 export abstract class BaseValidationRule<
   TContext extends IValidationContext = any,
-> implements IValidationRule<TContext>
-{
+> implements IValidationRule<TContext> {
   protected readonly logger: Logger;
 
   constructor(loggerContext?: string) {

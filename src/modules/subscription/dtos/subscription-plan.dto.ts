@@ -28,7 +28,7 @@ export class CreateSubscriptionPlanDto {
   @IsString()
   currency?: string;
 
-      @ApiProperty({
+  @ApiProperty({
     description: 'Payment gateway variant ID for the plan',
     example: '1012063',
   })
@@ -77,7 +77,8 @@ export class UpdateSubscriptionPlanDto {
   })
   @IsOptional()
   @IsString()
-  payment_gateway_variant_id?: string;  @ApiPropertyOptional({ description: 'List of features included in the plan' })
+  payment_gateway_variant_id?: string;
+  @ApiPropertyOptional({ description: 'List of features included in the plan' })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

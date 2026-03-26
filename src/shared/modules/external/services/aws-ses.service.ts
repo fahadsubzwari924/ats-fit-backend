@@ -1,6 +1,9 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import { EmailSendPayload, IEmailService } from '../../../interfaces/email.interface';
+import {
+  EmailSendPayload,
+  IEmailService,
+} from '../../../interfaces/email.interface';
 import {
   ITemplateProvider,
   TEMPLATE_PROVIDER_TOKEN,
@@ -14,18 +17,22 @@ import {
   InternalServerErrorException,
 } from '../../../exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../constants/error-codes';
-import { IRecipients, IAwsEmailConfig, IEmailSenderConfig } from '../../../interfaces';
+import {
+  IRecipients,
+  IAwsEmailConfig,
+  IEmailSenderConfig,
+} from '../../../interfaces';
 import { EmailSubjects } from '../../../enums';
 
 /**
  * AWS SES Email Service
- * 
+ *
  * Sends emails using AWS SES with template support from S3
  * Follows SOLID principles:
  * - Single Responsibility: Only handles email sending via SES
  * - Open/Closed: Extensible via template provider and renderer abstractions
  * - Dependency Inversion: Depends on abstractions (ITemplateProvider, ITemplateRenderer)
- * 
+ *
  * Architecture:
  * - Template Provider (S3TemplateProviderService): Fetches templates from S3
  * - Template Renderer (HandlebarsTemplateRendererService): Renders templates with data
@@ -40,11 +47,9 @@ export class AwsSesService implements IEmailService {
     private readonly templateProvider: ITemplateProvider,
     @Inject(TEMPLATE_RENDERER_TOKEN)
     private readonly templateRenderer: ITemplateRenderer,
-  ) {
-  }
+  ) {}
 
   private buildSesClient(awsConfig: IAwsEmailConfig): SESClient {
-
     // Validate AWS configuration
     this.validateAwsConfig(awsConfig);
 
@@ -52,30 +57,36 @@ export class AwsSesService implements IEmailService {
       region: awsConfig.region,
       credentials:
         awsConfig.accessKeyId && awsConfig.secretAccessKey
-          ? { accessKeyId: awsConfig.accessKeyId, secretAccessKey: awsConfig.secretAccessKey }
+          ? {
+              accessKeyId: awsConfig.accessKeyId,
+              secretAccessKey: awsConfig.secretAccessKey,
+            }
           : undefined,
     });
   }
 
   /**
    * Send an email using AWS SES
-   * 
+   *
    * Payload options:
    * - subject, html, text: Direct content (overrides template)
    * - templateKey: Template identifier to fetch from S3
    * - templateData: Data to bind to template variables
    * - to: Recipient email (can be passed in payload or as parameter)
-   * 
+   *
    * @param to Recipient email address
    * @param payload Email payload with content or template info
    * @returns SES send result
    */
-  async sendEmail(awsConfig: IAwsEmailConfig, recipients: IRecipients, senderConfig: IEmailSenderConfig, payload: EmailSendPayload): Promise<unknown> {
-
+  async sendEmail(
+    awsConfig: IAwsEmailConfig,
+    recipients: IRecipients,
+    senderConfig: IEmailSenderConfig,
+    payload: EmailSendPayload,
+  ): Promise<unknown> {
     try {
-
       this.validateSendEmailParams(recipients, senderConfig, payload);
-   
+
       const sesClient: SESClient = this.buildSesClient(awsConfig);
 
       // Validate SES client
@@ -84,14 +95,15 @@ export class AwsSesService implements IEmailService {
           'Invalid SES client instance',
           ERROR_CODES.INTERNAL_SERVER,
           undefined,
-          { 
+          {
             reason: 'SES client must be an instance of SESClient',
             receivedType: typeof sesClient,
           },
         );
       }
 
-      const subject = payload?.subject as string || EmailSubjects.NOTIFICATION_FROM_ATS_FIT;
+      const subject =
+        payload?.subject || EmailSubjects.NOTIFICATION_FROM_ATS_FIT;
 
       // Fetch template from S3 via provider
       const templateContent = await this.templateProvider.fetchTemplate({
@@ -104,10 +116,13 @@ export class AwsSesService implements IEmailService {
           'Email template not found',
           ERROR_CODES.INVALID_TEMPLATE_KEY,
           undefined,
-          { recipients: recipients.emailsTo, hasTemplateKey: !!payload.templateKey },
+          {
+            recipients: recipients.emailsTo,
+            hasTemplateKey: !!payload.templateKey,
+          },
         );
       }
-      
+
       // Binding Templates with Dynamic Data
       const bindedHtmlTemplate = await this.buildEmailTemplate(
         templateContent,
@@ -120,13 +135,21 @@ export class AwsSesService implements IEmailService {
           'Email must have subject, html, or text content',
           ERROR_CODES.BAD_REQUEST,
           undefined,
-          { recipients: recipients.emailsTo, hasTemplateKey: !!payload.templateKey },
+          {
+            recipients: recipients.emailsTo,
+            hasTemplateKey: !!payload.templateKey,
+          },
         );
       }
 
-
       // Send email via SES to all recipients
-      return await this.sendViaSes(recipients, senderConfig, subject, bindedHtmlTemplate, sesClient);
+      return await this.sendViaSes(
+        recipients,
+        senderConfig,
+        subject,
+        bindedHtmlTemplate,
+        sesClient,
+      );
     } catch (error) {
       if (
         error instanceof BadRequestException ||
@@ -154,13 +177,20 @@ export class AwsSesService implements IEmailService {
     }
   }
 
-  private validateSendEmailParams(recipients: IRecipients, senderConfig: IEmailSenderConfig, payload: EmailSendPayload): void {
-
+  private validateSendEmailParams(
+    recipients: IRecipients,
+    senderConfig: IEmailSenderConfig,
+    payload: EmailSendPayload,
+  ): void {
     // Validate sender configuration
     this.validateSenderConfig(senderConfig);
 
     // Validate all email addresses
-    if (!recipients.emailsTo || !Array.isArray(recipients.emailsTo) || recipients.emailsTo.length === 0) {
+    if (
+      !recipients.emailsTo ||
+      !Array.isArray(recipients.emailsTo) ||
+      recipients.emailsTo.length === 0
+    ) {
       throw new BadRequestException(
         'At least one recipient email is required',
         ERROR_CODES.BAD_REQUEST,
@@ -187,14 +217,12 @@ export class AwsSesService implements IEmailService {
     templateContent: string,
     templateData: Record<string, unknown>,
   ): Promise<string> {
-
     // Validate template content
     this.validateTemplateContent(templateContent);
 
     // Validate parameters
     this.validateRenderEmailTemplateParams(templateData);
     try {
-
       // Render template with data via renderer
       const rendered = await this.templateRenderer.bindTemplate(
         templateContent,
@@ -253,7 +281,9 @@ export class AwsSesService implements IEmailService {
       },
     });
 
-    this.logger.log(`Sending email to ${recipients?.emailsTo.join(', ')} via AWS SES`);
+    this.logger.log(
+      `Sending email to ${recipients?.emailsTo.join(', ')} via AWS SES`,
+    );
 
     const result = await sesClient.send(command);
 
@@ -292,7 +322,11 @@ export class AwsSesService implements IEmailService {
       );
     }
 
-    if (!recipients?.emailsTo || !Array.isArray(recipients?.emailsTo) || recipients?.emailsTo.length === 0) {
+    if (
+      !recipients?.emailsTo ||
+      !Array.isArray(recipients?.emailsTo) ||
+      recipients?.emailsTo.length === 0
+    ) {
       throw new BadRequestException(
         'At least one recipient email (emailsTo) is required',
         ERROR_CODES.BAD_REQUEST,
@@ -357,7 +391,10 @@ export class AwsSesService implements IEmailService {
       );
     }
 
-    if (!senderConfig?.fromAddress || typeof senderConfig?.fromAddress !== 'string') {
+    if (
+      !senderConfig?.fromAddress ||
+      typeof senderConfig?.fromAddress !== 'string'
+    ) {
       throw new BadRequestException(
         'Sender email address is required',
         ERROR_CODES.BAD_REQUEST,
@@ -366,7 +403,10 @@ export class AwsSesService implements IEmailService {
       );
     }
 
-    if (!senderConfig?.senderName || typeof senderConfig?.senderName !== 'string') {
+    if (
+      !senderConfig?.senderName ||
+      typeof senderConfig?.senderName !== 'string'
+    ) {
       throw new BadRequestException(
         'Sender name is required',
         ERROR_CODES.BAD_REQUEST,
@@ -420,7 +460,6 @@ export class AwsSesService implements IEmailService {
   private validateRenderEmailTemplateParams(
     templateData: Record<string, unknown>,
   ): void {
-
     // Validate templateData parameter
     if (!templateData || typeof templateData !== 'object') {
       throw new BadRequestException(
@@ -524,8 +563,10 @@ export class AwsSesService implements IEmailService {
     }
 
     // Both credentials must be provided together
-    if ((awsConfig.accessKeyId && !awsConfig.secretAccessKey) ||
-        (!awsConfig.accessKeyId && awsConfig.secretAccessKey)) {
+    if (
+      (awsConfig.accessKeyId && !awsConfig.secretAccessKey) ||
+      (!awsConfig.accessKeyId && awsConfig.secretAccessKey)
+    ) {
       throw new BadRequestException(
         'AWS access key ID and secret access key must be provided together',
         ERROR_CODES.BAD_REQUEST,
@@ -561,7 +602,10 @@ export class AwsSesService implements IEmailService {
     }
 
     // Validate fromAddress
-    if (!senderConfig.fromAddress || typeof senderConfig.fromAddress !== 'string') {
+    if (
+      !senderConfig.fromAddress ||
+      typeof senderConfig.fromAddress !== 'string'
+    ) {
       throw new BadRequestException(
         'Sender email address is required and must be a string',
         ERROR_CODES.BAD_REQUEST,
@@ -591,7 +635,10 @@ export class AwsSesService implements IEmailService {
     }
 
     // Validate senderName
-    if (!senderConfig.senderName || typeof senderConfig.senderName !== 'string') {
+    if (
+      !senderConfig.senderName ||
+      typeof senderConfig.senderName !== 'string'
+    ) {
       throw new BadRequestException(
         'Sender name is required and must be a string',
         ERROR_CODES.BAD_REQUEST,
@@ -639,7 +686,10 @@ export class AwsSesService implements IEmailService {
           'Template key must be a string',
           ERROR_CODES.BAD_REQUEST,
           undefined,
-          { templateKey: payload.templateKey, type: typeof payload.templateKey },
+          {
+            templateKey: payload.templateKey,
+            type: typeof payload.templateKey,
+          },
         );
       }
 
@@ -723,7 +773,7 @@ export class AwsSesService implements IEmailService {
         'Template content must be a string',
         ERROR_CODES.EMAIL_TEMPLATE_RENDER_FAILED,
         undefined,
-        { 
+        {
           reason: 'Invalid template content type',
           receivedType: typeof templateContent,
         },

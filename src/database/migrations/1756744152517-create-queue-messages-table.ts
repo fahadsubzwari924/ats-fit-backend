@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateQueueMessagesTable1756744152517
-  implements MigrationInterface
-{
+export class CreateQueueMessagesTable1756744152517 implements MigrationInterface {
   name = 'CreateQueueMessagesTable1756744152517';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

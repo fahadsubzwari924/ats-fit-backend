@@ -29,7 +29,8 @@ import { ResumeService } from '../resume-tailoring/services/resume.service';
 import { UserService } from './user.service';
 import { ResumeQueueService } from '../resume-tailoring/services/resume-queue.service';
 import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
-
+import { ResumeProfileEnrichmentService } from '../resume-tailoring/services/resume-profile-enrichment.service';
+import { ResumeProfileStatusResponse } from '../resume-tailoring/interfaces/resume-profile-enrichment.interface';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { IFeatureUsage } from '../../shared/interfaces';
 import {
@@ -49,7 +50,49 @@ export class UserController {
     private readonly userService: UserService,
     private readonly resumeQueueService: ResumeQueueService,
     private readonly resumeContentService: ResumeContentService,
+    private readonly resumeProfileEnrichmentService: ResumeProfileEnrichmentService,
   ) {}
+
+  @Get('resume-profile-status')
+  @ApiOperation({
+    summary: 'Get resume profile enrichment status',
+    description:
+      "Returns current state of the user's enriched profile for polling after upload (tailoring mode, questions count, completeness)",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Resume profile status',
+    schema: {
+      type: 'object',
+      properties: {
+        hasResume: { type: 'boolean' },
+        processingStatus: {
+          type: 'string',
+          enum: ['none', 'queued', 'processing', 'completed', 'failed'],
+        },
+        questionsTotal: { type: 'number' },
+        questionsAnswered: { type: 'number' },
+        profileCompleteness: { type: 'number' },
+        enrichedProfileId: { type: 'string', nullable: true },
+        tailoringMode: {
+          type: 'string',
+          enum: ['none', 'standard', 'enhanced', 'precision'],
+        },
+      },
+    },
+  })
+  async getResumeProfileStatus(
+    @Req() request: RequestWithUserContext,
+  ): Promise<ResumeProfileStatusResponse> {
+    const userId = request?.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'User authentication required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+    return this.resumeProfileEnrichmentService.getResumeProfileStatus(userId);
+  }
 
   @Get('feature-usage')
   @ApiOperation({

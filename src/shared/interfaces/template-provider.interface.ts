@@ -1,6 +1,6 @@
 /**
  * Template Provider Interface
- * 
+ *
  * Abstraction for template retrieval from various sources (S3, disk, database, etc.)
  * Following Interface Segregation Principle (ISP) and Dependency Inversion Principle (DIP)
  */

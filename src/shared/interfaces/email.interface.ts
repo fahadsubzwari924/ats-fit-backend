@@ -1,6 +1,6 @@
-import { IAwsEmailConfig } from "./aws-email-config.interface";
-import { IEmailSenderConfig } from "./email-sender-config.interface";
-import { IRecipients } from "./recipient.interface";
+import { IAwsEmailConfig } from './aws-email-config.interface';
+import { IEmailSenderConfig } from './email-sender-config.interface';
+import { IRecipients } from './recipient.interface';
 
 export interface IEmailService {
   /**
@@ -9,7 +9,12 @@ export interface IEmailService {
    * @param to - recipient email address
    * @param payload - arbitrary payload / template data
    */
-  sendEmail(awsConfig: IAwsEmailConfig, recipients: IRecipients, senderConfig: IEmailSenderConfig, payload: EmailSendPayload): Promise<any>;
+  sendEmail(
+    awsConfig: IAwsEmailConfig,
+    recipients: IRecipients,
+    senderConfig: IEmailSenderConfig,
+    payload: EmailSendPayload,
+  ): Promise<any>;
 }
 
 export interface EmailSendPayload {

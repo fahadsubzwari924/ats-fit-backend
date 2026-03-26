@@ -16,6 +16,31 @@ import { MimeTypes } from '../../../shared/constants/mime-types.enum';
 import { AtsEvaluationService } from '../../../shared/services/ats-evaluation.service';
 import { PromptService } from '../../../shared/services/prompt.service';
 
+export interface ResumeHistoryItem {
+  id: string;
+  companyName: string;
+  jobPosition: string;
+  optimizationConfidence: number | null;
+  keywordsAdded: number | null;
+  sectionsOptimized: number | null;
+  templateId: string | null;
+  createdAt: Date;
+  /** True when a PDF is stored in S3 and download-by-id will succeed */
+  canDownload: boolean;
+}
+
+export interface ResumeHistoryDetail extends ResumeHistoryItem {
+  achievementsQuantified: number | null;
+  changesDiff: any;
+}
+
+export interface PaginatedResumeHistory {
+  items: ResumeHistoryItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 @Injectable()
 export class ResumeService {
   private readonly logger = new Logger(ResumeService.name);
@@ -46,7 +71,10 @@ export class ResumeService {
       return data.text;
     } catch (error) {
       this.logger.error('PDF text extraction failed', error);
-      throw new Error('Failed to parse PDF resume');
+      throw new BadRequestException(
+        'Failed to parse PDF resume',
+        ERROR_CODES.PDF_PARSE_FAILED,
+      );
     }
   }
 
@@ -187,6 +215,188 @@ export class ResumeService {
     });
   }
 
+  async getResumeGenerationHistory(
+    userId: string,
+    limit = 10,
+  ): Promise<ResumeHistoryItem[]> {
+    const records = await this.resumeGenerationRepository.find({
+      where: { user_id: userId },
+      order: { created_at: 'DESC' },
+      take: limit,
+      select: [
+        'id',
+        'company_name',
+        'job_position',
+        'optimization_confidence',
+        'keywords_added',
+        'sections_optimized',
+        'template_id',
+        'created_at',
+        'pdf_s3_key',
+      ],
+    });
+
+    return records.map((r) => ({
+      id: r.id,
+      companyName: r.company_name,
+      jobPosition: r.job_position,
+      optimizationConfidence: r.optimization_confidence,
+      keywordsAdded: r.keywords_added,
+      sectionsOptimized: r.sections_optimized,
+      templateId: r.template_id,
+      createdAt: r.created_at,
+      canDownload: Boolean(r.pdf_s3_key),
+    }));
+  }
+
+  async getResumeGenerationHistoryPaginated(
+    userId: string,
+    options: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      sortOrder?: 'ASC' | 'DESC';
+    } = {},
+  ): Promise<PaginatedResumeHistory> {
+    const { page = 1, limit = 10, search, sortOrder = 'DESC' } = options;
+    const skip = (page - 1) * limit;
+
+    const qb = this.resumeGenerationRepository
+      .createQueryBuilder('rg')
+      .where('rg.user_id = :userId', { userId });
+
+    if (search) {
+      qb.andWhere(
+        '(LOWER(rg.company_name) LIKE :search OR LOWER(rg.job_position) LIKE :search)',
+        { search: `%${search.toLowerCase()}%` },
+      );
+    }
+
+    qb.select([
+      'rg.id',
+      'rg.company_name',
+      'rg.job_position',
+      'rg.optimization_confidence',
+      'rg.keywords_added',
+      'rg.sections_optimized',
+      'rg.template_id',
+      'rg.created_at',
+      'rg.pdf_s3_key',
+    ])
+      .orderBy('rg.created_at', sortOrder)
+      .skip(skip)
+      .take(limit);
+
+    const [records, total] = await qb.getManyAndCount();
+
+    return {
+      items: records.map((r) => ({
+        id: r.id,
+        companyName: r.company_name,
+        jobPosition: r.job_position,
+        optimizationConfidence: r.optimization_confidence,
+        keywordsAdded: r.keywords_added,
+        sectionsOptimized: r.sections_optimized,
+        templateId: r.template_id,
+        createdAt: r.created_at,
+        canDownload: Boolean(r.pdf_s3_key),
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async getResumeGenerationDetail(
+    generationId: string,
+    userId: string,
+  ): Promise<ResumeHistoryDetail> {
+    const record = await this.resumeGenerationRepository.findOne({
+      where: { id: generationId, user_id: userId },
+      select: [
+        'id',
+        'company_name',
+        'job_position',
+        'optimization_confidence',
+        'keywords_added',
+        'sections_optimized',
+        'achievements_quantified',
+        'changes_diff',
+        'template_id',
+        'created_at',
+        'pdf_s3_key',
+      ],
+    });
+
+    if (!record) {
+      throw new NotFoundException(
+        'Resume generation not found',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    return {
+      id: record.id,
+      companyName: record.company_name,
+      jobPosition: record.job_position,
+      optimizationConfidence: record.optimization_confidence,
+      keywordsAdded: record.keywords_added,
+      sectionsOptimized: record.sections_optimized,
+      achievementsQuantified: record.achievements_quantified,
+      changesDiff: record.changes_diff ?? null,
+      canDownload: Boolean(record.pdf_s3_key),
+      templateId: record.template_id,
+      createdAt: record.created_at,
+    };
+  }
+
+  async getChangesDiff(generationId: string, userId: string): Promise<any> {
+    const record = await this.resumeGenerationRepository.findOne({
+      where: { id: generationId, user_id: userId },
+      select: ['id', 'changes_diff'],
+    });
+
+    if (!record) {
+      throw new NotFoundException(
+        'Resume generation not found',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return record.changes_diff ?? null;
+  }
+
+  async downloadResumeGeneration(
+    generationId: string,
+    userId: string,
+  ): Promise<Buffer> {
+    const record = await this.resumeGenerationRepository.findOne({
+      where: { id: generationId, user_id: userId },
+      select: ['id', 'pdf_s3_key', 'company_name', 'job_position'],
+    });
+
+    if (!record) {
+      throw new NotFoundException(
+        'Resume generation not found',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    if (!record.pdf_s3_key) {
+      throw new NotFoundException(
+        'PDF is no longer available for download',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    const bucket = this.configService.get<string>(
+      'AWS_S3_GENERATED_RESUMES_BUCKET',
+    );
+
+    return this.s3Service.getObject({ bucketName: bucket, key: record.pdf_s3_key });
+  }
+
   /**
    * Extract structured content from resume text without job-specific analysis
    * This method focuses solely on parsing and structuring resume content
@@ -215,7 +425,10 @@ export class ResumeService {
       );
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Resume content extraction failed: ${errorMessage}`);
+      throw new BadRequestException(
+        `Resume content extraction failed: ${errorMessage}`,
+        ERROR_CODES.RESUME_TEXT_EXTRACTION_FAILED,
+      );
     }
   }
 }

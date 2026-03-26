@@ -37,8 +37,35 @@ export class ResumeGeneration {
   @Column({ nullable: true })
   company_name: string;
 
+  @Column({ nullable: true })
+  job_position: string;
+
   @Column('jsonb', { nullable: true })
   analysis: any;
+
+  @Column({ nullable: true })
+  keywords_added: number;
+
+  @Column({ nullable: true })
+  sections_optimized: number;
+
+  @Column({ nullable: true })
+  achievements_quantified: number;
+
+  @Column('float', { nullable: true })
+  optimization_confidence: number;
+
+  @Column({ nullable: true })
+  pdf_s3_key: string;
+
+  @Column('jsonb', { nullable: true })
+  job_analysis: any;
+
+  @Column('jsonb', { nullable: true })
+  candidate_content: any;
+
+  @Column('jsonb', { nullable: true })
+  changes_diff: any;
 
   @CreateDateColumn()
   created_at: Date;

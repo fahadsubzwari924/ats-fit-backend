@@ -23,4 +23,4 @@ async function seedRateLimits() {
   }
 }
 
-seedRateLimits();
+void seedRateLimits();

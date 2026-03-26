@@ -6,7 +6,7 @@ import { Queue } from 'bull';
 import { ExtractedResumeContent } from '../../../database/entities/extracted-resume-content.entity';
 import { QueueMessage } from '../../../database/entities/queue-message.entity';
 import { QueueMessagePriority } from '../../../shared/enums/queue-message.enum';
-import { ResumeExtractionJobData } from '../processors/resume-extraction.processor';
+import { ResumeExtractionJobData } from '../interfaces/resume-extraction.interface';
 import {
   ResumeGenerationJobData,
   ResumeFileData,

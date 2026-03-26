@@ -4,7 +4,6 @@ import {
   createCheckout,
   getCustomer,
   getSubscription,
-  lemonSqueezySetup,
   NewCheckout,
 } from '@lemonsqueezy/lemonsqueezy.js';
 import { CreateCheckoutRequest } from '../interfaces/payment-gateway.interface';
@@ -23,7 +22,6 @@ export class LemonSqueezyService {
   constructor() {}
 
   async createCheckoutSession(request: CreateCheckoutRequest) {
-
     const storeId = process.env.LEMON_SQUEEZY_STORE_ID;
     if (!storeId) {
       throw new InternalServerErrorException(
@@ -63,7 +61,6 @@ export class LemonSqueezyService {
   }
 
   async getSubscriptionDetails(subscriptionId: string) {
-
     const response = await getSubscription(subscriptionId);
 
     if (response?.error) {
@@ -77,7 +74,6 @@ export class LemonSqueezyService {
   }
 
   async cancelSubscription(subscriptionId: string) {
-
     const response = await cancelSubscription(subscriptionId);
 
     if (response?.error) {
@@ -92,7 +88,6 @@ export class LemonSqueezyService {
 
   // Bonus: Get Customer Portal URL (for users to manage billing themselves)
   async getCustomerPortalUrl(customerId: string) {
-
     const response = await getCustomer(customerId);
 
     if (response.error) {
