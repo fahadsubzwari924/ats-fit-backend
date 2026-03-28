@@ -13,6 +13,7 @@ const INITIAL_BACKOFF_MS = 300;
 @Injectable()
 export class TailoredResumePdfStorageService {
   private readonly logger = new Logger(TailoredResumePdfStorageService.name);
+  private hasLoggedCandidatesBucketFallback = false;
 
   constructor(
     private readonly configService: ConfigService,
@@ -20,20 +21,47 @@ export class TailoredResumePdfStorageService {
   ) {}
 
   /**
+   * Bucket for tailored PDF objects (upload + download must use the same value).
+   * Prefers AWS_S3_GENERATED_RESUMES_BUCKET; if unset/empty, uses AWS_S3_CANDIDATES_RESUMES_BUCKET
+   * so dev setups that only configure the candidates bucket still persist pdf_s3_key.
+   */
+  getBucketForTailoredPdfs(): string | null {
+    const dedicated = this.nonEmptyEnv('AWS_S3_GENERATED_RESUMES_BUCKET');
+    if (dedicated) {
+      return dedicated;
+    }
+    const fallback = this.nonEmptyEnv('AWS_S3_CANDIDATES_RESUMES_BUCKET');
+    if (fallback) {
+      if (!this.hasLoggedCandidatesBucketFallback) {
+        this.hasLoggedCandidatesBucketFallback = true;
+        this.logger.log(
+          'AWS_S3_GENERATED_RESUMES_BUCKET not set; tailored PDFs use AWS_S3_CANDIDATES_RESUMES_BUCKET (object keys: tailored-resumes/...). Set AWS_S3_GENERATED_RESUMES_BUCKET for a dedicated bucket.',
+        );
+      }
+      return fallback;
+    }
+    this.logger.warn(
+      'Tailored PDF S3 persistence disabled: set AWS_S3_GENERATED_RESUMES_BUCKET or AWS_S3_CANDIDATES_RESUMES_BUCKET',
+    );
+    return null;
+  }
+
+  private nonEmptyEnv(key: string): string | undefined {
+    const v = this.configService.get<string>(key);
+    const t = typeof v === 'string' ? v.trim() : '';
+    return t.length > 0 ? t : undefined;
+  }
+
+  /**
    * Uploads a generated PDF. Returns S3 object key on success, or null if the bucket
-   * is not configured (typical in local dev) or upload ultimately fails.
+   * is not configured or upload ultimately fails.
    */
   async uploadGeneratedPdf(
     pdfBuffer: Buffer,
     ownerId: string,
   ): Promise<string | null> {
-    const bucket = this.configService.get<string>(
-      'AWS_S3_GENERATED_RESUMES_BUCKET',
-    );
+    const bucket = this.getBucketForTailoredPdfs();
     if (!bucket) {
-      this.logger.debug(
-        'AWS_S3_GENERATED_RESUMES_BUCKET not set — skipping tailored PDF persistence',
-      );
       return null;
     }
 

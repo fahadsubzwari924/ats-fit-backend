@@ -1,6 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
 
-import { ResumeService } from '../resume-tailoring/services/resume.service';
 import { AtsMatchController } from './ats-match.controller';
 import { AtsMatchService } from './ats-match.service';
 import { SharedModule } from '../../shared/shared.module';
@@ -22,7 +21,6 @@ import { ResumeSelectionService } from './services/resume-selection.service';
   controllers: [AtsMatchController],
   providers: [
     AtsMatchService,
-    ResumeService,
     OpenAIService,
     EmbeddingService,
     ClaudeService,

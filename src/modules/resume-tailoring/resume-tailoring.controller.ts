@@ -383,41 +383,6 @@ export class ResumeTailoringController {
   }
 
   /**
-   * Validates template existence for download endpoints (returns response directly)
-   * @param templateId - The template ID to validate
-   * @param res - Express response object
-   * @returns Promise<boolean> - true if valid, false if invalid (response already sent)
-   */
-  private async validateTemplateForDownloadEndpoint(
-    templateId: string,
-    res: Response,
-  ): Promise<boolean> {
-    const templateExists =
-      await this.resumeTemplateService.validateTemplateExists(templateId);
-
-    if (!templateExists) {
-      this.logger.error(
-        `Template validation failed: Template ${templateId} not found in database`,
-      );
-      res.status(404).json({
-        status: 'error',
-        message: 'Template not found',
-        code: 'TEMPLATE_NOT_FOUND',
-        data: null,
-        errors: null,
-        meta: {
-          timestamp: new Date().toISOString(),
-          path: '/api/v1/resumes/generate/download',
-        },
-      });
-      return false;
-    }
-
-    this.logger.debug(`Template validation successful for ID: ${templateId}`);
-    return true;
-  }
-
-  /**
    * Sets headers for PDF download response
    */
   private setPdfResponseHeaders(

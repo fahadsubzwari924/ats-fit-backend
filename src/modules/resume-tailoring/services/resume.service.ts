@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ResumeTemplateService } from './resume-templates.service';
+import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
 import { AIContentService } from '../../../shared/services/ai-content.service';
 import * as pdf from 'pdf-parse';
 import { BadRequestException } from '../../../shared/exceptions/custom-http-exceptions';
@@ -63,6 +64,7 @@ export class ResumeService {
     private readonly userRepository: Repository<User>,
 
     private readonly s3Service: S3Service,
+    private readonly tailoredResumePdfStorageService: TailoredResumePdfStorageService,
   ) {}
 
   private async extractTextFromPdf(buffer: Buffer): Promise<string> {
@@ -390,11 +392,19 @@ export class ResumeService {
       );
     }
 
-    const bucket = this.configService.get<string>(
-      'AWS_S3_GENERATED_RESUMES_BUCKET',
-    );
+    const bucket =
+      this.tailoredResumePdfStorageService.getBucketForTailoredPdfs();
+    if (!bucket) {
+      throw new NotFoundException(
+        'PDF is no longer available for download',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
 
-    return this.s3Service.getObject({ bucketName: bucket, key: record.pdf_s3_key });
+    return this.s3Service.getObject({
+      bucketName: bucket,
+      key: record.pdf_s3_key,
+    });
   }
 
   /**

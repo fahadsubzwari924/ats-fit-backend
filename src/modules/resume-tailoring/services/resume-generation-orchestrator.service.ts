@@ -8,7 +8,6 @@ import { PdfGenerationOrchestratorService } from './pdf-generation-orchestrator.
 import { ResumeValidationService } from './resume-validation.service';
 import { AtsEvaluationService } from '../../../shared/services/ats-evaluation.service';
 import { PromptService } from '../../../shared/services/prompt.service';
-import { AIContentService } from '../../../shared/services/ai-content.service';
 import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
@@ -47,7 +46,6 @@ export class ResumeGenerationOrchestratorService {
     private readonly pdfGenerationOrchestratorService: PdfGenerationOrchestratorService,
     private readonly atsEvaluationService: AtsEvaluationService,
     private readonly promptService: PromptService,
-    private readonly aiContentService: AIContentService,
     private readonly tailoredResumePdfStorageService: TailoredResumePdfStorageService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
@@ -209,7 +207,6 @@ export class ResumeGenerationOrchestratorService {
           input.jobDescription,
           resumeTextForAts,
           this.promptService,
-          this.aiContentService,
           {
             userId: input.userContext.userId,
             guestId: input.userContext.guestId,
