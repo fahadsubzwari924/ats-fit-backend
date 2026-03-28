@@ -56,7 +56,6 @@ export class AtsEvaluationService {
     jobDescription: string,
     resumeText: string,
     promptService: IPromptService,
-    _aiService?: unknown,
     userContext?: { userId?: string; guestId?: string },
     additionalData?: {
       companyName?: string;

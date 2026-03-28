@@ -10,7 +10,6 @@ import { ResumeContentService } from '../resume-tailoring/services/resume-conten
 import { PremiumAtsEvaluation } from './interfaces';
 import { PromptService } from '../resume-tailoring/services';
 import { AtsEvaluationService } from '../../shared/services/ats-evaluation.service';
-import { AIContentService } from '../../shared/services/ai-content.service';
 import { ResumeInputData } from '../../shared/interfaces/resume-input.interface';
 import {
   ResumeSourceStrategy,
@@ -25,7 +24,6 @@ export class AtsMatchService {
     private readonly resumeService: ResumeService,
     private readonly promptService: PromptService,
     private readonly atsEvaluationService: AtsEvaluationService,
-    private readonly aiContentService: AIContentService,
     private readonly resumeContentService: ResumeContentService,
   ) {}
 
@@ -246,7 +244,6 @@ export class AtsMatchService {
           jobDescription,
           resumeInput.text,
           this.promptService,
-          this.aiContentService,
           userContext,
           additionalData,
         );

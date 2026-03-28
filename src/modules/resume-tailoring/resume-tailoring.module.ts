@@ -3,14 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ResumeTailoringController } from './resume-tailoring.controller';
-import { ResumeTailoringAsyncController } from './resume-tailoring-async.controller';
 import {
   ResumeGeneration,
   ResumeTemplate,
   User,
   Resume,
   ExtractedResumeContent,
-  ResumeGenerationResult,
   QueueMessage,
   TailoringQuestion,
   EnrichedResumeProfile,
@@ -29,7 +27,6 @@ import { PdfGenerationOrchestratorService } from './services/pdf-generation-orch
 import { ResumeGenerationOrchestratorService } from './services/resume-generation-orchestrator.service';
 import { ResumeContentService } from './services/resume-content.service';
 import { ResumeValidationService } from './services/resume-validation.service';
-import { ResumeGenerationResultService } from './services/resume-generation-result.service';
 import { ResumeQueueService } from './services/resume-queue.service';
 import { ResumeProfileEnrichmentService } from './services/resume-profile-enrichment.service';
 import { ProfileQuestionSelectionService } from './services/profile-question-selection.service';
@@ -49,8 +46,6 @@ import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { AtsMatchModule } from '../ats-match/ats-match.module';
 import { QueueModule } from '../queue/queue.module';
 import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-provider.token';
-// Queue Processors (Domain-specific)
-import { ResumeGenerationProcessor } from './processors/resume-generation.processor';
 import { ResumeExtractionProcessor } from './processors/resume-extraction.processor';
 
 @Module({
@@ -61,7 +56,6 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
       ResumeGeneration,
       Resume,
       ExtractedResumeContent,
-      ResumeGenerationResult,
       QueueMessage,
       TailoringQuestion,
       EnrichedResumeProfile,
@@ -99,7 +93,6 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
     PdfGenerationOrchestratorService,
     TailoredResumePdfStorageService,
     ResumeGenerationOrchestratorService,
-    ResumeGenerationResultService,
     ResumeQueueService,
     // Profile enrichment & profile questions
     ProfileQuestionSelectionService,
@@ -107,8 +100,6 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
     ResumeProfileEnrichmentService,
     // Cover Letter Generation
     CoverLetterGenerationService,
-    // Queue Processors (Domain-specific)
-    ResumeGenerationProcessor,
     ResumeExtractionProcessor,
     // Interceptors
     {
@@ -116,11 +107,7 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
       useClass: TransformUserContextInterceptor,
     },
   ],
-  controllers: [
-    ResumeTailoringController,
-    ResumeTailoringAsyncController,
-    ProfileQuestionsController,
-  ],
+  controllers: [ResumeTailoringController, ProfileQuestionsController],
   exports: [
     ResumeTemplateService,
     ResumeService,
@@ -137,7 +124,6 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
     ResumeOptimizerService,
     PdfGenerationOrchestratorService,
     ResumeGenerationOrchestratorService,
-    ResumeGenerationResultService,
     ResumeQueueService,
     ResumeProfileEnrichmentService,
   ],

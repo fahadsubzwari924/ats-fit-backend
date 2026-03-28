@@ -21,8 +21,8 @@ describe('TailoredResumePdfStorageService', () => {
     service = module.get(TailoredResumePdfStorageService);
   });
 
-  it('returns null and skips upload when bucket is not configured', async () => {
-    configGet.mockReturnValue(undefined);
+  it('returns null and skips upload when no tailored-PDF bucket is configured', async () => {
+    configGet.mockImplementation(() => undefined);
     const result = await service.uploadGeneratedPdf(
       Buffer.from('%PDF'),
       'user-1',
@@ -31,8 +31,32 @@ describe('TailoredResumePdfStorageService', () => {
     expect(uploadFile).not.toHaveBeenCalled();
   });
 
+  it('uses AWS_S3_CANDIDATES_RESUMES_BUCKET when generated bucket is unset', async () => {
+    configGet.mockImplementation((key: string) => {
+      if (key === 'AWS_S3_GENERATED_RESUMES_BUCKET') {
+        return undefined;
+      }
+      if (key === 'AWS_S3_CANDIDATES_RESUMES_BUCKET') {
+        return 'candidates-bucket';
+      }
+      return undefined;
+    });
+    uploadFile.mockResolvedValue(undefined);
+    const buf = Buffer.from('%PDF-1');
+    const key = await service.uploadGeneratedPdf(buf, 'user-1');
+    expect(key).toMatch(/^tailored-resumes\/user-1\/[0-9a-f-]{36}\.pdf$/);
+    expect(uploadFile).toHaveBeenCalledWith({
+      bucketName: 'candidates-bucket',
+      key,
+      file: buf,
+      contentType: 'application/pdf',
+    });
+  });
+
   it('returns key with tailored-resumes/{owner}/{uuid}.pdf on success', async () => {
-    configGet.mockReturnValue('generated-bucket');
+    configGet.mockImplementation((key: string) =>
+      key === 'AWS_S3_GENERATED_RESUMES_BUCKET' ? 'generated-bucket' : undefined,
+    );
     uploadFile.mockResolvedValue(undefined);
     const buf = Buffer.from('%PDF-1');
     const ownerId = '07559858-7650-464f-b219-e57a00bc0f6f';
@@ -53,7 +77,9 @@ describe('TailoredResumePdfStorageService', () => {
   });
 
   it('does not retry when error is access denied', async () => {
-    configGet.mockReturnValue('bucket');
+    configGet.mockImplementation((key: string) =>
+      key === 'AWS_S3_GENERATED_RESUMES_BUCKET' ? 'bucket' : undefined,
+    );
     uploadFile.mockRejectedValue(
       new Error('Access denied to S3 resource during upload operation'),
     );
@@ -64,7 +90,9 @@ describe('TailoredResumePdfStorageService', () => {
 
   it('retries on transient errors then succeeds', async () => {
     jest.useFakeTimers();
-    configGet.mockReturnValue('bucket');
+    configGet.mockImplementation((key: string) =>
+      key === 'AWS_S3_GENERATED_RESUMES_BUCKET' ? 'bucket' : undefined,
+    );
     uploadFile
       .mockRejectedValueOnce(
         new Error('S3 service error during upload: SlowDown'),
