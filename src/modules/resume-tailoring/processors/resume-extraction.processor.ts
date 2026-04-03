@@ -47,8 +47,7 @@ export class ResumeExtractionProcessor implements OnModuleInit {
   async handleResumeExtraction(
     job: Job<ResumeExtractionJobData>,
   ): Promise<void> {
-    const { queueMessageId, userId, fileName, fileBuffer, fileSize, resumeId } =
-      job.data;
+    const { queueMessageId, userId, fileName, s3Url, resumeId } = job.data;
     const startTime = Date.now();
 
     this.logger.log(
@@ -64,11 +63,20 @@ export class ResumeExtractionProcessor implements OnModuleInit {
       );
       await job.progress(10);
 
-      const tempFile = this.createTempFile(fileName, fileBuffer, fileSize);
-      await job.progress(20);
-
+      const fileBuffer = await this.resumeService.getResumeBufferFromS3(s3Url);
       const extractedText =
-        await this.resumeService.extractTextFromResume(tempFile);
+        await this.resumeService.extractTextFromResume({
+          fieldname: 'resumeFile',
+          originalname: fileName,
+          encoding: '7bit',
+          mimetype: 'application/pdf',
+          buffer: fileBuffer,
+          size: fileBuffer.length,
+          stream: null,
+          destination: '',
+          filename: '',
+          path: '',
+        } as Express.Multer.File);
       await job.progress(50);
 
       const structuredContent =
@@ -79,17 +87,14 @@ export class ResumeExtractionProcessor implements OnModuleInit {
 
       const processingDuration = Date.now() - startTime;
 
-      await this.extractedResumeRepository.update(
-        { id: resumeId },
-        { extractedText, structuredContent },
-      );
-      await job.progress(85);
-
-      const questionsTotal = await this.runProfileQuestionGeneration(
-        userId,
-        resumeId,
-        structuredContent,
-      );
+      const [, questionsTotal] = await Promise.all([
+        this.extractedResumeRepository.update(
+          { id: resumeId },
+          { extractedText, structuredContent },
+        ),
+        this.runProfileQuestionGeneration(userId, resumeId, structuredContent),
+      ]);
+      await job.progress(90);
 
       await this.updateQueueMessageStatus(
         queueMessageId,
@@ -142,6 +147,10 @@ export class ResumeExtractionProcessor implements OnModuleInit {
   /**
    * Validates job data at the queue boundary. Throws if required fields are missing.
    * Ensures fail-fast before any async work; caught by handleResumeExtraction try/catch.
+   *
+   * Note: fileSize is intentionally excluded — it is stored as 0 on the record
+   * because the actual file lives in S3. The real size is derived from the
+   * downloaded buffer at processing time.
    */
   private assertJobData(data: ResumeExtractionJobData): void {
     const requiredStrings: (keyof ResumeExtractionJobData)[] = [
@@ -149,6 +158,7 @@ export class ResumeExtractionProcessor implements OnModuleInit {
       'userId',
       'fileName',
       'resumeId',
+      's3Url',
     ];
     for (const field of requiredStrings) {
       if (!data[field] || typeof data[field] !== 'string') {
@@ -156,9 +166,6 @@ export class ResumeExtractionProcessor implements OnModuleInit {
           `Invalid job data: '${field}' is required and must be a non-empty string`,
         );
       }
-    }
-    if (!data.fileBuffer || !data.fileSize) {
-      throw new Error('Invalid job data: fileBuffer and fileSize are required');
     }
   }
 
@@ -242,14 +249,10 @@ export class ResumeExtractionProcessor implements OnModuleInit {
     await this.queueMessageRepository
       .createQueryBuilder()
       .update(QueueMessage)
-      .set(updateData)
-      .where('id = :id', { id: queueMessageId })
-      .execute();
-
-    await this.queueMessageRepository
-      .createQueryBuilder()
-      .update(QueueMessage)
-      .set({ attempts: () => 'attempts + 1' })
+      .set({
+        ...updateData,
+        attempts: () => 'attempts + 1',
+      })
       .where('id = :id', { id: queueMessageId })
       .execute();
 

@@ -18,6 +18,7 @@ import { RequestWithUserContext } from '../../../shared/interfaces/request-user.
 import { AnswerProfileQuestionDto } from '../dtos/answer-profile-question.dto';
 import { ProfileQuestionResponseDto } from '../dtos/profile-question-response.dto';
 import { ResumeProfileEnrichmentService } from '../services/resume-profile-enrichment.service';
+import { ResumeQueueService } from '../services/resume-queue.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -45,6 +46,7 @@ export class ProfileQuestionsController {
     @InjectRepository(ExtractedResumeContent)
     private readonly extractedResumeContentRepository: Repository<ExtractedResumeContent>,
     private readonly resumeProfileEnrichmentService: ResumeProfileEnrichmentService,
+    private readonly resumeQueueService: ResumeQueueService,
   ) {}
 
   @Get()
@@ -145,15 +147,15 @@ export class ProfileQuestionsController {
     const total = all.length;
     const profileCompleteness = total > 0 ? answered / total : 1.0;
 
-    let enrichedProfileId: string | null = null;
     if (total > 0 && answered === total) {
       try {
-        const profile =
-          await this.resumeProfileEnrichmentService.enrichProfile(userId);
-        enrichedProfileId = profile.id;
+        await this.resumeQueueService.addProfileEnrichmentJob(userId);
+        this.logger.log(
+          `Enqueued profile enrichment job for user ${userId} after last question answered`,
+        );
       } catch (err) {
         this.logger.warn(
-          `Auto-enrichment after last answer failed for user ${userId}`,
+          `Failed to enqueue profile enrichment job for user ${userId}`,
           err,
         );
       }
@@ -162,20 +164,20 @@ export class ProfileQuestionsController {
     return {
       saved: true,
       profileCompleteness,
-      enrichedProfileId,
+      enrichedProfileId: null,
     };
   }
 
   @Post('complete')
   @ApiOperation({
-    summary: 'Mark profile Q&A complete and run enrichment',
+    summary: 'Mark profile Q&A complete and trigger background enrichment',
     description:
-      'User explicitly signals done. Triggers profile enrichment regardless of completeness percentage.',
+      'User explicitly signals done. Enqueues profile enrichment as a background job. The client should poll GET /users/resume-profile-status until enrichedProfileId is present.',
   })
-  @ApiResponse({ status: 200, description: 'Enrichment completed' })
+  @ApiResponse({ status: 200, description: 'Enrichment enqueued' })
   async complete(
     @Req() request: RequestWithUserContext,
-  ): Promise<{ enrichedProfileId: string }> {
+  ): Promise<{ enrichedProfileId: string | null }> {
     const userId = request?.userContext?.userId;
     if (!userId) {
       throw new ForbiddenException(
@@ -184,8 +186,10 @@ export class ProfileQuestionsController {
       );
     }
 
-    const profile =
-      await this.resumeProfileEnrichmentService.enrichProfile(userId);
-    return { enrichedProfileId: profile.id };
+    await this.resumeQueueService.addProfileEnrichmentJob(userId);
+    this.logger.log(
+      `Enqueued profile enrichment job for user ${userId} via /complete`,
+    );
+    return { enrichedProfileId: null };
   }
 }

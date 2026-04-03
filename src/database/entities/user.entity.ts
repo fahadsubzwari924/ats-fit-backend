@@ -75,6 +75,9 @@ export class User {
   @Column({ default: true })
   is_active: boolean;
 
+  @Column({ default: false })
+  onboarding_completed: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 

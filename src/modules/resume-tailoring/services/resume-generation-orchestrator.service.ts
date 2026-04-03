@@ -9,6 +9,7 @@ import { ResumeValidationService } from './resume-validation.service';
 import { AtsEvaluationService } from '../../../shared/services/ats-evaluation.service';
 import { PromptService } from '../../../shared/services/prompt.service';
 import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
+import { ResumeQueueService } from './resume-queue.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import {
@@ -47,6 +48,7 @@ export class ResumeGenerationOrchestratorService {
     private readonly atsEvaluationService: AtsEvaluationService,
     private readonly promptService: PromptService,
     private readonly tailoredResumePdfStorageService: TailoredResumePdfStorageService,
+    private readonly resumeQueueService: ResumeQueueService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
   ) {}
@@ -187,7 +189,7 @@ export class ResumeGenerationOrchestratorService {
         pdf_s3_key: pdfS3Key,
         job_analysis: jobAnalysis,
         candidate_content: resumeContent.content,
-        changes_diff: optimizationResult.changesDiff ?? null,
+        changes_diff: null,
       });
       const dbTime = Date.now() - dbStart;
 
@@ -195,7 +197,27 @@ export class ResumeGenerationOrchestratorService {
         `Resume generation record saved in ${dbTime}ms with ID: ${savedGeneration.id}`,
       );
 
-      // Step 5: Fire ATS evaluation in background — do NOT await, PDF is already ready
+      // Step 5a: Dispatch changes diff computation as a background Bull job.
+      // This is fire-and-forget — users get their PDF without waiting.
+      void this.resumeQueueService
+        .addChangesDiffJob({
+          resumeGenerationId: savedGeneration.id,
+          userId: input.userContext.userId || '',
+          originalContent: resumeContent.content as unknown as Record<string, unknown>,
+          optimizedContent: optimizationResult.optimizedContent as unknown as Record<string, unknown>,
+          jobAnalysisKeywords: {
+            mandatorySkills: jobAnalysis.technical.mandatorySkills,
+            primaryKeywords: jobAnalysis.keywords.primary,
+          },
+        })
+        .catch((error: unknown) => {
+          this.logger.warn(
+            '[Background] Changes diff job dispatch failed — diff will be unavailable for this generation',
+            error,
+          );
+        });
+
+      // Step 5b: Fire ATS evaluation in background — do NOT await, PDF is already ready
       const atsEvaluationStart = Date.now();
 
       const resumeTextForAts = this.convertOptimizedContentToText(
@@ -234,7 +256,7 @@ export class ResumeGenerationOrchestratorService {
       this.logger.log(
         `Resume generation completed in ${totalProcessingTime}ms ` +
           `(Validation: ${validationTime}ms, Parallel: ${parallelOperationsTime}ms, ` +
-          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, ATS: background)`,
+          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, Diff: background, ATS: background)`,
       );
 
       // Build comprehensive result — ATS score available after background task completes

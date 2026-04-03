@@ -109,6 +109,7 @@ export class AuthService {
         'user.is_active',
         'user.created_at',
         'user.updated_at',
+        'user.onboarding_completed',
       ])
       .leftJoinAndSelect(
         'user.uploadedResumes',
@@ -338,6 +339,7 @@ export class AuthService {
         'user.is_active',
         'user.created_at',
         'user.updated_at',
+        'user.onboarding_completed',
       ])
       .leftJoinAndSelect(
         'user.uploadedResumes',

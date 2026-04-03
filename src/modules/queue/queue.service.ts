@@ -115,19 +115,13 @@ export class QueueService {
       updateData.errorDetails = additionalData.errorDetails;
     }
 
-    // Increment attempts using raw query to avoid TypeScript issues
     await this.queueMessageRepository
       .createQueryBuilder()
       .update(QueueMessage)
-      .set(updateData)
-      .where('id = :id', { id: queueMessageId })
-      .execute();
-
-    // Increment attempts separately
-    await this.queueMessageRepository
-      .createQueryBuilder()
-      .update(QueueMessage)
-      .set({ attempts: () => 'attempts + 1' })
+      .set({
+        ...updateData,
+        attempts: () => 'attempts + 1',
+      })
       .where('id = :id', { id: queueMessageId })
       .execute();
 

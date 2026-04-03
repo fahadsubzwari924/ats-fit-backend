@@ -124,14 +124,10 @@ ${jobDescription}
   }
 
   /**
-   * Generate prompt for extracting structured content from resume text
-   * This method creates a prompt focused solely on parsing and structuring resume content
-   * without any job-specific analysis or matching
-   *
-   * @param resumeText - Raw text extracted from resume
-   * @returns string - Formatted prompt for AI to extract structured content
+   * System-level instructions for extracting structured content from resume text.
+   * This string is static and ideal for OpenAI prompt caching.
    */
-  getResumeContentExtractionPrompt(resumeText: string): string {
+  getResumeContentExtractionSystemPrompt(): string {
     return `
 You are an expert resume parser. Extract and structure the following resume text into a comprehensive JSON format. Focus on accurately parsing all sections and information present in the resume without making assumptions about missing data.
 
@@ -143,9 +139,6 @@ You are an expert resume parser. Extract and structure the following resume text
 5. Maintain original text context and meaning
 6. Use consistent date formats (YYYY-MM-DD where possible)
 7. Organize skills into logical categories
-
-**Resume Text:**
-${resumeText}
 
 **Return a JSON object with the following exact structure:**
 {
@@ -173,9 +166,10 @@ ${resumeText}
       "position": "Job title",
       "duration": "Duration as written in resume",
       "location": "Work location",
+      "responsibilities": ["Bullet points exactly as written in the resume for this role"],
+      "achievements": [],
       "startDate": "YYYY-MM-DD or YYYY-MM",
       "endDate": "YYYY-MM-DD or YYYY-MM or 'Present'",
-      "responsibilities": ["List of responsibilities achievements if available"],
       "technologies": "Technologies used (if mentioned)"
     }
   ],
@@ -206,11 +200,21 @@ ${resumeText}
 
 **Important Notes:**
 - If information is not present in the resume, use empty strings or empty arrays
-- Preserve the original wording and context as much as possible  
+- Preserve the original wording and context as much as possible
 - Extract dates in the most specific format available in the resume
 - For skills, categorize them logically based on context
 - Include all additional sections that don't fit standard categories
+- For each work experience, put ALL bullet points into the "responsibilities" array in the exact order they appear in the resume. Leave "achievements" as an empty array.
+- Maintain the exact chronological order of work experiences as they appear in the resume (most recent first)
+- Each bullet point must belong to the company it appears under in the resume — do not move bullets between companies, even across page breaks
 `;
+  }
+
+  /**
+   * User-level content for resume extraction: the raw resume text only.
+   */
+  getResumeContentExtractionUserPrompt(resumeText: string): string {
+    return `Resume Text:\n${resumeText}`;
   }
 
   /**
@@ -354,7 +358,7 @@ You are an expert resume optimization specialist. Tailor the candidate's resume 
 - Primary Keywords: ${Array.isArray(keywords.primary) ? keywords.primary.join(', ') : 'None specified'}
 
 **CURRENT CANDIDATE RESUME:**
-${JSON.stringify(candidateContent, null, 2)}
+${JSON.stringify(candidateContent)}
 
 **OPTIMIZATION INSTRUCTIONS:**
 1. **Achievements and responsibilities:**
@@ -434,25 +438,6 @@ Return valid JSON with the EXACT structure below. Set achievementsQuantified to 
     "achievementsQuantified": 0,
     "skillsAligned": 8,
     "confidenceScore": 85
-  },
-  "optimizationStrategy": {
-    "primaryFocus": ["keyword integration", "factual alignment"],
-    "improvementAreas": ["technical skills", "leadership experience"],
-    "atsOptimizations": ["keyword density", "format standardization"],
-    "recommendations": ["highlight relevant projects"]
-  },
-  "changesDiff": {
-    "totalChanges": 5,
-    "sectionsChanged": 3,
-    "changes": [
-      {
-        "section": "Professional Summary",
-        "changeType": "modified",
-        "original": "original text here",
-        "optimized": "optimized text here",
-        "addedKeywords": ["React", "TypeScript"]
-      }
-    ]
   }
 }
 
@@ -461,8 +446,7 @@ Return valid JSON with the EXACT structure below. Set achievementsQuantified to 
 - NEVER use "N/A", "Unknown", or invalid values for dates
 - Include ALL work experiences from candidate resume (don't skip any)
 - Ensure experience array is complete and properly formatted
-- Do NOT invent metrics; changesDiff.changes must cover ALL sections that were modified: Summary, Skills, and each Experience entry
-- changeType must be one of: "modified", "added", "removed", "unchanged"
+- Do NOT invent metrics
 `;
   }
 
@@ -525,7 +509,7 @@ Every number or metric listed under USER-VERIFIED FACTS was provided by the cand
 - Primary Keywords: ${Array.isArray(keywords.primary) ? (keywords.primary as string[]).join(', ') : 'None specified'}
 
 **CURRENT CANDIDATE RESUME (may already include merged user facts):**
-${JSON.stringify(candidateContent, null, 2)}
+${JSON.stringify(candidateContent)}
 
 **OPTIMIZATION INSTRUCTIONS:**
 1. **Achievements and responsibilities:**
@@ -605,25 +589,6 @@ Return valid JSON with the EXACT structure below. Metrics in optimizationMetrics
     "achievementsQuantified": 10,
     "skillsAligned": 8,
     "confidenceScore": 85
-  },
-  "optimizationStrategy": {
-    "primaryFocus": ["keyword integration", "factual alignment"],
-    "improvementAreas": ["technical skills", "leadership experience"],
-    "atsOptimizations": ["keyword density", "format standardization"],
-    "recommendations": ["preserve user metrics", "highlight relevant projects"]
-  },
-  "changesDiff": {
-    "totalChanges": 5,
-    "sectionsChanged": 3,
-    "changes": [
-      {
-        "section": "Professional Summary",
-        "changeType": "modified",
-        "original": "original text here",
-        "optimized": "optimized text here",
-        "addedKeywords": ["React", "TypeScript"]
-      }
-    ]
   }
 }
 
@@ -632,8 +597,6 @@ Return valid JSON with the EXACT structure below. Metrics in optimizationMetrics
 - NEVER use "N/A", "Unknown", or invalid values for dates
 - Include ALL work experiences from candidate resume
 - Do not introduce new numerical claims
-- changesDiff.changes must cover ALL sections that were modified: Summary, Skills, and each Experience entry
-- changeType must be one of: "modified", "added", "removed", "unchanged"
 `;
   }
 
@@ -652,7 +615,7 @@ Return valid JSON with the EXACT structure below. Metrics in optimizationMetrics
     const bulletsFormatted = bulletContexts
       .map(
         (b, i) =>
-          `${i + 1}. [Experience ${b.workExperienceIndex}, Bullet ${b.bulletPointIndex}] "${b.originalBulletPoint}"${b.positionTitle ? ` (${b.positionTitle})` : ''}`,
+          `${i + 1}. "${b.originalBulletPoint}"${b.positionTitle ? ` (${b.positionTitle})` : ''}`,
       )
       .join('\n');
 
@@ -663,7 +626,8 @@ You are an expert resume consultant. For each resume bullet point below, generat
 ${bulletsFormatted}
 
 **RULES:**
-- Generate exactly one question per bullet point above.
+- Generate exactly one question per bullet point above, in the SAME ORDER as listed.
+- The "questions" array must have the same length and order as the bullet list above.
 - Question should target: metric (numbers, %), scope (team size, users, scale), or outcome (result, impact).
 - Use categories: metrics | impact | scope | technology | outcome.
 - Keep questions conversational and easy to answer.
@@ -673,9 +637,6 @@ ${bulletsFormatted}
 {
   "questions": [
     {
-      "workExperienceIndex": 0,
-      "bulletPointIndex": 0,
-      "originalBulletPoint": "exact bullet text from above",
       "questionText": "One clear question for the candidate",
       "questionCategory": "metrics"
     }
@@ -685,12 +646,14 @@ ${bulletsFormatted}
   }
 
   /**
-   * Prompt for profile enrichment: merge answered profile questions into original
-   * structured resume. No job description. Rewrite only bullets that have answers;
-   * unanswered/skipped pass through unchanged. Zero hallucination.
+   * Prompt for profile enrichment (delta approach): sends ONLY the bullets that
+   * have user answers and asks Claude to return ONLY those rewritten bullets.
+   * Merging into the full resume structure happens in TypeScript (SRP).
+   *
+   * Compared to the old full-resume approach, this cuts input/output tokens by
+   * ~80-90% and is designed to run efficiently on Claude Haiku 3.5.
    */
   getProfileEnrichmentPrompt(
-    originalStructuredContentJson: string,
     questionsAndResponses: Array<{
       workExperienceIndex: number;
       bulletPointIndex: number;
@@ -699,33 +662,32 @@ ${bulletsFormatted}
       userResponse: string;
     }>,
   ): string {
-    const qrFormatted = questionsAndResponses
+    const items = questionsAndResponses
       .map(
         (qr, i) =>
-          `${i + 1}. Experience[${qr.workExperienceIndex}] Bullet[${qr.bulletPointIndex}]: "${qr.originalBulletPoint}"\n   Q: ${qr.questionText}\n   A: ${qr.userResponse}`,
+          `${i + 1}. Original: "${qr.originalBulletPoint}"\n   Q: ${qr.questionText}\n   A: ${qr.userResponse}`,
       )
       .join('\n\n');
 
     return `
-You are an expert resume writer. Merge the user's factual answers into their resume structured content. There is NO job description; this is profile-level enrichment only.
+You are an expert resume writer. Rewrite ONLY the bullet points listed below using the candidate's factual answers. There is no job description — this is profile-level enrichment only.
 
-**ZERO HALLUCINATION:** Use ONLY the facts from the user's responses. Never invent metrics or numbers. Unanswered bullets stay exactly as in the original.
+**ZERO HALLUCINATION:** Use ONLY the facts from each answer. Never invent, estimate, or round numbers. If the answer provides a metric or scope, integrate it naturally using the CAR method (Context, Action, Result). If the answer is vague, write a strong qualitative statement without inventing figures.
 
-**Original structured resume (JSON):**
-${originalStructuredContentJson}
+**Bullets to rewrite:**
+${items}
 
-**User's answers (only these bullets should be rewritten):**
-${qrFormatted}
+**Rules:**
+- Return exactly one rewritten bullet per input, in the SAME order (index 1, 2, 3…).
+- Keep each bullet concise (1-2 sentences max).
+- Preserve the technical domain and role context of the original.
+- Do not add qualifications, numbers, or claims not present in the original bullet or the user's answer.
 
-**Instructions:**
-1. For each bullet that has a user answer above: rewrite that single bullet using ONLY the user's stated facts (CAR method). Keep the same position in the same experience.
-2. For all other bullets: output them UNCHANGED from the original JSON.
-3. Keep contactInfo, summary, skills, education, certifications, additionalSections identical to the original unless a user answer clearly relates to them (rare).
-4. Return valid JSON with the same structure as the original. Only the "experience[].achievements" array may differ for bullets that had answers.
-
-**Output (JSON only):**
+**Output (JSON only, no markdown):**
 {
-  "optimizedContent": { ... same shape as original experience/skills/contactInfo/summary/education/certifications/additionalSections ... }
+  "rewrittenBullets": [
+    { "index": 1, "bullet": "Rewritten bullet text here" }
+  ]
 }
 `;
   }

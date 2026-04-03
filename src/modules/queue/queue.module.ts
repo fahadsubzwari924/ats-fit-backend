@@ -21,18 +21,44 @@ import { QueueService } from './queue.service';
 @Module({
   imports: [
     // Register Bull queues (infrastructure only)
-    BullModule.registerQueue({
-      name: 'resume_processing',
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
+    BullModule.registerQueue(
+      {
+        name: 'resume_processing',
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          removeOnComplete: 50,
+          removeOnFail: 25,
         },
-        removeOnComplete: 50,
-        removeOnFail: 25,
       },
-    }),
+      {
+        name: 'profile_enrichment',
+        defaultJobOptions: {
+          attempts: 2,
+          backoff: {
+            type: 'exponential',
+            delay: 3000,
+          },
+          removeOnComplete: 50,
+          removeOnFail: 25,
+        },
+      },
+      {
+        name: 'changes_diff',
+        defaultJobOptions: {
+          attempts: 2,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        },
+      },
+    ),
 
     // TypeORM for queue tracking entity
     TypeOrmModule.forFeature([QueueMessage]),

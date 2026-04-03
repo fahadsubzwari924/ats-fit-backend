@@ -180,6 +180,7 @@ export class ResumeContentService implements IResumeContentProvider {
    * Used by queue processing system
    */
   async createExtractedResumeRecord(data: {
+    id?: string;
     userId: string;
     queueMessageId: string;
     originalFileName: string;
@@ -187,6 +188,7 @@ export class ResumeContentService implements IResumeContentProvider {
     fileHash: string;
   }): Promise<ExtractedResumeContent> {
     const newRecord = this.extractedResumeRepository.create({
+      id: data.id,
       userId: data.userId,
       queueMessageId: data.queueMessageId,
       originalFileName: data.originalFileName,

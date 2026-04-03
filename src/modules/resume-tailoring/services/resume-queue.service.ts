@@ -6,9 +6,14 @@ import { Queue } from 'bull';
 import { ExtractedResumeContent } from '../../../database/entities/extracted-resume-content.entity';
 import { QueueMessage } from '../../../database/entities/queue-message.entity';
 import { QueueMessagePriority } from '../../../shared/enums/queue-message.enum';
-import { ResumeExtractionJobData } from '../interfaces/resume-extraction.interface';
+import {
+  ResumeExtractionJobData,
+  ProfileEnrichmentJobData,
+  ChangesDiffJobData,
+} from '../interfaces/resume-extraction.interface';
 import { FileUtil } from '../../../shared/utils/file.util';
 import { ResumeContentService } from './resume-content.service';
+import { v4 as uuidv4 } from 'uuid';
 import { QueueService } from '../../queue/queue.service';
 
 /**
@@ -29,6 +34,10 @@ export class ResumeQueueService {
   constructor(
     @InjectQueue('resume_processing')
     private readonly resumeProcessingQueue: Queue<ResumeExtractionJobData>,
+    @InjectQueue('profile_enrichment')
+    private readonly profileEnrichmentQueue: Queue<ProfileEnrichmentJobData>,
+    @InjectQueue('changes_diff')
+    private readonly changesDiffQueue: Queue<ChangesDiffJobData>,
     @InjectRepository(QueueMessage)
     private readonly queueMessageRepository: Repository<QueueMessage>,
     private readonly resumeContentService: ResumeContentService,
@@ -42,10 +51,10 @@ export class ResumeQueueService {
   async addResumeProcessingJob(
     userId: string,
     fileName: string,
-    fileBuffer: Buffer,
+    s3Url: string,
   ): Promise<ExtractedResumeContent> {
-    const fileSize = fileBuffer.length;
-    const fileHash = FileUtil.generateFileHash(fileBuffer);
+    const fileHash = FileUtil.generateFileHash(Buffer.from(fileName + s3Url));
+    const preGeneratedId = uuidv4();
 
     // Check if this file has already been processed using ResumeContentService
     const existingContent =
@@ -64,16 +73,15 @@ export class ResumeQueueService {
       jobType: 'extract_resume_content',
       userId,
       entityName: 'extracted_resume_content',
+      entityId: preGeneratedId,
       payload: {
         fileName,
-        fileSize,
         fileHash,
-        fileBuffer: FileUtil.bufferToBase64(fileBuffer), // Store as base64 for JSON compatibility
+        s3Url,
       },
       priority: QueueMessagePriority.NORMAL,
       metadata: {
         originalFileName: fileName,
-        fileSize,
         fileHash,
       },
     });
@@ -81,17 +89,13 @@ export class ResumeQueueService {
     // Create business entity using ResumeContentService
     const savedRecord =
       await this.resumeContentService.createExtractedResumeRecord({
+        id: preGeneratedId,
         userId,
         queueMessageId: queueMessage.id,
         originalFileName: fileName,
-        fileSize,
+        fileSize: 0,
         fileHash,
       });
-
-    // Update queue message with entity ID
-    await this.queueMessageRepository.update(queueMessage.id, {
-      entityId: savedRecord.id,
-    });
 
     // Add job to Bull queue with queue message ID
     const job = await this.resumeProcessingQueue.add(
@@ -100,8 +104,8 @@ export class ResumeQueueService {
         queueMessageId: queueMessage.id,
         userId,
         fileName,
-        fileBuffer, // Keep as Buffer for processing
-        fileSize,
+        s3Url,
+        fileSize: savedRecord.fileSize,
         resumeId: savedRecord.id,
       },
       {
@@ -121,11 +125,85 @@ export class ResumeQueueService {
         queueMessageId: queueMessage.id,
         resumeId: savedRecord.id,
         correlationId: queueMessage.correlationId,
-        jobStatus: await job.getState(),
-        jobProgress: (await job.progress()) as number | object,
       },
     );
 
     return savedRecord;
+  }
+
+  /**
+   * Enqueue a profile enrichment job for the given user.
+   * Called when all profile questions are answered so enrichment runs in the
+   * background without blocking the HTTP response.
+   */
+  async addProfileEnrichmentJob(userId: string): Promise<void> {
+    const queueMessage = await this.queueService.createQueueJob({
+      queueName: 'profile_enrichment',
+      jobType: 'enrich_profile',
+      userId,
+      payload: { userId },
+      priority: QueueMessagePriority.NORMAL,
+    });
+
+    const job = await this.profileEnrichmentQueue.add(
+      'enrich_profile',
+      { queueMessageId: queueMessage.id, userId },
+      {
+        priority: 1,
+        delay: 0,
+        attempts: 2,
+        backoff: {
+          type: 'exponential',
+          delay: 3000,
+        },
+      },
+    );
+
+    this.logger.log(
+      `Enqueued profile enrichment job ${job.id} for user ${userId}`,
+      { queueMessageId: queueMessage.id, correlationId: queueMessage.correlationId },
+    );
+  }
+
+  /**
+   * Enqueue a changes diff computation job after resume generation.
+   * Runs in the background so users get their PDF without waiting.
+   */
+  async addChangesDiffJob(
+    params: Omit<ChangesDiffJobData, 'queueMessageId'>,
+  ): Promise<void> {
+    const queueMessage = await this.queueService.createQueueJob({
+      queueName: 'changes_diff',
+      jobType: 'compute_changes_diff',
+      userId: params.userId,
+      entityName: 'resume_generations',
+      entityId: params.resumeGenerationId,
+      payload: {
+        resumeGenerationId: params.resumeGenerationId,
+      },
+      priority: QueueMessagePriority.NORMAL,
+    });
+
+    const job = await this.changesDiffQueue.add(
+      'compute_changes_diff',
+      {
+        queueMessageId: queueMessage.id,
+        ...params,
+      },
+      {
+        priority: 1,
+        delay: 0,
+        attempts: 2,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+      },
+    );
+
+    this.logger.log(
+      `Enqueued changes diff job ${job.id} for resume generation ${params.resumeGenerationId}`,
+      { queueMessageId: queueMessage.id, correlationId: queueMessage.correlationId },
+    );
   }
 }

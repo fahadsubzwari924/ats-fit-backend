@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -39,7 +39,7 @@ import { ERROR_CODES } from '../../../shared/constants/error-codes';
  * - Detailed timing metrics for performance analysis
  */
 @Injectable()
-export class PdfGenerationService implements OnModuleDestroy {
+export class PdfGenerationService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PdfGenerationService.name);
   private browser: puppeteer.Browser | null = null;
   private browserPromise: Promise<puppeteer.Browser> | null = null;
@@ -191,6 +191,22 @@ export class PdfGenerationService implements OnModuleDestroy {
 
     const restartTime = Date.now() - restartStartTime;
     this.logger.log(`Browser restarted in ${restartTime}ms`);
+  }
+
+  /**
+   * Pre-warm the Puppeteer browser instance on application startup so the
+   * first resume generation request never pays the cold-start penalty.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.getBrowser();
+      this.logger.log('Puppeteer browser pre-warmed on module init');
+    } catch (error) {
+      this.logger.warn(
+        'Failed to pre-warm Puppeteer browser on module init — will retry on first request',
+        error,
+      );
+    }
   }
 
   /**
