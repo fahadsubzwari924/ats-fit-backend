@@ -47,6 +47,9 @@ import { AtsMatchModule } from '../ats-match/ats-match.module';
 import { QueueModule } from '../queue/queue.module';
 import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-provider.token';
 import { ResumeExtractionProcessor } from './processors/resume-extraction.processor';
+import { ResumeProfileEnrichmentProcessor } from './processors/resume-profile-enrichment.processor';
+import { ChangesDiffProcessor } from './processors/changes-diff.processor';
+import { ChangesDiffComputationService } from './services/changes-diff-computation.service';
 
 @Module({
   imports: [
@@ -101,6 +104,9 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
     // Cover Letter Generation
     CoverLetterGenerationService,
     ResumeExtractionProcessor,
+    ResumeProfileEnrichmentProcessor,
+    ChangesDiffProcessor,
+    ChangesDiffComputationService,
     // Interceptors
     {
       provide: APP_INTERCEPTOR,

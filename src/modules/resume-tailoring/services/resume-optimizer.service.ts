@@ -8,7 +8,6 @@ import { TailoredContent } from '../interfaces/resume-extracted-keywords.interfa
 import { JobAnalysisResult } from '../interfaces/job-analysis.interface';
 import {
   ResumeOptimizationResult,
-  ResumeDiff,
 } from '../interfaces/resume-optimization.interface';
 import {
   InternalServerErrorException,
@@ -22,6 +21,9 @@ import {
   TailoringModeResult,
   VerifiedFact,
 } from '../interfaces/user-context.interface';
+
+// changesDiff has been removed from the AI response — it is computed
+// programmatically in a background Bull job (ChangesDiffProcessor).
 
 /**
  * AI Resume Optimizer Service V2
@@ -253,12 +255,7 @@ export class ResumeOptimizerService {
       const parsedResult = JSON.parse(jsonMatch[0]);
       this.validateOptimizationResult(parsedResult);
 
-      const changesDiff = this.normalizeChangesDiff(parsedResult);
-
-      return {
-        ...(parsedResult as Omit<ResumeOptimizationResult, 'processingMetadata'>),
-        changesDiff,
-      };
+      return parsedResult as Omit<ResumeOptimizationResult, 'processingMetadata'>;
     } catch (error: unknown) {
       this.logger.error('Failed to parse optimization response', {
         content: content.substring(0, 500),
@@ -278,52 +275,12 @@ export class ResumeOptimizerService {
   }
 
   /**
-   * Normalize and validate the changesDiff field from AI response.
-   * This field is optional — if missing or malformed we return undefined gracefully.
-   */
-  private normalizeChangesDiff(result: any): ResumeDiff | undefined {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const diff = result?.changesDiff;
-      if (!diff || typeof diff !== 'object') return undefined;
-
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const changes = Array.isArray(diff.changes) ? diff.changes : [];
-      return {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        totalChanges: typeof diff.totalChanges === 'number' ? diff.totalChanges : changes.length,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        sectionsChanged: typeof diff.sectionsChanged === 'number' ? diff.sectionsChanged : changes.length,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        changes: changes.map((c: any) => ({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          section: String(c.section ?? ''),
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          changeType: (['modified', 'added', 'removed', 'unchanged'] as const).includes(c.changeType)
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            ? c.changeType
-            : 'modified',
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          original: String(c.original ?? ''),
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          optimized: String(c.optimized ?? ''),
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          addedKeywords: Array.isArray(c.addedKeywords) ? c.addedKeywords.map(String) : [],
-        })),
-      };
-    } catch {
-      return undefined;
-    }
-  }
-
-  /**
    * Validate the parsed optimization result structure
    */
   private validateOptimizationResult(result: any): void {
     const requiredFields = [
       'optimizedContent',
       'optimizationMetrics',
-      'optimizationStrategy',
     ];
 
     for (const field of requiredFields) {
@@ -456,7 +413,7 @@ export class ResumeOptimizerService {
           content: optimizationPrompt,
         },
       ],
-      max_tokens: 5000, // Increased to accommodate changesDiff section in response
+      max_tokens: 3500,
       temperature: 0.2,
     });
 
@@ -488,7 +445,7 @@ export class ResumeOptimizerService {
       messages: [{ role: 'user', content: optimizationPrompt }],
       response_format: { type: 'json_object' },
       temperature: 0.2,
-      max_tokens: 5000, // Increased to accommodate changesDiff section in response
+      max_tokens: 3500,
     });
 
     // Parse OpenAI response (similar structure to Claude)
@@ -517,11 +474,7 @@ export class ResumeOptimizerService {
     try {
       const parsedResult: unknown = JSON.parse(content);
       this.validateOptimizationResult(parsedResult);
-      const changesDiff = this.normalizeChangesDiff(parsedResult);
-      return {
-        ...(parsedResult as Omit<ResumeOptimizationResult, 'processingMetadata'>),
-        changesDiff,
-      };
+      return parsedResult as Omit<ResumeOptimizationResult, 'processingMetadata'>;
     } catch (error) {
       this.logger.error('Failed to parse OpenAI optimization response', {
         content: content.substring(0, 500),

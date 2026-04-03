@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Patch,
   Get,
   UseGuards,
   UseInterceptors,
@@ -19,7 +20,6 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
-import { PremiumUserGuard } from '../auth/guards/premium-user.guard';
 import { FileValidationPipe } from '../../shared/pipes/file-validation.pipe';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
 import { MimeTypes } from '../../shared/constants/mime-types.enum';
@@ -31,6 +31,7 @@ import { ResumeQueueService } from '../resume-tailoring/services/resume-queue.se
 import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
 import { ResumeProfileEnrichmentService } from '../resume-tailoring/services/resume-profile-enrichment.service';
 import { ResumeProfileStatusResponse } from '../resume-tailoring/interfaces/resume-profile-enrichment.interface';
+import { User, UserType } from '../../database/entities/user.entity';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { IFeatureUsage } from '../../shared/interfaces';
 import {
@@ -159,15 +160,40 @@ export class UserController {
     return this.userService.getUserFeatureUsage(userId);
   }
 
+  @Patch('onboarding/complete')
+  @ApiOperation({
+    summary: 'Mark onboarding as completed for the current user',
+    description:
+      'Sets onboarding_completed = true on the user record. Called once at the end of the onboarding flow (either after upload or on skip).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Onboarding marked as completed. Returns updated user.',
+  })
+  async completeOnboarding(
+    @Req() request: RequestWithUserContext,
+  ): Promise<User> {
+    const userId = request?.userContext?.userId;
+
+    if (!userId) {
+      throw new BadRequestException(
+        'User authentication required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+
+    this.logger.log(`Marking onboarding complete for user: ${userId}`);
+    return this.userService.markOnboardingComplete(userId);
+  }
+
   @Post('upload-resume')
-  @UseGuards(PremiumUserGuard)
   @UseInterceptors(FileInterceptor('resumeFile'))
   @ApiOperation({
-    summary: 'Upload resume with automatic premium processing',
+    summary: 'Upload resume (available to all authenticated users)',
     description: `
-      Upload a resume file. The file will be uploaded to S3 immediately.
-      For premium users, the resume will automatically be processed in the 
-      background for faster future resume generation.
+      Upload a resume file. The file is uploaded to S3 immediately.
+      For all registered (non-guest) users, background processing is also triggered
+      automatically to extract content and generate onboarding profile questions.
     `,
   })
   @ApiResponse({
@@ -181,7 +207,7 @@ export class UserController {
         s3Url: { type: 'string', description: 'S3 URL' },
         asyncProcessing: {
           type: 'object',
-          description: 'Async processing info (for premium users)',
+          description: 'Async processing info (for all registered users)',
           properties: {
             processingId: { type: 'string' },
             status: { type: 'string' },
@@ -221,12 +247,15 @@ export class UserController {
       s3Url: resume.s3Url,
     };
 
-    // Automatic async processing for premium users
-    const isPremiumUser = request?.userContext?.isPremium;
+    // Trigger async processing for all registered (non-guest) users.
+    // Profile question generation is a core onboarding step required on every plan;
+    // gating it on isPremium would silently break onboarding for freemium users.
+    const isRegisteredUser =
+      request?.userContext?.userType === UserType.REGISTERED;
 
-    if (isPremiumUser) {
+    if (isRegisteredUser) {
       this.logger.log(
-        `Starting async processing for resume ${resume.fileName} (premium user: ${userId})`,
+        `Starting async resume processing for user ${userId}, file: ${resume.fileName}`,
       );
 
       try {
@@ -234,7 +263,7 @@ export class UserController {
           await this.resumeQueueService.addResumeProcessingJob(
             userId,
             resume.fileName,
-            resumeFile.buffer,
+            resume.s3Url,
           );
 
         return {
@@ -244,8 +273,7 @@ export class UserController {
             status:
               extractedContent.queueMessage?.status ||
               QueueMessageStatus.QUEUED,
-            message:
-              'Premium feature: Async processing initiated for faster future generations',
+            message: 'Resume processing initiated',
           },
         };
       } catch (error) {
@@ -254,7 +282,7 @@ export class UserController {
         this.logger.warn(
           `Async processing failed for resume ${resume.fileName}: ${errorMessage}`,
         );
-        // Continue with regular upload even if async processing fails
+        // S3 upload succeeded; return that even if queue enqueue fails
         return result;
       }
     }

@@ -156,6 +156,24 @@ export class UserService {
   }
 
   /**
+   * Mark the user's onboarding as completed.
+   * Returns the updated user for the auth response.
+   */
+  async markOnboardingComplete(userId: string): Promise<User> {
+    await this.userRepository.update(userId, { onboarding_completed: true });
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId, is_active: true },
+      relations: ['uploadedResumes'],
+    });
+    if (!user) {
+      throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
+    }
+
+    return user;
+  }
+
+  /**
    * Get feature usage for a user by user ID - Reusable method
    * This method can be used by login API and dedicated feature usage endpoint
    * @param userId User ID

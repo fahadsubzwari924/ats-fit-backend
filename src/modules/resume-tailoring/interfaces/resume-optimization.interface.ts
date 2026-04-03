@@ -78,14 +78,14 @@ export interface ResumeDiff {
 }
 
 /**
- * Complete resume optimization result from Claude 3.5 Sonnet
+ * Complete resume optimization result from Claude.
  *
- * Contains optimized content along with detailed metrics and strategy information.
+ * changesDiff is no longer returned by the AI — it is computed programmatically
+ * in a background Bull job after the main optimization completes.
  */
 export interface ResumeOptimizationResult {
   optimizedContent: TailoredContent;
   optimizationMetrics: OptimizationMetrics;
-  optimizationStrategy: OptimizationStrategy;
+  optimizationStrategy?: OptimizationStrategy;
   processingMetadata: AIProcessingMetadata;
-  changesDiff?: ResumeDiff;
 }

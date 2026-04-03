@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EnrichedResumeProfile } from '../../../database/entities/enriched-resume-profile.entity';
@@ -19,22 +20,29 @@ import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { get } from 'lodash';
 import { ClaudeResponse } from '../../../shared/modules/external/interfaces';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
-import { AIResumeResponse } from '../interfaces/resume-optimization.interface';
 import {
   ResumeProfileStatusResponse,
   ProcessingStatus,
   TailoringMode,
 } from '../interfaces/resume-profile-enrichment.interface';
+
 import {
   VerifiedFact,
   TailoringModeResult,
 } from '../interfaces/user-context.interface';
 import { QueueMessageStatus } from '../../../shared/enums/queue-message.enum';
 
-function isAIResumeResponse(obj: unknown): obj is AIResumeResponse {
-  if (typeof obj !== 'object' || obj === null) return false;
-  const r = obj as Record<string, unknown>;
-  return typeof r.optimizedContent === 'object' && r.optimizedContent !== null;
+interface DeltaBullet {
+  index: number;
+  bullet: string;
+}
+
+interface QnRItem {
+  workExperienceIndex: number;
+  bulletPointIndex: number;
+  originalBulletPoint: string;
+  questionText: string;
+  userResponse: string;
 }
 
 /**
@@ -47,6 +55,7 @@ function isAIResumeResponse(obj: unknown): obj is AIResumeResponse {
 @Injectable()
 export class ResumeProfileEnrichmentService {
   private readonly logger = new Logger(ResumeProfileEnrichmentService.name);
+  private readonly enrichmentModel: string;
 
   constructor(
     @InjectRepository(EnrichedResumeProfile)
@@ -57,10 +66,20 @@ export class ResumeProfileEnrichmentService {
     private readonly extractedResumeRepository: Repository<ExtractedResumeContent>,
     private readonly claudeService: ClaudeService,
     private readonly promptService: PromptService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.enrichmentModel = this.configService.get<string>(
+      'CLAUDE_ENRICHMENT_MODEL',
+      'claude-haiku-4-5-20251001',
+    );
+  }
 
   /**
    * Merge answered profile questions into structured content and save/update EnrichedResumeProfile.
+   *
+   * Uses a delta approach: Claude only rewrites the specific bullets that have user answers
+   * (low input/output tokens, runs on Haiku 3.5). The merge into the full resume structure
+   * is handled here in TypeScript, following Single Responsibility Principle.
    */
   async enrichProfile(userId: string): Promise<EnrichedResumeProfile> {
     const profileQuestions = await this.questionRepository.find({
@@ -94,7 +113,10 @@ export class ResumeProfileEnrichmentService {
     }
 
     const originalContent = extracted.structuredContent;
-    const questionsAndResponses = profileQuestions
+
+    // Only questions with non-empty text responses contribute to enrichment.
+    // Skipped questions (isAnswered=true, userResponse=null) are excluded.
+    const questionsAndResponses: QnRItem[] = profileQuestions
       .filter((q) => q.isAnswered && q.userResponse?.trim())
       .map((q) => ({
         workExperienceIndex: q.workExperienceIndex,
@@ -104,27 +126,40 @@ export class ResumeProfileEnrichmentService {
         userResponse: (q.userResponse ?? '').trim(),
       }));
 
-    const prompt = this.promptService.getProfileEnrichmentPrompt(
-      JSON.stringify(originalContent),
-      questionsAndResponses,
-    );
-
     let enrichedContent: TailoredContent;
-    try {
-      const response = await this.claudeService.chatCompletion({
-        max_tokens: 8000,
-        temperature: 0.2,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      enrichedContent = this.parseEnrichmentResponse(response);
-    } catch (error) {
-      if (AIErrorUtil.isClaudeOverloadError(error)) {
-        this.logger.warn('Claude overload during profile enrichment', error);
-      }
-      throw new InternalServerErrorException(
-        'Profile enrichment failed',
-        ERROR_CODES.PROFILE_ENRICHMENT_FAILED,
+
+    if (questionsAndResponses.length === 0) {
+      // All questions were skipped — use original content as-is, no AI call needed.
+      enrichedContent = originalContent;
+      this.logger.log(
+        `No answered questions with responses for user ${userId}; using original content`,
       );
+    } else {
+      const prompt =
+        this.promptService.getProfileEnrichmentPrompt(questionsAndResponses);
+
+      try {
+        const response = await this.claudeService.chatCompletion({
+          model: this.enrichmentModel,
+          max_tokens: 2000,
+          temperature: 0.2,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        const rewrittenBullets = this.parseDeltaEnrichmentResponse(response);
+        enrichedContent = this.mergeEnrichedBullets(
+          originalContent,
+          rewrittenBullets,
+          questionsAndResponses,
+        );
+      } catch (error) {
+        if (AIErrorUtil.isClaudeOverloadError(error)) {
+          this.logger.warn('Claude overload during profile enrichment', error);
+        }
+        throw new InternalServerErrorException(
+          'Profile enrichment failed',
+          ERROR_CODES.PROFILE_ENRICHMENT_FAILED,
+        );
+      }
     }
 
     const answeredCount = profileQuestions.filter((q) => q.isAnswered).length;
@@ -169,7 +204,13 @@ export class ResumeProfileEnrichmentService {
     return created;
   }
 
-  private parseEnrichmentResponse(response: ClaudeResponse): TailoredContent {
+  /**
+   * Parses the delta enrichment response from Claude.
+   * Expects: { "rewrittenBullets": [{ "index": 1, "bullet": "..." }] }
+   */
+  private parseDeltaEnrichmentResponse(
+    response: ClaudeResponse,
+  ): DeltaBullet[] {
     const raw = String(get(response, 'choices[0].message.content', ''));
     const content = raw
       .replace(/^```(?:json)?\s*/i, '')
@@ -177,32 +218,32 @@ export class ResumeProfileEnrichmentService {
       .trim();
 
     if (!content) {
-      this.logger.error('Empty AI response for profile enrichment', {
+      this.logger.error('Empty AI response for profile enrichment delta', {
         rawLength: raw.length,
-        responseKeys: Object.keys(response),
       });
       throw new InternalServerErrorException(
         'Empty AI response',
         ERROR_CODES.PROFILE_ENRICHMENT_FAILED,
       );
     }
+
     try {
-      const parsed: unknown = JSON.parse(content);
-      if (!isAIResumeResponse(parsed)) {
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      if (
+        !Array.isArray(parsed.rewrittenBullets) ||
+        parsed.rewrittenBullets.length === 0
+      ) {
         throw new InternalServerErrorException(
-          'Invalid enrichment response structure',
+          'Invalid enrichment delta response structure',
           ERROR_CODES.INVALID_AI_RESPONSE_STRUCTURE,
         );
       }
-      return parsed.optimizedContent;
+      return parsed.rewrittenBullets as DeltaBullet[];
     } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof InternalServerErrorException
-      ) {
+      if (error instanceof InternalServerErrorException) {
         throw error;
       }
-      this.logger.error('Failed to parse profile enrichment response', {
+      this.logger.error('Failed to parse profile enrichment delta response', {
         contentPreview: content.substring(0, 500),
         error: error instanceof Error ? error.message : String(error),
       });
@@ -211,6 +252,40 @@ export class ResumeProfileEnrichmentService {
         ERROR_CODES.AI_RESPONSE_PARSING_FAILED,
       );
     }
+  }
+
+  /**
+   * Merges rewritten bullets into the original structured content.
+   * Claude handles language; this method handles data structure (SRP).
+   *
+   * Uses structuredClone to avoid mutating the original object.
+   */
+  private mergeEnrichedBullets(
+    originalContent: TailoredContent,
+    rewrittenBullets: DeltaBullet[],
+    questionsAndResponses: QnRItem[],
+  ): TailoredContent {
+    const merged: TailoredContent = structuredClone(originalContent);
+
+    for (let i = 0; i < rewrittenBullets.length; i++) {
+      const qr = questionsAndResponses[i];
+      const rewritten = rewrittenBullets[i];
+
+      if (!qr || !rewritten?.bullet) continue;
+
+      const exp = merged.experience?.[qr.workExperienceIndex];
+      if (!exp) continue;
+
+      // Bullets live in responsibilities; replace the specific index.
+      if (
+        Array.isArray(exp.responsibilities) &&
+        qr.bulletPointIndex < exp.responsibilities.length
+      ) {
+        exp.responsibilities[qr.bulletPointIndex] = rewritten.bullet;
+      }
+    }
+
+    return merged;
   }
 
   /**

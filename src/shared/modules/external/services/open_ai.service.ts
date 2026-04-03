@@ -5,13 +5,25 @@ import { ConfigService } from '@nestjs/config';
 import { head } from 'lodash';
 import { InternalServerErrorException } from '../../../exceptions/custom-http-exceptions';
 
+type OpenApiResponseFormat =
+  | { type: 'text' }
+  | { type: 'json_object' }
+  | {
+      type: 'json_schema';
+      json_schema: {
+        name: string;
+        strict: boolean;
+        schema: Record<string, unknown>;
+      };
+    };
+
 interface OpenApiRequestParams {
   model: string;
   messages: Array<{
     role: 'system' | 'user' | 'assistant';
     content: string;
   }>;
-  response_format?: { type: 'json_object' | 'text' };
+  response_format?: OpenApiResponseFormat;
   temperature?: number;
   max_tokens?: number;
 }
@@ -76,8 +88,15 @@ export class OpenAIService {
     const completion = await this.openai.chat.completions.create({
       model: params.model || 'gpt-4',
       messages: params.messages,
-      response_format: params.response_format,
-      temperature: params.temperature || 0.7, // Balanced creativity
+      // Cast to OpenAI SDK union type — our internal discriminated union is structurally
+      // compatible; the cast is safe because callers always provide json_schema when
+      // type === 'json_schema' (enforced by OpenApiResponseFormat).
+      response_format: params.response_format as
+        | OpenAI.ResponseFormatText
+        | OpenAI.ResponseFormatJSONSchema
+        | OpenAI.ResponseFormatJSONObject
+        | undefined,
+      temperature: params.temperature ?? 0.7,
       max_tokens: params.max_tokens || 2000,
     });
 

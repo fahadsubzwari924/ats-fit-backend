@@ -91,6 +91,18 @@ export class ResumeService {
     );
   }
 
+  async getResumeBufferFromS3(s3Url: string): Promise<Buffer> {
+    const bucketName = this.configService.get<string>(
+      'AWS_S3_CANDIDATES_RESUMES_BUCKET',
+    );
+    const key = this.s3Service.extractS3KeyFromUrl(s3Url);
+
+    return this.s3Service.getObject({
+      bucketName,
+      key,
+    });
+  }
+
   async saveResumeGeneration(
     resumeGenerationPayload: Partial<ResumeGeneration>,
   ): Promise<void> {
