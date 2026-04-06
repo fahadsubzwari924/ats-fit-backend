@@ -12,12 +12,13 @@ import {
   Max,
   IsObject,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { TrimString } from '../../../shared/utils/transformers';
 import {
   ApplicationStatus,
   ApplicationSource,
 } from '../../../database/entities/job-application.entity';
+
+export { JobApplicationQueryDto } from './job-application-query.dto';
 
 // DTO for creating job application after ATS analysis
 export class CreateJobApplicationDto {
@@ -49,6 +50,14 @@ export class CreateJobApplicationDto {
   @IsOptional()
   @IsString()
   resume_generation_id?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When the candidate applied (ISO 8601). Omit to use server default for tailored_resume (now).',
+  })
+  @IsOptional()
+  @IsDateString({}, { message: 'Applied date must be a valid ISO date string' })
+  applied_at?: string;
 
   @IsOptional()
   @IsNumber({}, { message: 'ATS score must be a number' })
@@ -130,6 +139,23 @@ export class UpdateJobApplicationDto {
   @IsDateString({}, { message: 'Interview date must be a valid date' })
   interview_scheduled_at?: string;
 
+  @ApiPropertyOptional({
+    description: 'Planned follow-up date (ISO 8601)',
+    example: '2026-04-10T12:00:00.000Z',
+  })
+  @IsOptional()
+  @IsDateString({}, { message: 'Follow-up date must be a valid date' })
+  follow_up_date?: string;
+
+  @ApiPropertyOptional({
+    description: 'Contact phone for this application',
+    maxLength: 20,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  contact_phone?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(2000, {
@@ -147,64 +173,4 @@ export class UpdateJobApplicationDto {
   @IsOptional()
   @IsObject()
   metadata?: any;
-}
-
-// DTO for querying job applications
-export class JobApplicationQueryDto {
-  @ApiPropertyOptional({
-    description: 'Application status filter',
-    enum: ApplicationStatus,
-  })
-  @IsOptional()
-  @IsEnum(ApplicationStatus)
-  status?: ApplicationStatus;
-
-  @ApiPropertyOptional({
-    description: 'Company name filter',
-  })
-  @IsOptional()
-  @IsString()
-  company_name?: string;
-
-  @ApiPropertyOptional({
-    description: 'Number of records to return',
-    default: 20,
-    minimum: 1,
-    maximum: 100,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({}, { message: 'Limit must be a number' })
-  @Min(1, { message: 'Limit must be at least 1' })
-  @Max(100, { message: 'Limit must be at most 100' })
-  limit?: number;
-
-  @ApiPropertyOptional({
-    description: 'Number of records to skip',
-    default: 0,
-    minimum: 0,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber({}, { message: 'Offset must be a number' })
-  @Min(0, { message: 'Offset must be at least 0' })
-  offset?: number;
-
-  @ApiPropertyOptional({
-    description: 'Sort field',
-    enum: ['created_at', 'updated_at', 'company_name', 'status', 'priority'],
-    default: 'created_at',
-  })
-  @IsOptional()
-  @IsString()
-  sort_by?: string;
-
-  @ApiPropertyOptional({
-    description: 'Sort order',
-    enum: ['ASC', 'DESC'],
-    default: 'DESC',
-  })
-  @IsOptional()
-  @IsString()
-  sort_order?: 'ASC' | 'DESC';
 }
