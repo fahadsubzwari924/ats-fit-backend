@@ -10,7 +10,7 @@
 |-------|---------|
 | **Business** | Why we build it—personas, priorities, metrics ([business-context.md](./business-context.md)) |
 | **Requirements** | Traceable **REQ-** / **US-** / **NFR-** IDs ([functional-requirements.md](./functional-requirements.md), [non-functional-requirements.md](./non-functional-requirements.md)) |
-| **Domain specs** | What the API and modules do + **AC-** acceptance criteria (`00`–`09` below) |
+| **Domain specs** | What the API and modules do + **AC-** acceptance criteria (numbered domain files below) |
 
 **Suggested reading order:** [business-context.md](./business-context.md) → [00-product-overview.md](./00-product-overview.md) → [functional-requirements.md](./functional-requirements.md) → domain spec for the area you are changing.
 
@@ -34,7 +34,6 @@
 | [02-auth-and-identity.md](./02-auth-and-identity.md) | JWT, `@Public()`, user context |
 | [03-resume-tailoring.md](./03-resume-tailoring.md) | Generate, history, PDF, diff, cover letter, batch |
 | [04-profile-enrichment.md](./04-profile-enrichment.md) | Upload, extraction queue, Q&A, enrichment |
-| [05-ats-matching.md](./05-ats-matching.md) | ATS score, history, available resumes |
 | [06-job-applications.md](./06-job-applications.md) | CRUD, filters, stats, enums |
 | [07-subscriptions-billing.md](./07-subscriptions-billing.md) | Plans, checkout, webhooks (**intended** behavior) |
 | [08-rate-limits-and-usage.md](./08-rate-limits-and-usage.md) | Feature types, limits, usage endpoints |

@@ -36,7 +36,7 @@ Turn a **job description + candidate context** into a **downloadable tailored re
 - **`POST /resume-tailoring/generate`** — **Public** (no JWT required) but subject to **rate limits** (`FeatureType.RESUME_GENERATION`).
 - **Multipart:** `resumeFile` (PDF) optional when resume already stored; body fields include job description, position, company, `templateId`, optional `resumeId` (see `GenerateTailoredResumeDto` in code).
 - **Response:** Raw **PDF** stream (not JSON).
-- **Response headers (client contract):** Include generation id, ATS score, tailoring mode, keyword/section/achievement metrics, optimization confidence (see controller `setPdfResponseHeaders` in code for exact header names).
+- **Response headers (client contract):** Include generation id, tailoring mode, keyword/section/achievement metrics, and optimization confidence (see controller `setPdfResponseHeaders` in code for exact header names).
 
 ## History and artifacts
 
@@ -58,11 +58,10 @@ Turn a **job description + candidate context** into a **downloadable tailored re
 
 ## Orchestration (conceptual)
 
-Single and batch generation go through an **orchestrator** that coordinates extraction sources, AI optimization, ATS evaluation, PDF build, and persistence of generation records. Exact steps and prompts: **see code** (`resume-generation-orchestrator.service` and related services).
+Single and batch generation go through an **orchestrator** that coordinates extraction sources, AI optimization, PDF build, and persistence of generation records. Exact steps and prompts: **see code** (`resume-generation-orchestrator.service` and related services).
 
 ## Related specs
 
 - Upload and extraction: [04-profile-enrichment.md](./04-profile-enrichment.md)
-- ATS scoring as a product feature: [05-ats-matching.md](./05-ats-matching.md)
 - Limits: [08-rate-limits-and-usage.md](./08-rate-limits-and-usage.md)
 - Requirements: [functional-requirements.md](./functional-requirements.md)

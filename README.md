@@ -1,13 +1,12 @@
 # ATS Fit Backend
 
-NestJS backend for ATS Fit, a SaaS platform that helps job seekers tailor resumes to job descriptions, score ATS fit, generate cover letters, track applications, and manage subscriptions.
+NestJS backend for ATS Fit, a SaaS platform that helps job seekers tailor resumes to job descriptions, generate cover letters, track applications, and manage subscriptions.
 
 ## What this service provides
 
 - Authentication (email/password + Google token login)
 - Resume upload, extraction, and profile enrichment flow
 - Tailored resume PDF generation (single + batch)
-- ATS matching score and history
 - Job application tracking (CRUD + stats)
 - Subscription checkout and payment webhook handling
 - Feature usage tracking and rate limits
