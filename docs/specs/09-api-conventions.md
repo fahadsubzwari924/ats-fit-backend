@@ -15,7 +15,7 @@ Give clients and partners **predictable** integration: consistent auth, errors, 
 
 | ID | Kind |
 |----|------|
-| REQ-010 | Functional |
+| REQ-009 | Functional |
 | NFR-OBS-01 | Non-functional (health / operability) |
 
 ## Acceptance criteria

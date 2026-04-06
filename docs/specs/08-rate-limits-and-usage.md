@@ -15,7 +15,7 @@ Protect **cost and reliability** of AI-heavy features while keeping the product 
 
 | ID | Kind |
 |----|------|
-| REQ-009 | Functional |
+| REQ-008 | Functional |
 | NFR-PERF-03 | Non-functional |
 
 ## Acceptance criteria
@@ -33,8 +33,6 @@ Used for quotas and guard metadata:
 | Value | Typical use |
 |-------|-------------|
 | `resume_generation` | Single tailored PDF generation |
-| `ats_score` | ATS score endpoint |
-| `ats_score_history` | History window / access rules |
 | `job_application_tracking` | Reserved for application tracking limits (if enforced) |
 | `cover_letter` | Cover letter generation |
 | `resume_batch_generation` | Batch tailor endpoint |
@@ -53,11 +51,7 @@ Used for quotas and guard metadata:
 
 ## User feature usage (dashboard-style)
 
-- **`GET /users/feature-usage`** — Authenticated; returns array of features (e.g. `ats_score`, `resume_generation`) with `allowed`, `used`, `remaining`, `usagePercentage`, `resetDate` (see controller Swagger schema).
-
-## ATS score usage tracking
-
-- **`POST /ats-match/score`** combines rate limit metadata with **`UsageTrackingInterceptor`** (usage rows)—align changes with both.
+- **`GET /users/feature-usage`** — Authenticated; returns feature usage with `allowed`, `used`, `remaining`, `usagePercentage`, `resetDate` (see controller Swagger schema).
 
 ## Configuration source
 
@@ -66,5 +60,5 @@ Limits per **plan** and **user type** live in DB/config services (`RateLimitServ
 ## Related specs
 
 - Identity context: [02-auth-and-identity.md](./02-auth-and-identity.md)
-- Endpoints using limits: [03](./03-resume-tailoring.md), [05](./05-ats-matching.md)
+- Endpoints using limits: [03](./03-resume-tailoring.md), [06](./06-job-applications.md), [07](./07-subscriptions-billing.md)
 - Requirements: [functional-requirements.md](./functional-requirements.md)

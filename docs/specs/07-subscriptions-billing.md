@@ -17,8 +17,8 @@ Let users **discover plans**, **pay through a trusted gateway**, and receive **e
 
 | ID | Kind |
 |----|------|
-| REQ-008 | Functional |
-| US-5 | User story |
+| REQ-007 | Functional |
+| US-4 | User story |
 | NFR-SEC-02, NFR-REL-03, NFR-DATA-02 | Non-functional |
 
 ## Acceptance criteria

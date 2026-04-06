@@ -41,7 +41,6 @@ Give the product a **maintainable, observable backend**: clear module boundaries
 | `AuthModule` | Sign up, sign in, Google token login |
 | `UserModule` | Resume upload, processed resumes, feature usage, onboarding flag |
 | `ResumeTailoringModule` | Templates, generation, history, download, diff, cover letter, batch, profile questions |
-| `AtsMatchModule` | ATS score, match history, available resumes |
 | `JobApplicationModule` | Application CRUD, list filters, stats |
 | `SubscriptionModule` | Plans, checkout, webhooks, payment/subscription reads |
 | `RateLimitModule` | Usage checks and HTTP usage reporting |

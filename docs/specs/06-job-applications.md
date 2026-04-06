@@ -9,14 +9,14 @@ last_reviewed: 2026-04-06
 
 ## Business intent
 
-Replace ad-hoc spreadsheets with a **single pipeline** for every application: what was applied, current status, next follow-up, and links back to the **tailored resume** or **ATS run** that justified the apply.
+Replace ad-hoc spreadsheets with a **single pipeline** for every application: what was applied, current status, next follow-up, and links back to the **tailored resume** used for the apply.
 
 ## Traceability
 
 | ID | Kind |
 |----|------|
-| REQ-007 | Functional |
-| US-4 | User story |
+| REQ-006 | Functional |
+| US-3 | User story |
 
 ## Acceptance criteria
 
@@ -25,12 +25,12 @@ Replace ad-hoc spreadsheets with a **single pipeline** for every application: wh
 - [ ] **AC-JOB-03:** User can get **stats** for their own applications.
 - [ ] **AC-JOB-04:** User can update status, notes, interview/follow-up fields, and metadata per DTO.
 - [ ] **AC-JOB-05:** User can delete an application; deleted records are not returned on subsequent reads.
-- [ ] **AC-JOB-06:** Optional links (`ats_match_history_id`, `resume_generation_id`, score snapshots) persist when provided.
+- [ ] **AC-JOB-06:** Optional links (`resume_generation_id`) and supporting metadata persist when provided.
 - [ ] **AC-JOB-07:** Sparse **`fields`** query limits payload shape without breaking required security/ownership checks.
 
 ## Purpose
 
-Persist a **single place** for the user to record applications: company, role, description, URLs, salary notes, pipeline status, follow-ups, and links to ATS/generation artifacts.
+Persist a **single place** for the user to record applications: company, role, description, URLs, salary notes, pipeline status, follow-ups, and links to generation artifacts.
 
 ## API (prefix `/job-applications`)
 
@@ -67,11 +67,10 @@ Service methods resolve ownership from `request.userContext` and enforce record 
 
 ## Payload highlights (create)
 
-Includes company, position, job description, optional URL/location, salaries, `applied_at`, `application_source`, optional `ats_match_history_id`, `resume_generation_id`, `ats_score`, `ats_analysis`, `resume_content`, cover letter, notes, `metadata` (see DTO for nullability).
+Includes company, position, job description, optional URL/location, salaries, `applied_at`, `application_source`, optional `resume_generation_id`, `resume_content`, cover letter, notes, `metadata` (see DTO for nullability).
 
 ## Related specs
 
-- ATS artifacts: [05-ats-matching.md](./05-ats-matching.md)
 - Generations: [03-resume-tailoring.md](./03-resume-tailoring.md)
 - API patterns: [09-api-conventions.md](./09-api-conventions.md)
 - Requirements: [functional-requirements.md](./functional-requirements.md)

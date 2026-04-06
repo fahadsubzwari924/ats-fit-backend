@@ -43,7 +43,7 @@ Let users **create an account and sign in** reliably (email/password and Google 
 ## Public routes
 
 - Handler or controller method annotated with **`@Public()`** bypasses `JwtAuthGuard`.
-- Some public routes still run **rate limits** via `@RateLimitFeature` (e.g. resume generate, ATS score).
+- Some public routes still run **rate limits** via `@RateLimitFeature` (e.g. resume generation).
 
 ## User context (`request.userContext`)
 

@@ -9,7 +9,7 @@ last_reviewed: 2026-04-06
 
 ## Problem
 
-Job seekers need to **tailor resumes** to job descriptions, **score** fit against ATS-style signals, optionally produce **cover letters**, and **track applications** in one place—without redoing the same manual work for every role.
+Job seekers need to **tailor resumes** to job descriptions, optionally produce **cover letters**, and **track applications** in one place—without redoing the same manual work for every role.
 
 ## Primary actors
 
@@ -21,15 +21,13 @@ Job seekers need to **tailor resumes** to job descriptions, **score** fit agains
 |---|---------|----------------------|
 | 1 | **Onboard** | As a user, I want to upload my resume and complete profile Q&A so tailoring uses accurate context. |
 | 2 | **Tailor** | As a user, I want a tailored PDF for a specific job so I can apply with a relevant resume. |
-| 3 | **Measure** | As a user, I want an ATS-style score for a JD and my resume so I know what to improve. |
-| 4 | **Apply & track** | As a user, I want one list of applications with status and notes so I do not lose track. |
-| 5 | **Monetize** | As a user, I want to subscribe for higher limits so I can use premium workflows. |
+| 3 | **Apply & track** | As a user, I want one list of applications with status and notes so I do not lose track. |
+| 4 | **Monetize** | As a user, I want to subscribe for higher limits so I can use premium workflows. |
 
 **Backend steps (journey 1):** Sign up / sign in → upload PDF → async extraction → profile questions → enrichment → mark onboarding complete.  
 **Backend steps (journey 2):** Submit job details (+ optional file or stored resume) → generate tailored PDF → optional cover letter → optional batch (plan-gated).  
-**Backend steps (journey 3):** Score against JD + resume content or file; history within plan limits.  
-**Backend steps (journey 4):** CRUD **job application** records with status pipeline, notes, dates, links to ATS runs or generations.  
-**Backend steps (journey 5):** Browse plans → checkout → webhook confirms payment → subscription and payment history updated (**intended** flow in [07-subscriptions-billing.md](./07-subscriptions-billing.md)).
+**Backend steps (journey 3):** CRUD **job application** records with status pipeline, notes, dates, links to tailored generations.  
+**Backend steps (journey 4):** Browse plans → checkout → webhook confirms payment → subscription and payment history updated (**intended** flow in [07-subscriptions-billing.md](./07-subscriptions-billing.md)).
 
 ## Non-goals (backend)
 

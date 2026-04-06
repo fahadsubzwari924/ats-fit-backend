@@ -32,7 +32,7 @@ last_reviewed: 2026-04-06
 
 | ID | Requirement |
 |----|-------------|
-| **NFR-PERF-01** | Tailored generation and ATS calls depend on external AI latency; product-facing timeouts and UX copy are owned by frontend + API gateway policies (**see runbook**). |
+| **NFR-PERF-01** | Tailored generation and enrichment calls depend on external AI latency; product-facing timeouts and UX copy are owned by frontend + API gateway policies (**see runbook**). |
 | **NFR-PERF-02** | Batch generation is **sequential** by design; document max batch size and timeouts if enforced (**see code / runbook**). |
 | **NFR-PERF-03** | Rate limits protect upstream AI and cost; limits are configurable per plan (**see** `RateLimitService` / data seeds). |
 
