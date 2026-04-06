@@ -27,6 +27,46 @@ import { AtsMatchService } from '../ats-match/ats-match.service';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { FieldSelectionService } from '../../shared/services/field-selection.service';
 import { JOB_APPLICATION_FIELD_CONFIG } from './config/field-selection.config';
+import { resolveAppliedAtOnCreate } from './utils/resolve-applied-at-on-create';
+
+const JOB_APPLICATION_LIST_SORT_COLUMNS = new Set([
+  'created_at',
+  'updated_at',
+  'company_name',
+  'job_position',
+  'status',
+  'applied_at',
+  'application_deadline',
+  'follow_up_date',
+  'ats_score',
+]);
+
+function appendNullableDateRange(
+  qb: SelectQueryBuilder<JobApplication>,
+  columnPath: string,
+  from: string | undefined,
+  to: string | undefined,
+  paramKeys: { from: string; to: string },
+): void {
+  if (!from && !to) return;
+  qb.andWhere(`${columnPath} IS NOT NULL`);
+  if (from && to) {
+    qb.andWhere(
+      `${columnPath} BETWEEN :${paramKeys.from} AND :${paramKeys.to}`,
+      { [paramKeys.from]: from, [paramKeys.to]: to },
+    );
+    return;
+  }
+  if (from) {
+    qb.andWhere(`${columnPath} >= :${paramKeys.from}`, {
+      [paramKeys.from]: from,
+    });
+    return;
+  }
+  qb.andWhere(`${columnPath} <= :${paramKeys.to}`, {
+    [paramKeys.to]: to,
+  });
+}
 
 @Injectable()
 export class JobApplicationService {
@@ -67,6 +107,7 @@ export class JobApplicationService {
         job_position: data.job_position,
         job_description: data.job_description,
         application_source: data.application_source,
+        applied_at: resolveAppliedAtOnCreate(data),
         ats_match_history_id: data.ats_match_history_id,
         resume_generation_id: data.resume_generation_id,
         ats_score: data.ats_score,
@@ -446,11 +487,22 @@ export class JobApplicationService {
       });
     }
 
-    // Add filters
-    if (query.status) {
+    if (query.statuses?.length) {
+      queryBuilder.andWhere('jobApplication.status IN (:...statuses)', {
+        statuses: query.statuses,
+      });
+    } else if (query.status) {
       queryBuilder.andWhere('jobApplication.status = :status', {
         status: query.status,
       });
+    }
+
+    const qTrimmed = query.q?.trim();
+    if (qTrimmed) {
+      queryBuilder.andWhere(
+        '(jobApplication.company_name ILIKE :qSearch OR jobApplication.job_position ILIKE :qSearch)',
+        { qSearch: `%${qTrimmed}%` },
+      );
     }
 
     if (query.company_name) {
@@ -459,10 +511,34 @@ export class JobApplicationService {
       });
     }
 
-    // Add sorting
-    const sortBy = query.sort_by || 'created_at';
-    const sortOrder = query.sort_order || 'DESC';
-    queryBuilder.orderBy(`jobApplication.${sortBy}`, sortOrder);
+    appendNullableDateRange(
+      queryBuilder,
+      'jobApplication.applied_at',
+      query.applied_at_from,
+      query.applied_at_to,
+      { from: 'appliedAtFrom', to: 'appliedAtTo' },
+    );
+    appendNullableDateRange(
+      queryBuilder,
+      'jobApplication.application_deadline',
+      query.deadline_from,
+      query.deadline_to,
+      { from: 'deadlineFrom', to: 'deadlineTo' },
+    );
+    appendNullableDateRange(
+      queryBuilder,
+      'jobApplication.follow_up_date',
+      query.follow_up_from,
+      query.follow_up_to,
+      { from: 'followUpFrom', to: 'followUpTo' },
+    );
+
+    const sortColumn =
+      query.sort_by && JOB_APPLICATION_LIST_SORT_COLUMNS.has(query.sort_by)
+        ? query.sort_by
+        : 'created_at';
+    const sortOrder = query.sort_order === 'ASC' ? 'ASC' : 'DESC';
+    queryBuilder.orderBy(`jobApplication.${sortColumn}`, sortOrder);
 
     return queryBuilder;
   }

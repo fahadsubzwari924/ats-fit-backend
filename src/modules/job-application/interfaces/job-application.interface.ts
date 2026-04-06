@@ -27,6 +27,8 @@ export interface ICreateJobApplication {
   company_name: string;
   job_position: string;
   job_description: string;
+  /** ISO 8601 date-time from client; optional — see create service for tailored_resume default. */
+  applied_at?: string;
   application_source: ApplicationSource;
   ats_match_history_id?: string;
   resume_generation_id?: string;
@@ -60,8 +62,18 @@ export interface IUpdateJobApplication {
 export interface IJobApplicationQuery {
   user_id?: string;
   guest_id?: string;
+  /** When `statuses` is non-empty, the service ignores `status` (multi-status wins). */
   status?: ApplicationStatus;
+  statuses?: ApplicationStatus[];
   company_name?: string;
+  /** Search across company name and job position (ILIKE). */
+  q?: string;
+  applied_at_from?: string;
+  applied_at_to?: string;
+  deadline_from?: string;
+  deadline_to?: string;
+  follow_up_from?: string;
+  follow_up_to?: string;
   limit?: number;
   offset?: number;
   sort_by?: string;

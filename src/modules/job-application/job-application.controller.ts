@@ -60,6 +60,7 @@ export class JobApplicationController {
         company_name: dto.company_name,
         job_position: dto.job_position,
         job_description: dto.job_description,
+        applied_at: dto.applied_at,
         application_source: dto.application_source,
         ats_match_history_id: dto.ats_match_history_id,
         resume_generation_id: dto.resume_generation_id,
@@ -82,7 +83,7 @@ export class JobApplicationController {
   @ApiOperation({
     summary: 'Get job applications',
     description:
-      'Get a list of job applications with optional field selection. Use the "fields" query parameter to specify which fields to return (e.g., ?fields=id,company_name,status)',
+      'List job applications with optional filters: `q` (company/position ILIKE), `status` or `statuses` (comma-separated; if `statuses` is set it takes precedence over `status`), date ranges (`applied_at_from`/`applied_at_to`, `deadline_from`/`deadline_to`, `follow_up_from`/`follow_up_to`), and `company_name`. Supports field selection via `fields` (e.g. ?fields=id,company_name,status).',
   })
   @ApiResponse({
     status: 200,
@@ -102,7 +103,15 @@ export class JobApplicationController {
         user_id: userContext?.userId,
         guest_id: userContext?.guestId,
         status: query.status,
+        statuses: query.statuses,
         company_name: query.company_name,
+        q: query.q,
+        applied_at_from: query.applied_at_from,
+        applied_at_to: query.applied_at_to,
+        deadline_from: query.deadline_from,
+        deadline_to: query.deadline_to,
+        follow_up_from: query.follow_up_from,
+        follow_up_to: query.follow_up_to,
         limit: query.limit || 20,
         offset: query.offset || 0,
         sort_by: query.sort_by || 'created_at',
@@ -216,6 +225,10 @@ export class JobApplicationController {
         interview_scheduled_at: dto.interview_scheduled_at
           ? new Date(dto.interview_scheduled_at)
           : undefined,
+        follow_up_date: dto.follow_up_date
+          ? new Date(dto.follow_up_date)
+          : undefined,
+        contact_phone: dto.contact_phone,
         interview_notes: dto.interview_notes,
         rejection_reason: dto.rejection_reason,
         metadata: dto.metadata,
