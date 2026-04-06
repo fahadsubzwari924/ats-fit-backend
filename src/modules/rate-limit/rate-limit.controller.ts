@@ -41,16 +41,6 @@ export class RateLimitController {
             resetDate: { type: 'string', format: 'date-time' },
           },
         },
-        ats_score: {
-          type: 'object',
-          properties: {
-            allowed: { type: 'boolean' },
-            currentUsage: { type: 'number' },
-            limit: { type: 'number' },
-            remaining: { type: 'number' },
-            resetDate: { type: 'string', format: 'date-time' },
-          },
-        },
         userType: { type: 'string' },
         plan: { type: 'string' },
       },

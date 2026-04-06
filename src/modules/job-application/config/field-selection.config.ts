@@ -15,8 +15,6 @@ export const JOB_APPLICATION_FIELD_CONFIG: FieldSelectionConfig = {
     'application_source',
     'application_deadline',
     'applied_at',
-    'ats_score',
-    'ats_analysis',
     'cover_letter',
     'notes',
     'contact_phone',
@@ -37,7 +35,6 @@ export const JOB_APPLICATION_FIELD_CONFIG: FieldSelectionConfig = {
     'status',
     'application_source',
     'applied_at',
-    'ats_score',
     'created_at',
     'updated_at',
   ],
@@ -45,10 +42,6 @@ export const JOB_APPLICATION_FIELD_CONFIG: FieldSelectionConfig = {
     user: {
       entity: 'user',
       allowedFields: ['id', 'email', 'firstName', 'lastName'],
-    },
-    ats_match_history: {
-      entity: 'ats_match_history',
-      allowedFields: ['id', 'match_score', 'created_at'],
     },
     resume_generation: {
       entity: 'resume_generation',

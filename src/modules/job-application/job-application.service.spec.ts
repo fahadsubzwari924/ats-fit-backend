@@ -5,10 +5,8 @@ import {
   JobApplication,
   ApplicationStatus,
 } from '../../database/entities/job-application.entity';
-import { AtsMatchHistory } from '../../database/entities/ats-match-history.entity';
 import { ResumeGeneration } from '../../database/entities/resume-generations.entity';
 import { User } from '../../database/entities/user.entity';
-import { AtsMatchService } from '../ats-match/ats-match.service';
 import { FieldSelectionService } from '../../shared/services/field-selection.service';
 
 describe('JobApplicationService', () => {
@@ -47,10 +45,8 @@ describe('JobApplicationService', () => {
           provide: getRepositoryToken(JobApplication),
           useValue: { createQueryBuilder },
         },
-        { provide: getRepositoryToken(AtsMatchHistory), useValue: {} },
         { provide: getRepositoryToken(ResumeGeneration), useValue: {} },
         { provide: getRepositoryToken(User), useValue: {} },
-        { provide: AtsMatchService, useValue: {} },
         {
           provide: FieldSelectionService,
           useValue: {

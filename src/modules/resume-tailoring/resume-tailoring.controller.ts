@@ -29,9 +29,7 @@ import {
 } from './dtos/batch-generate.dto';
 import { FileValidationPipe } from '../../shared/pipes/file-validation.pipe';
 import { ResumeGenerationOrchestratorService } from './services/resume-generation-orchestrator.service';
-import type {
-  UserContext as ResumeUserContext,
-} from './interfaces/user-context.interface';
+import type { UserContext as ResumeUserContext } from './interfaces/user-context.interface';
 import { ValidationLoggingInterceptor } from './interceptors/validation-logging.interceptor';
 import {
   NotFoundException,
@@ -147,13 +145,12 @@ export class ResumeTailoringController {
    * Generate Tailored Resume - Enhanced AI-Powered Resume Generation
    *
    * This endpoint provides advanced AI-powered resume generation with
-   * comprehensive validation, optimization, and ATS scoring capabilities.
+   * comprehensive validation and optimization capabilities.
    *
    * Key Features:
    * - AI-powered job description analysis using GPT-4 Turbo
    * - Smart resume content processing for guest vs registered users
    * - Claude 3.5 Sonnet-powered content optimization
-   * - ATS scoring integration with confidence metrics
    * - Optimized PDF generation with performance tracking
    * - Comprehensive error handling and validation
    *
@@ -199,7 +196,6 @@ export class ResumeTailoringController {
       const responseForHeaders = {
         filename: result.filename,
         resumeGenerationId: result.resumeGenerationId,
-        atsScore: result.atsScore,
         tailoringMode: result.tailoringMode,
         keywordsAdded: result.keywordsAdded,
         sectionsOptimized: result.sectionsOptimized,
@@ -217,7 +213,7 @@ export class ResumeTailoringController {
       this.logger.log(
         `Resume generation completed in ${totalTime}ms. ` +
           `Resume Generation ID: ${result.resumeGenerationId}, ` +
-          `ATS Score: ${result.atsScore}%, Keywords Added: ${result.keywordsAdded}, ` +
+          `Keywords Added: ${result.keywordsAdded}, ` +
           `Optimization Confidence: ${result.optimizationConfidence}%`,
       );
     } catch (error) {
@@ -363,9 +359,7 @@ export class ResumeTailoringController {
           companyName: job.companyName,
           status: 'failed',
           error:
-            error instanceof Error
-              ? error.message
-              : 'Resume generation failed',
+            error instanceof Error ? error.message : 'Resume generation failed',
         });
       }
     }
@@ -390,7 +384,6 @@ export class ResumeTailoringController {
     response: {
       filename: string;
       resumeGenerationId: string;
-      atsScore: number;
       tailoringMode?: string;
       keywordsAdded: number;
       sectionsOptimized: number;
@@ -404,7 +397,6 @@ export class ResumeTailoringController {
       'Content-Disposition': `attachment; filename=${response.filename}`,
       'Content-Length': contentLength.toString(),
       'X-Resume-Generation-Id': response.resumeGenerationId,
-      'X-ATS-Score': response.atsScore.toString(),
       'X-Filename': response.filename,
       'X-Tailoring-Mode': response.tailoringMode ?? 'standard',
       'X-Keywords-Added': response.keywordsAdded.toString(),

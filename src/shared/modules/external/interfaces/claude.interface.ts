@@ -19,12 +19,6 @@ export interface ClaudeResponse {
   }>;
 }
 
-export interface ClaudeAtsEvaluationParams {
-  resumeText: string;
-  jobDescription: string;
-  prompt: string;
-}
-
 export interface ClaudeConfig {
   apiKey: string;
   baseUrl: string;

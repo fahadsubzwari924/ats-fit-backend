@@ -26,7 +26,6 @@ const JOB_APPLICATION_QUERY_SORT_FIELDS = [
   'applied_at',
   'application_deadline',
   'follow_up_date',
-  'ats_score',
 ] as const;
 
 export class JobApplicationQueryDto {

@@ -11,7 +11,6 @@ import {
   JobApplication,
   ApplicationStatus,
 } from '../../database/entities/job-application.entity';
-import { AtsMatchHistory } from '../../database/entities/ats-match-history.entity';
 import { ResumeGeneration } from '../../database/entities/resume-generations.entity';
 import { User } from '../../database/entities/user.entity';
 import {
@@ -22,8 +21,6 @@ import {
   IJobApplicationWithRelations,
   IJobApplicationMetadata,
 } from './interfaces/job-application.interface';
-import { AtsAnalysis } from './interfaces/ats-analysis.interface';
-import { AtsMatchService } from '../ats-match/ats-match.service';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { FieldSelectionService } from '../../shared/services/field-selection.service';
 import { JOB_APPLICATION_FIELD_CONFIG } from './config/field-selection.config';
@@ -38,7 +35,6 @@ const JOB_APPLICATION_LIST_SORT_COLUMNS = new Set([
   'applied_at',
   'application_deadline',
   'follow_up_date',
-  'ats_score',
 ]);
 
 function appendNullableDateRange(
@@ -75,13 +71,10 @@ export class JobApplicationService {
   constructor(
     @InjectRepository(JobApplication)
     private readonly jobApplicationRepository: Repository<JobApplication>,
-    @InjectRepository(AtsMatchHistory)
-    private readonly atsMatchHistoryRepository: Repository<AtsMatchHistory>,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    private readonly atsMatchService: AtsMatchService,
     private readonly fieldSelectionService: FieldSelectionService,
   ) {}
 
@@ -108,10 +101,7 @@ export class JobApplicationService {
         job_description: data.job_description,
         application_source: data.application_source,
         applied_at: resolveAppliedAtOnCreate(data),
-        ats_match_history_id: data.ats_match_history_id,
         resume_generation_id: data.resume_generation_id,
-        ats_score: data.ats_score,
-        ats_analysis: data.ats_analysis,
         resume_content: data.resume_content,
         job_url: data.job_url,
         job_location: data.job_location,
@@ -123,7 +113,7 @@ export class JobApplicationService {
         contact_phone: data.contact_phone,
         metadata: this.buildJobApplicationMetadata(
           data.metadata,
-          data.ats_analysis,
+          data.resume_content,
         ),
         status: ApplicationStatus.APPLIED,
       });
@@ -221,10 +211,6 @@ export class JobApplicationService {
 
       const queryBuilder = this.jobApplicationRepository
         .createQueryBuilder('jobApplication')
-        .leftJoinAndSelect(
-          'jobApplication.ats_match_history',
-          'ats_match_history',
-        )
         .leftJoinAndSelect(
           'jobApplication.resume_generation',
           'resume_generation',
@@ -398,7 +384,6 @@ export class JobApplicationService {
       const stats: IJobApplicationStats = {
         total_applications: applications.length,
         applications_by_status: this.calculateStatusStats(applications),
-        average_ats_score: this.calculateAverageAtsScore(applications),
         response_rate: this.calculateResponseRate(applications),
         interview_rate: this.calculateInterviewRate(applications),
         success_rate: this.calculateSuccessRate(applications),
@@ -432,19 +417,6 @@ export class JobApplicationService {
       }
     }
 
-    // Validate ATS match history exists if provided
-    if (payload.ats_match_history_id) {
-      const atsHistory = await this.atsMatchHistoryRepository.findOne({
-        where: { id: payload.ats_match_history_id },
-      });
-      if (!atsHistory) {
-        throw new NotFoundException(
-          'ATS match history not found',
-          ERROR_CODES.NOT_FOUND,
-        );
-      }
-    }
-
     // Validate resume generation exists if provided
     if (payload.resume_generation_id) {
       const resumeGeneration = await this.resumeGenerationRepository.findOne({
@@ -467,10 +439,6 @@ export class JobApplicationService {
   ): SelectQueryBuilder<JobApplication> {
     const queryBuilder = this.jobApplicationRepository
       .createQueryBuilder('jobApplication')
-      .leftJoinAndSelect(
-        'jobApplication.ats_match_history',
-        'ats_match_history',
-      )
       .leftJoinAndSelect(
         'jobApplication.resume_generation',
         'resume_generation',
@@ -548,97 +516,12 @@ export class JobApplicationService {
    */
   private buildJobApplicationMetadata(
     existingMetadata?: IJobApplicationMetadata,
-    atsAnalysis?: AtsAnalysis,
+    resumeContent?: string,
   ): IJobApplicationMetadata {
     return {
       ...existingMetadata,
-      skills_matched: this.extractSkillsMatched(atsAnalysis),
-      skills_missing: this.extractMissingSkills(atsAnalysis),
+      resume_content_provided: Boolean(resumeContent),
     };
-  }
-
-  /**
-   * Extract matched skills from ATS analysis
-   */
-  private extractSkillsMatched(atsAnalysis?: AtsAnalysis): string[] {
-    if (!atsAnalysis) return [];
-
-    // Check for skills in matched.hardSkills (new format)
-    const hardSkills =
-      atsAnalysis.matched?.hardSkills ||
-      atsAnalysis.details?.matched?.hardSkills;
-    if (Array.isArray(hardSkills)) {
-      return hardSkills;
-    }
-
-    return [];
-  }
-
-  /**
-   * Extract missing skills from ATS analysis
-   */
-  private extractMissingSkills(atsAnalysis?: AtsAnalysis): string[] {
-    if (!atsAnalysis) return [];
-
-    // Check for missing keywords (legacy format) or details.missingKeywords (new format)
-    const missingKeywords =
-      atsAnalysis.missingKeywords || atsAnalysis.details?.missingKeywords;
-    if (Array.isArray(missingKeywords)) {
-      return missingKeywords;
-    }
-
-    return [];
-  }
-
-  /**
-   * Generate suggestions based on ATS analysis
-   */
-  private generateSuggestions(atsAnalysis?: AtsAnalysis): string[] {
-    const suggestions: string[] = [];
-
-    if (!atsAnalysis) return suggestions;
-
-    // Check for missing keywords
-    const missingKeywords = this.extractMissingSkills(atsAnalysis);
-    if (missingKeywords.length > 0) {
-      suggestions.push(
-        `Consider adding these missing keywords: ${missingKeywords.slice(0, 5).join(', ')}`,
-      );
-    }
-
-    // Check skill match score
-    const skillMatchScore =
-      atsAnalysis.skillMatchScore || atsAnalysis.details?.skillMatchScore;
-    if (typeof skillMatchScore === 'number' && skillMatchScore < 70) {
-      suggestions.push(
-        'Your skill match score is low. Consider highlighting more relevant technical skills.',
-      );
-    }
-
-    // Check section scores
-    const sectionScores =
-      atsAnalysis.sectionScores || atsAnalysis.details?.sectionScores;
-    if (sectionScores) {
-      if (
-        typeof sectionScores.contactInfo === 'number' &&
-        sectionScores.contactInfo < 80
-      ) {
-        suggestions.push(
-          'Ensure your contact information is complete and professional.',
-        );
-      }
-
-      if (
-        typeof sectionScores.structure === 'number' &&
-        sectionScores.structure < 70
-      ) {
-        suggestions.push(
-          'Consider improving your resume structure and formatting.',
-        );
-      }
-    }
-
-    return suggestions;
   }
 
   /**
@@ -659,20 +542,6 @@ export class JobApplicationService {
     });
 
     return stats;
-  }
-
-  private calculateAverageAtsScore(applications: JobApplication[]): number {
-    const applicationsWithScore = applications.filter(
-      (app) => app.ats_score !== null && app.ats_score !== undefined,
-    );
-
-    if (applicationsWithScore.length === 0) return 0;
-
-    const total = applicationsWithScore.reduce(
-      (sum, app) => sum + (app.ats_score || 0),
-      0,
-    );
-    return Math.round((total / applicationsWithScore.length) * 100) / 100;
   }
 
   private calculateResponseRate(applications: JobApplication[]): number {

@@ -10,8 +10,6 @@ import { User } from './user.entity';
 
 export enum FeatureType {
   RESUME_GENERATION = 'resume_generation',
-  ATS_SCORE = 'ats_score',
-  ATS_SCORE_HISTORY = 'ats_score_history',
   JOB_APPLICATION_TRACKING = 'job_application_tracking',
   COVER_LETTER = 'cover_letter',
   RESUME_BATCH_GENERATION = 'resume_batch_generation',

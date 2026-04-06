@@ -14,8 +14,6 @@ import { Resume } from '../../../database/entities/resume.entity';
 import { User } from '../../../database/entities/user.entity';
 import { S3Service } from '../../../shared/modules/external/services/s3.service';
 import { MimeTypes } from '../../../shared/constants/mime-types.enum';
-import { AtsEvaluationService } from '../../../shared/services/ats-evaluation.service';
-import { PromptService } from '../../../shared/services/prompt.service';
 
 export interface ResumeHistoryItem {
   id: string;
@@ -51,8 +49,6 @@ export class ResumeService {
     private templateService: ResumeTemplateService,
     private aiContentService: AIContentService,
     private configService: ConfigService,
-    private atsEvaluationService: AtsEvaluationService,
-    private promptService: PromptService,
 
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
@@ -377,7 +373,6 @@ export class ResumeService {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return record.changes_diff ?? null;
   }
 

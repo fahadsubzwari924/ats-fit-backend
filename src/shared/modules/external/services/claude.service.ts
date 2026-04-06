@@ -1,11 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InternalServerErrorException } from '../../../exceptions/custom-http-exceptions';
-import {
-  ClaudeRequestParams,
-  ClaudeResponse,
-  ClaudeAtsEvaluationParams,
-} from '../interfaces';
+import { ClaudeRequestParams, ClaudeResponse } from '../interfaces';
 import { AIErrorUtil } from '../../../utils/ai-error.util';
 
 @Injectable()
@@ -236,88 +232,5 @@ export class ClaudeService {
       );
       throw error;
     }
-  }
-
-  // Specialized method for ATS evaluation with optimized prompt
-  async evaluateAtsMatch(params: ClaudeAtsEvaluationParams): Promise<any> {
-    try {
-      this.logger.log('Starting Claude ATS evaluation...');
-
-      // Optimize the prompt for faster processing
-      const optimizedPrompt = this.optimizeAtsPrompt(params.prompt);
-
-      const result = await this.chatCompletion({
-        messages: [{ role: 'user', content: optimizedPrompt }],
-        temperature: 0.1, // Low temperature for consistent scoring
-        max_tokens: 3000, // Reduced for faster response
-      });
-
-      const raw = result.choices?.[0]?.message?.content;
-      if (!raw) {
-        throw new Error('No content in Claude ATS evaluation response');
-      }
-
-      // Strip markdown fences first, then extract the outermost JSON object.
-      // Claude occasionally wraps the response in ```json fences and/or appends
-      // explanatory text after the closing brace — both break JSON.parse directly.
-      const stripped = raw
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```\s*$/i, '')
-        .trim();
-
-      const jsonMatch = stripped.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON object found in Claude ATS evaluation response');
-      }
-
-      this.logger.log('Claude ATS evaluation completed successfully');
-      return JSON.parse(jsonMatch[0]);
-    } catch (error) {
-      this.logger.error('Claude ATS evaluation failed', error);
-
-      // Check if it's an overload error - re-throw as-is to preserve the error type
-      if (AIErrorUtil.isClaudeOverloadError(error)) {
-        this.logger.warn(
-          'Claude ATS evaluation failed due to overload - re-throwing for fallback handling',
-        );
-        throw error;
-      }
-
-      // Provide more specific error information for other errors
-      if (error instanceof Error) {
-        if (error.message.includes('response_format')) {
-          throw new InternalServerErrorException(
-            'Claude API response format error - please check API configuration',
-          );
-        }
-        if (error.message.includes('401')) {
-          throw new InternalServerErrorException(
-            'Claude API authentication failed - please check API key',
-          );
-        }
-        if (error.message.includes('429')) {
-          throw new InternalServerErrorException(
-            'Claude API rate limit exceeded - please try again later',
-          );
-        }
-        if (error.message.includes('AbortError')) {
-          throw new InternalServerErrorException(
-            'Claude API request timed out - please try again',
-          );
-        }
-      }
-
-      throw new InternalServerErrorException(
-        'Failed to evaluate ATS match with Claude',
-      );
-    }
-  }
-
-  private optimizeAtsPrompt(prompt: string): string {
-    // Optimize the prompt for faster processing
-    return prompt
-      .replace(/\n\s*\n/g, '\n') // Remove extra blank lines
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .trim();
   }
 }
