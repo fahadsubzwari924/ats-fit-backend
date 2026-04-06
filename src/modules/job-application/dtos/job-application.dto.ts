@@ -20,7 +20,7 @@ import {
 
 export { JobApplicationQueryDto } from './job-application-query.dto';
 
-// DTO for creating job application after ATS analysis
+// DTO for creating job application records
 export class CreateJobApplicationDto {
   @IsEnum(ApplicationSource, {
     message:
@@ -45,10 +45,6 @@ export class CreateJobApplicationDto {
 
   @IsOptional()
   @IsString()
-  ats_match_history_id?: string;
-
-  @IsOptional()
-  @IsString()
   resume_generation_id?: string;
 
   @ApiPropertyOptional({
@@ -58,16 +54,6 @@ export class CreateJobApplicationDto {
   @IsOptional()
   @IsDateString({}, { message: 'Applied date must be a valid ISO date string' })
   applied_at?: string;
-
-  @IsOptional()
-  @IsNumber({}, { message: 'ATS score must be a number' })
-  @Min(0, { message: 'ATS score must be at least 0' })
-  @Max(100, { message: 'ATS score must be at most 100' })
-  ats_score?: number;
-
-  @IsOptional()
-  @IsObject()
-  ats_analysis?: any;
 
   @IsOptional()
   @IsString()

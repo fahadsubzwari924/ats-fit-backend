@@ -3,22 +3,11 @@ import {
   ApplicationSource,
   JobApplication,
 } from '../../../database/entities/job-application.entity';
-import { AtsAnalysis } from './ats-analysis.interface';
 
 export interface IJobApplicationMetadata {
   skills_matched?: string[];
   skills_missing?: string[];
   [key: string]: any;
-}
-
-export interface IJobApplicationAnalysis {
-  ats_score: number;
-  ats_analysis: any;
-  ats_match_history_id: string;
-  resume_content: string;
-  suggestions: string[];
-  matched_skills: string[];
-  missing_skills: string[];
 }
 
 export interface ICreateJobApplication {
@@ -30,10 +19,7 @@ export interface ICreateJobApplication {
   /** ISO 8601 date-time from client; optional — see create service for tailored_resume default. */
   applied_at?: string;
   application_source: ApplicationSource;
-  ats_match_history_id?: string;
   resume_generation_id?: string;
-  ats_score?: number;
-  ats_analysis?: AtsAnalysis;
   resume_content?: string;
   job_url?: string;
   job_location?: string;
@@ -84,7 +70,6 @@ export interface IJobApplicationQuery {
 export interface IJobApplicationStats {
   total_applications: number;
   applications_by_status: Record<ApplicationStatus, number>;
-  average_ats_score: number;
   response_rate: number;
   interview_rate: number;
   success_rate: number;
@@ -99,11 +84,6 @@ export interface IJobApplicationStats {
 }
 
 export interface IJobApplicationWithRelations extends JobApplication {
-  atsMatchHistory?: {
-    id: string;
-    ats_score: number;
-    analysis: any;
-  };
   resumeGeneration?: {
     id: string;
     template_id: string;

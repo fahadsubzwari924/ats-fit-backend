@@ -99,7 +99,7 @@ export class UserController {
   @ApiOperation({
     summary: 'Get current user feature usage statistics',
     description:
-      'Retrieves comprehensive feature usage information for the authenticated user including ATS score and resume generation limits',
+      'Retrieves feature usage information for the authenticated user.',
   })
   @ApiResponse({
     status: 200,
@@ -111,7 +111,7 @@ export class UserController {
         properties: {
           feature: {
             type: 'string',
-            enum: ['ats_score', 'resume_generation'],
+            enum: ['resume_generation'],
             description: 'The feature name',
           },
           allowed: {

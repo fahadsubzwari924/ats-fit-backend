@@ -28,7 +28,6 @@ export interface ProcessingMetrics {
   optimizationTimeMs: number;
   pdfGenerationTimeMs: number;
   dbSaveTimeMs: number;
-  atsEvaluationTimeMs: number;
   totalProcessingTimeMs: number;
 }
 
@@ -45,11 +44,6 @@ export interface ResumeGenerationResult {
 
   // Generation tracking
   resumeGenerationId: string;
-
-  // ATS evaluation results
-  atsScore: number;
-  atsConfidence: number;
-  atsMatchHistoryId: string;
 
   // Optimization metrics
   keywordsAdded: number;

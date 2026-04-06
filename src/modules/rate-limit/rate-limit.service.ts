@@ -261,26 +261,23 @@ export class RateLimitService {
   }
 
   /**
-   * Get usage statistics for a user - Always returns both main features
+   * Get usage statistics for a user.
    */
   async getUserUsageStats(userContext: UserContext): Promise<{
     resume_generation: RateLimitResult;
-    ats_score: RateLimitResult;
   }> {
-    // Always check both main features regardless of usage history
-    const [resumeGeneration, atsScore] = await Promise.all([
-      this.checkRateLimit(userContext, FeatureType.RESUME_GENERATION),
-      this.checkRateLimit(userContext, FeatureType.ATS_SCORE),
-    ]);
+    const resumeGeneration = await this.checkRateLimit(
+      userContext,
+      FeatureType.RESUME_GENERATION,
+    );
 
     return {
       resume_generation: resumeGeneration,
-      ats_score: atsScore,
     };
   }
 
   /**
-   * Get formatted feature usage for API responses - Always returns both features
+   * Get formatted feature usage for API responses.
    */
   async getFormattedFeatureUsage(
     userContext: UserContext,
@@ -288,14 +285,6 @@ export class RateLimitService {
     const stats = await this.getUserUsageStats(userContext);
 
     return [
-      {
-        feature: 'ats_score',
-        allowed: stats.ats_score.limit,
-        remaining: stats.ats_score.remaining,
-        used: stats.ats_score.currentUsage,
-        usagePercentage: `${stats.ats_score.usagePercentage}%`,
-        resetDate: stats.ats_score.resetDate,
-      },
       {
         feature: 'resume_generation',
         allowed: stats.resume_generation.limit,
@@ -320,14 +309,6 @@ export class RateLimitService {
         monthly_limit: 2,
         description: 'Freemium guest users can generate 2 resumes per month',
       },
-      {
-        plan: UserPlan.FREEMIUM,
-        user_type: UserType.GUEST,
-        feature_type: FeatureType.ATS_SCORE,
-        monthly_limit: 5,
-        description:
-          'Freemium guest users can check ATS score 5 times per month',
-      },
       // Freemium - Registered users
       {
         plan: UserPlan.FREEMIUM,
@@ -336,14 +317,6 @@ export class RateLimitService {
         monthly_limit: 5,
         description:
           'Freemium registered users can generate 5 resumes per month',
-      },
-      {
-        plan: UserPlan.FREEMIUM,
-        user_type: UserType.REGISTERED,
-        feature_type: FeatureType.ATS_SCORE,
-        monthly_limit: 10,
-        description:
-          'Freemium registered users can check ATS score 10 times per month',
       },
       // Premium - Registered users (future use)
       {
@@ -356,9 +329,9 @@ export class RateLimitService {
       {
         plan: UserPlan.PREMIUM,
         user_type: UserType.REGISTERED,
-        feature_type: FeatureType.ATS_SCORE,
-        monthly_limit: 100,
-        description: 'Premium users can check ATS score 100 times per month',
+        feature_type: FeatureType.RESUME_BATCH_GENERATION,
+        monthly_limit: 25,
+        description: 'Premium users can run 25 batch generations per month',
       },
     ];
 

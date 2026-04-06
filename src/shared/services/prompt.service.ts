@@ -1,127 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
-import {
-  BadRequestException,
-  InternalServerErrorException,
-} from '../exceptions/custom-http-exceptions';
-import { ERROR_CODES } from '../constants/error-codes';
+import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class PromptService {
-  private readonly logger = new Logger(PromptService.name);
-
   constructor() {}
-
-  getPremiumAtsEvaluationPrompt(
-    resumeText: string,
-    jobDescription: string,
-  ): string {
-    return `
-You are a premium ATS (Applicant Tracking System) evaluator with expertise in resume analysis and job matching. You are evaluating a resume against a job description using industry-standard ATS criteria.
-
-**EVALUATION CRITERIA (Weighted Scoring):**
-
-1. **Technical Skills Match (35% weight)**
-   - Exact keyword matches and variations
-   - Related technologies and frameworks
-   - Skill relevance and recency
-   - Technology stack alignment
-   - Consider both explicit and implicit skill mentions
-
-2. **Experience Alignment (25% weight)**
-   - Years of experience vs requirements
-   - Seniority level match
-   - Industry relevance
-   - Role progression and career trajectory
-   - Project complexity and scale
-
-3. **Quantifiable Achievements (20% weight)**
-   - Number of measurable accomplishments
-   - Impact metrics and business value
-   - Technical complexity demonstrated
-   - Results-driven outcomes
-   - ROI and efficiency improvements
-
-4. **Soft Skills & Leadership (15% weight)**
-   - Team leadership and mentoring
-   - Communication and collaboration
-   - Problem-solving and strategic thinking
-   - Stakeholder management
-   - Cross-functional coordination
-
-5. **Resume Quality (5% weight)**
-   - Professional formatting
-   - Clear and concise descriptions
-   - Proper structure and organization
-   - Contact information completeness
-   - Grammar and presentation
-
-**SCORING GUIDELINES:**
-- 95-100: Exceptional match, highly qualified
-- 90-94: Excellent match, well qualified
-- 85-89: Strong match, qualified
-- 80-84: Good match, mostly qualified
-- 75-79: Moderate match, some concerns
-- 70-74: Fair match, significant gaps
-- Below 70: Weak match, major concerns
-
-**Resume:**
-${resumeText}
-
-**Job Description:**
-${jobDescription}
-
-**Return a JSON object with the following structure:**
-{
-  "overallScore": number (0-100),
-  "technicalSkillsScore": number (0-100),
-  "experienceAlignmentScore": number (0-100),
-  "achievementsScore": number (0-100),
-  "softSkillsScore": number (0-100),
-  "resumeQualityScore": number (0-100),
-  "detailedBreakdown": {
-    "technicalSkills": {
-      "matched": ["skill1", "skill2", ...],
-      "missing": ["skill1", "skill2", ...],
-      "score": number (0-100),
-      "reasoning": "string"
-    },
-    "experience": {
-      "level": "string",
-      "years": number,
-      "relevance": number (0-100),
-      "reasoning": "string"
-    },
-    "achievements": {
-      "count": number,
-      "quality": number (0-100),
-      "impact": number (0-100),
-      "reasoning": "string"
-    },
-    "softSkills": {
-      "matched": ["skill1", "skill2", ...],
-      "reasoning": "string"
-    },
-    "redFlags": ["flag1", "flag2", ...],
-    "strengths": ["strength1", "strength2", ...],
-    "weaknesses": ["weakness1", "weakness2", ...],
-    "recommendations": ["recommendation1", "recommendation2", ...]
-  },
-  "confidence": number (0-100)
-}
-
-**IMPORTANT INSTRUCTIONS:**
-- Be thorough and systematic in your evaluation
-- Consider both explicit and implicit skill matches
-- Provide specific, actionable feedback
-- Maintain consistent scoring standards
-- Consider the candidate's potential, not just exact matches
-- Be realistic but fair in assessment
-- Ensure all scores are between 0-100
-- Provide detailed reasoning for each score component
-- Focus on substance over exact keyword matching
-- Recognize equivalent technologies and skills
-`;
-  }
 
   /**
    * System-level instructions for extracting structured content from resume text.
@@ -701,7 +582,10 @@ ${items}
     candidateContent: Record<string, unknown>,
     companyName: string,
     jobPosition: string,
-    verifiedFacts?: Array<{ originalBulletPoint: string; userResponse: string }>,
+    verifiedFacts?: Array<{
+      originalBulletPoint: string;
+      userResponse: string;
+    }>,
   ): string {
     const technical = (jobAnalysis.technical as Record<string, unknown>) ?? {};
     const keywords = (jobAnalysis.keywords as Record<string, unknown>) ?? {};

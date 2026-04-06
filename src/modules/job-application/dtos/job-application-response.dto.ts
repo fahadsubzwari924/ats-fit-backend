@@ -4,60 +4,6 @@ import {
   ApplicationSource,
 } from '../../../database/entities/job-application.entity';
 
-export class JobApplicationAnalysisResponseDto {
-  @ApiProperty({
-    description: 'ATS score from the analysis',
-    example: 85.5,
-  })
-  ats_score: number;
-
-  @ApiProperty({
-    description: 'Detailed ATS analysis breakdown',
-  })
-  ats_analysis: {
-    technical_skills: number;
-    experience_alignment: number;
-    achievements: number;
-    soft_skills: number;
-    resume_quality: number;
-    overall_score: number;
-    confidence: number;
-    matched: {
-      hard_skills: string[];
-      soft_skills: string[];
-      qualifications: string[];
-    };
-    missing_keywords: string[];
-    recommendations: string[];
-  };
-
-  @ApiProperty({
-    description: 'ID of the ATS match history record',
-    example: 'uuid-string',
-  })
-  ats_match_history_id: string;
-
-  @ApiProperty({
-    description: 'Resume content that was analyzed',
-  })
-  resume_content: string;
-
-  @ApiProperty({
-    description: 'Suggested improvements for better ATS matching',
-  })
-  suggestions: string[];
-
-  @ApiProperty({
-    description: 'Skills that match the job requirements',
-  })
-  matched_skills: string[];
-
-  @ApiProperty({
-    description: 'Skills missing from the resume',
-  })
-  missing_skills: string[];
-}
-
 export class JobApplicationResponseDto {
   @ApiProperty({
     description: 'Unique identifier for the job application',
@@ -123,16 +69,6 @@ export class JobApplicationResponseDto {
     description: 'Date when application was submitted',
   })
   applied_at?: Date;
-
-  @ApiPropertyOptional({
-    description: 'ATS score',
-  })
-  ats_score?: number;
-
-  @ApiPropertyOptional({
-    description: 'ATS analysis data',
-  })
-  ats_analysis?: any;
 
   @ApiPropertyOptional({
     description: 'Cover letter content',
@@ -240,12 +176,6 @@ export class JobApplicationStatsResponseDto {
   applications_by_status: {
     [key in ApplicationStatus]: number;
   };
-
-  @ApiProperty({
-    description: 'Average ATS score',
-    example: 78.5,
-  })
-  average_ats_score: number;
 
   @ApiProperty({
     description: 'Response rate (percentage)',

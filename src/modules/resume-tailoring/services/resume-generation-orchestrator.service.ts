@@ -6,8 +6,6 @@ import { ResumeContentProcessorService } from './resume-content-processor.servic
 import { ResumeOptimizerService } from './resume-optimizer.service';
 import { PdfGenerationOrchestratorService } from './pdf-generation-orchestrator.service';
 import { ResumeValidationService } from './resume-validation.service';
-import { AtsEvaluationService } from '../../../shared/services/ats-evaluation.service';
-import { PromptService } from '../../../shared/services/prompt.service';
 import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
 import { ResumeQueueService } from './resume-queue.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
@@ -45,8 +43,6 @@ export class ResumeGenerationOrchestratorService {
     private readonly resumeContentProcessorService: ResumeContentProcessorService,
     private readonly resumeOptimizerService: ResumeOptimizerService,
     private readonly pdfGenerationOrchestratorService: PdfGenerationOrchestratorService,
-    private readonly atsEvaluationService: AtsEvaluationService,
-    private readonly promptService: PromptService,
     private readonly tailoredResumePdfStorageService: TailoredResumePdfStorageService,
     private readonly resumeQueueService: ResumeQueueService,
     @InjectRepository(ResumeGeneration)
@@ -203,8 +199,15 @@ export class ResumeGenerationOrchestratorService {
         .addChangesDiffJob({
           resumeGenerationId: savedGeneration.id,
           userId: input.userContext.userId || '',
-          originalContent: resumeContent.content as unknown as Record<string, unknown>,
-          optimizedContent: optimizationResult.optimizedContent as unknown as Record<string, unknown>,
+          originalContent: resumeContent.content as unknown as Record<
+            string,
+            unknown
+          >,
+          optimizedContent:
+            optimizationResult.optimizedContent as unknown as Record<
+              string,
+              unknown
+            >,
           jobAnalysisKeywords: {
             mandatorySkills: jobAnalysis.technical.mandatorySkills,
             primaryKeywords: jobAnalysis.keywords.primary,
@@ -217,46 +220,12 @@ export class ResumeGenerationOrchestratorService {
           );
         });
 
-      // Step 5b: Fire ATS evaluation in background — do NOT await, PDF is already ready
-      const atsEvaluationStart = Date.now();
-
-      const resumeTextForAts = this.convertOptimizedContentToText(
-        optimizationResult.optimizedContent,
-      );
-
-      void this.atsEvaluationService
-        .performAtsEvaluation(
-          input.jobDescription,
-          resumeTextForAts,
-          this.promptService,
-          {
-            userId: input.userContext.userId,
-            guestId: input.userContext.guestId,
-          },
-          {
-            companyName: input.companyName,
-            resumeContent: resumeTextForAts,
-          },
-        )
-        .then((result) => {
-          this.logger.log(
-            `[Background] ATS evaluation completed in ${Date.now() - atsEvaluationStart}ms. ` +
-              `Score: ${result.evaluation.overallScore}%, History ID: ${result.atsMatchHistoryId}`,
-          );
-        })
-        .catch((error: unknown) => {
-          this.logger.warn(
-            '[Background] ATS evaluation failed — resume PDF already delivered to user',
-            error,
-          );
-        });
-
       const totalProcessingTime = Date.now() - startTime;
 
       this.logger.log(
         `Resume generation completed in ${totalProcessingTime}ms ` +
           `(Validation: ${validationTime}ms, Parallel: ${parallelOperationsTime}ms, ` +
-          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, Diff: background, ATS: background)`,
+          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, Diff: background)`,
       );
 
       // Build comprehensive result — ATS score available after background task completes
@@ -267,11 +236,6 @@ export class ResumeGenerationOrchestratorService {
 
         // Generation tracking
         resumeGenerationId: savedGeneration.id,
-
-        // ATS scores are computed in the background; 0 indicates "pending"
-        atsScore: 0,
-        atsConfidence: 0,
-        atsMatchHistoryId: 'pending',
 
         // Optimization metrics
         keywordsAdded: optimizationResult.optimizationMetrics.keywordsAdded,
@@ -289,7 +253,6 @@ export class ResumeGenerationOrchestratorService {
           optimizationTimeMs: optimizationTime,
           pdfGenerationTimeMs: pdfGenerationTime,
           dbSaveTimeMs: dbTime,
-          atsEvaluationTimeMs: 0, // ATS evaluation runs in background
           totalProcessingTimeMs: totalProcessingTime,
         },
         contentSource: resumeContent.source,
@@ -344,16 +307,6 @@ export class ResumeGenerationOrchestratorService {
         );
       }
 
-      // Handle ATS evaluation failures - should not block resume generation
-      if (error instanceof Error && error.message.includes('ATS evaluation')) {
-        this.logger.warn(
-          'ATS evaluation failed, but resume generation could continue',
-          error,
-        );
-        // For now, we'll treat it as a general error, but in future iterations
-        // we could potentially return the PDF without ATS score
-      }
-
       // Handle any unexpected errors
       throw new InternalServerErrorException(
         'Resume generation failed due to an internal error. Please try again or contact support if the issue persists.',
@@ -389,121 +342,6 @@ export class ResumeGenerationOrchestratorService {
         'Failed to save resume generation record. Please try again or contact support if the issue persists.',
         ERROR_CODES.INTERNAL_SERVER,
       );
-    }
-  }
-
-  /**
-   * Converts optimized TailoredContent structure to plain text for ATS evaluation
-   * @param content - Structured resume content
-   * @returns Plain text representation of the resume
-   */
-  private convertOptimizedContentToText(content: TailoredContent): string {
-    try {
-      const sections: string[] = [];
-
-      // Add contact info
-      if (content.contactInfo) {
-        const contact = content.contactInfo;
-        sections.push(`${contact.name || ''}`);
-        if (contact.email) sections.push(`Email: ${contact.email}`);
-        if (contact.phone) sections.push(`Phone: ${contact.phone}`);
-        if (contact.location) sections.push(`Location: ${contact.location}`);
-        if (contact.linkedin) sections.push(`LinkedIn: ${contact.linkedin}`);
-        if (contact.github) sections.push(`GitHub: ${contact.github}`);
-      }
-
-      // Add professional summary
-      if (content.summary) {
-        sections.push(`\nPROFESSIONAL SUMMARY\n${content.summary}`);
-      }
-
-      // Add skills
-      if (content.skills) {
-        const skills = content.skills;
-        const skillSections: string[] = [];
-
-        if (skills.languages?.length) {
-          skillSections.push(`Languages: ${skills.languages.join(', ')}`);
-        }
-        if (skills.frameworks?.length) {
-          skillSections.push(`Frameworks: ${skills.frameworks.join(', ')}`);
-        }
-        if (skills.tools?.length) {
-          skillSections.push(`Tools: ${skills.tools.join(', ')}`);
-        }
-        if (skills.databases?.length) {
-          skillSections.push(`Databases: ${skills.databases.join(', ')}`);
-        }
-        if (skills.concepts?.length) {
-          skillSections.push(`Concepts: ${skills.concepts.join(', ')}`);
-        }
-
-        if (skillSections.length > 0) {
-          sections.push(`\nSKILLS\n${skillSections.join('\n')}`);
-        }
-      }
-
-      // Add experience
-      if (content.experience?.length) {
-        sections.push('\nPROFESSIONAL EXPERIENCE');
-        for (const exp of content.experience) {
-          const expSection = [
-            `${exp.position || ''} at ${exp.company || ''}`,
-            `${exp.duration || ''} | ${exp.location || ''}`,
-          ];
-
-          if (exp.responsibilities?.length) {
-            expSection.push('Responsibilities:');
-            expSection.push(
-              ...exp.responsibilities.map((r: string) => `• ${r}`),
-            );
-          }
-
-          if (exp.achievements?.length) {
-            expSection.push('Achievements:');
-            expSection.push(...exp.achievements.map((a: string) => `• ${a}`));
-          }
-
-          sections.push(expSection.join('\n'));
-        }
-      }
-
-      // Add education
-      if (content.education?.length) {
-        sections.push('\nEDUCATION');
-        for (const edu of content.education) {
-          sections.push(
-            `${edu.degree || ''} in ${edu.major || ''}\n${edu.institution || ''}\n${edu.startDate || ''} - ${edu.endDate || ''}`,
-          );
-        }
-      }
-
-      // Add certifications
-      if (content.certifications?.length) {
-        sections.push('\nCERTIFICATIONS');
-        for (const cert of content.certifications) {
-          sections.push(
-            `${cert.name || ''} - ${cert.issuer || ''} (${cert.date || ''})`,
-          );
-        }
-      }
-
-      // Add additional sections
-      if (content.additionalSections?.length) {
-        for (const additionalSection of content.additionalSections) {
-          sections.push(
-            `\n${additionalSection.title?.toUpperCase() || 'ADDITIONAL'}\n${
-              additionalSection.items?.join('\n• ') || ''
-            }`,
-          );
-        }
-      }
-
-      return sections.join('\n\n');
-    } catch (error) {
-      this.logger.error('Failed to convert optimized content to text', error);
-      // Fallback to JSON string representation
-      return JSON.stringify(content, null, 2);
     }
   }
 }

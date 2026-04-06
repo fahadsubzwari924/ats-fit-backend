@@ -1,12 +1,9 @@
 import { Module, Global } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { BaseMapperService } from './services/base-mapper.service';
 import { ResponseModule } from './modules/response/response.module';
 import { PromptService } from './services/prompt.service';
-import { AtsEvaluationService } from './services/ats-evaluation.service';
 import { DatabaseModule } from '../database/database.module';
 import { ExternalModule } from './modules/external/external.module';
-import { AtsMatchHistory } from '../database/entities/ats-match-history.entity';
 import { UserContextTransformationService } from './services/user-context-transformation.service';
 import { GenericUserContextTransformer } from './transformers/generic-user-context.transformer';
 import { CacheService } from './services/cache.service';
@@ -24,17 +21,10 @@ import { TEMPLATE_RENDERER_TOKEN } from './interfaces/template-renderer.interfac
 
 @Global()
 @Module({
-  imports: [
-    ResponseModule,
-    DatabaseModule,
-    ExternalModule,
-    ValidationModule,
-    TypeOrmModule.forFeature([AtsMatchHistory]),
-  ],
+  imports: [ResponseModule, DatabaseModule, ExternalModule, ValidationModule],
   providers: [
     BaseMapperService,
     PromptService,
-    AtsEvaluationService,
     UserContextTransformationService,
     GenericUserContextTransformer,
     CacheService,
@@ -71,7 +61,6 @@ import { TEMPLATE_RENDERER_TOKEN } from './interfaces/template-renderer.interfac
   exports: [
     BaseMapperService,
     PromptService,
-    AtsEvaluationService,
     ExternalModule,
     ValidationModule,
     UserContextTransformationService,
