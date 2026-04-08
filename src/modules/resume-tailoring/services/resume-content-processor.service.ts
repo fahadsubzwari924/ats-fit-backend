@@ -63,12 +63,6 @@ export class ResumeContentProcessorService {
         `Processing resume content for ${userContext.userType} user${userContext.userId ? ` (ID: ${userContext.userId})` : ''}`,
       );
 
-      // For guest users, always require file upload
-      if (userContext.userType === 'guest') {
-        return await this.processGuestResumeContent(userContext, resumeFile);
-      }
-
-      // For registered users, use smart selection logic
       return await this.processRegisteredUserResumeContent(
         userContext,
         resumeFile,
@@ -87,57 +81,6 @@ export class ResumeContentProcessorService {
 
       throw new InternalServerErrorException(
         'Failed to process resume content',
-        ERROR_CODES.INTERNAL_SERVER,
-      );
-    }
-  }
-
-  /**
-   * Process resume content for guest users (always from file upload)
-   */
-  private async processGuestResumeContent(
-    userContext: UserContext,
-    resumeFile?: Express.Multer.File,
-  ): Promise<ResumeContentResult> {
-    const startTime = Date.now();
-
-    if (!resumeFile) {
-      throw new BadRequestException(
-        'Resume file is required for guest users',
-        ERROR_CODES.BAD_REQUEST,
-      );
-    }
-
-    this.validateResumeFile(resumeFile);
-
-    try {
-      // Extract text from PDF
-      const resumeText = await this.extractTextFromFile(resumeFile);
-
-      // Use AI to extract structured content
-      const structuredContent =
-        await this.aiContentService.extractResumeContent(resumeText);
-
-      const processingTime = Date.now() - startTime;
-
-      this.logger.log(
-        `Guest resume processed in ${processingTime}ms from file upload`,
-      );
-
-      return {
-        content: structuredContent,
-        source: 'file_upload',
-        originalText: resumeText,
-        tailoringMode: 'standard',
-        metadata: {
-          extractionMethod: 'ai_extraction_from_file',
-          processingTime: processingTime,
-          fileSize: resumeFile.size,
-        },
-      };
-    } catch {
-      throw new InternalServerErrorException(
-        'Failed to extract content from resume file',
         ERROR_CODES.INTERNAL_SERVER,
       );
     }
@@ -437,23 +380,11 @@ export class ResumeContentProcessorService {
    */
   private convertToResumeSelectionUserContext(userContext: UserContext): {
     userId?: string;
-    guestId?: string;
     userType: UserType;
     plan?: UserPlan;
   } {
-    // Map our userType to the database UserType and UserPlan
-    if (userContext.userType === 'guest') {
-      return {
-        userId: userContext.userId,
-        guestId: userContext.guestId,
-        userType: UserType.GUEST,
-      };
-    }
-
-    // For freemium and premium users, they are registered users with different plans
     return {
       userId: userContext.userId,
-      guestId: userContext.guestId,
       userType: UserType.REGISTERED,
       plan:
         userContext.userType === 'freemium'

@@ -25,8 +25,7 @@ export interface ResumeValidationContext extends CommonValidationContext {
    */
   userContext: {
     userId?: string;
-    guestId?: string;
-    userType: 'guest' | 'freemium' | 'premium';
+    userType: 'freemium' | 'premium';
   };
 
   /**

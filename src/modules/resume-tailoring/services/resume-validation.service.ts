@@ -76,7 +76,7 @@ export class ResumeValidationService {
       userContext: input.userContext,
       user: {
         id: input.userContext.userId,
-        type: input.userContext.userType === 'guest' ? 'guest' : 'registered',
+        type: 'registered',
       },
       metadata: {
         source: 'resume-generation-v2',
@@ -107,10 +107,8 @@ export class ResumeValidationService {
 
     // Extract compatibility information from validation context
     const userContext = input.userContext;
-    const requiresFileUpload =
-      userContext.userType === 'guest' || !input.resumeId;
-    const hasExistingResumes =
-      userContext.userType !== 'guest' && !!input.resumeId;
+    const requiresFileUpload = !input.resumeId;
+    const hasExistingResumes = !!input.resumeId;
     const templateExists = !result.errors.some(
       (error) => error.includes('Template') && error.includes('not found'),
     );
@@ -149,7 +147,7 @@ export class ResumeValidationService {
       userContext: input.userContext,
       user: {
         id: input.userContext.userId,
-        type: input.userContext.userType === 'guest' ? 'guest' : 'registered',
+        type: 'registered',
       },
       metadata: {
         source: 'resume-generation-v2',

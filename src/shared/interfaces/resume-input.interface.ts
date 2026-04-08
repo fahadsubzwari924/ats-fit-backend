@@ -28,7 +28,6 @@ export interface ResumeInputData {
  */
 export interface AtsUserContext {
   userId?: string;
-  guestId?: string;
   userType: string;
   plan?: string;
   isPremium?: boolean;

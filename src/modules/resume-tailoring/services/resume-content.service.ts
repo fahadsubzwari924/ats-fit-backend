@@ -67,8 +67,8 @@ export class ResumeContentService implements IResumeContentProvider {
   /**
    * Check if user can use pre-processed resume feature
    */
-  canUsePreProcessedResume(userType: string): boolean {
-    return userType !== 'guest';
+  canUsePreProcessedResume(_userType: string): boolean {
+    return true;
   }
 
   /**

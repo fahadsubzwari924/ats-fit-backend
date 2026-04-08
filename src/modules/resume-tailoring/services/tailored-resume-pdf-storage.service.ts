@@ -103,7 +103,7 @@ export class TailoredResumePdfStorageService {
   }
 
   private sanitizeOwnerSegment(ownerId: string): string {
-    const trimmed = (ownerId || 'guest').trim() || 'guest';
+    const trimmed = (ownerId || 'unknown').trim() || 'unknown';
     return trimmed.replace(/[^a-zA-Z0-9_.\-:@]/g, '_').slice(0, 200);
   }
 

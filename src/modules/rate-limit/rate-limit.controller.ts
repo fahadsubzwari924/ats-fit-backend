@@ -8,9 +8,10 @@ import {
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { RateLimitService } from './rate-limit.service';
 import { UserService } from '../user/user.service';
-import { Public } from '../auth/decorators/public.decorator';
 import { Request as ExpressRequest } from 'express';
 import { UserContext } from '../auth/types/user-context.type';
+import { UnauthorizedException } from '../../shared/exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../../shared/constants/error-codes';
 
 @ApiTags('Rate Limits')
 @Controller('rate-limits')
@@ -23,8 +24,9 @@ export class RateLimitController {
   ) {}
 
   @Get('usage')
-  @Public()
-  @ApiOperation({ summary: 'Get current usage statistics' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current usage statistics (authenticated)' })
   @ApiResponse({
     status: 200,
     description: 'Usage statistics retrieved successfully',
@@ -50,17 +52,16 @@ export class RateLimitController {
     @Request() req: ExpressRequest & { user?: { userId?: string } },
   ) {
     try {
-      let userContext: UserContext;
-
-      // Check if user is authenticated
-      if (req?.user && typeof req?.user?.userId === 'string') {
-        userContext = await this.userService.getAuthenticatedUserContext(
-          req.user.userId,
+      const userId = req?.user?.userId;
+      if (typeof userId !== 'string') {
+        throw new UnauthorizedException(
+          'Authentication required',
+          ERROR_CODES.AUTH_REQUIRED,
         );
-      } else {
-        // Get guest user context
-        userContext = await this.userService.getOrCreateGuestUser(req);
       }
+
+      const userContext: UserContext =
+        await this.userService.getAuthenticatedUserContext(userId);
 
       const usageStats =
         await this.rateLimitService.getUserUsageStats(userContext);
@@ -89,7 +90,10 @@ export class RateLimitController {
   ) {
     const userId = req.user?.userId;
     if (typeof userId !== 'string') {
-      throw new Error('Invalid user ID');
+      throw new UnauthorizedException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
     }
     const userContext =
       await this.userService.getAuthenticatedUserContext(userId);

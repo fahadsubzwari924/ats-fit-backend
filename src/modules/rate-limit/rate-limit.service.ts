@@ -6,7 +6,6 @@ import {
   FeatureType,
 } from '../../database/entities/usage-tracking.entity';
 import { RateLimitConfig } from '../../database/entities/rate-limit-config.entity';
-import { IUserContext } from '../user/user.service';
 import { UserPlan, UserType } from '../../database/entities/user.entity';
 import { BadRequestException } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
@@ -129,7 +128,6 @@ export class RateLimitService {
       // Create new record
       usageRecord = this.usageTrackingRepository.create({
         user_id: userContext.userId,
-        guest_id: userContext.guestId,
         ip_address: userContext.ipAddress,
         feature_type: featureType,
         month: currentMonth,
@@ -229,17 +227,8 @@ export class RateLimitService {
       year,
     };
 
-    const identifierMap: [keyof IUserContext, string][] = [
-      ['userId', 'user_id'],
-      ['guestId', 'guest_id'],
-      ['ipAddress', 'ip_address'],
-    ];
-
-    for (const [contextKey, queryKey] of identifierMap) {
-      if (userContext[contextKey]) {
-        query[queryKey] = userContext[contextKey];
-        break;
-      }
+    if (userContext.userId) {
+      query.user_id = userContext.userId;
     }
 
     return query;
@@ -254,9 +243,7 @@ export class RateLimitService {
     month: number,
     year: number,
   ): string {
-    const identifier: string = String(
-      userContext.userId ?? userContext.guestId ?? userContext.ipAddress ?? '',
-    );
+    const identifier: string = String(userContext.userId ?? '');
     return `${identifier}:${featureType}:${month}:${year}`;
   }
 
@@ -301,22 +288,12 @@ export class RateLimitService {
    */
   async initializeRateLimitConfigs(): Promise<void> {
     const configs = [
-      // Freemium - Guest users
-      {
-        plan: UserPlan.FREEMIUM,
-        user_type: UserType.GUEST,
-        feature_type: FeatureType.RESUME_GENERATION,
-        monthly_limit: 2,
-        description: 'Freemium guest users can generate 2 resumes per month',
-      },
-      // Freemium - Registered users
       {
         plan: UserPlan.FREEMIUM,
         user_type: UserType.REGISTERED,
         feature_type: FeatureType.RESUME_GENERATION,
         monthly_limit: 5,
-        description:
-          'Freemium registered users can generate 5 resumes per month',
+        description: 'Freemium users can generate 5 resumes per month',
       },
       // Premium - Registered users (future use)
       {

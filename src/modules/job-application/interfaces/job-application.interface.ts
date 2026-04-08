@@ -12,7 +12,6 @@ export interface IJobApplicationMetadata {
 
 export interface ICreateJobApplication {
   user_id?: string;
-  guest_id?: string;
   company_name: string;
   job_position: string;
   job_description: string;
@@ -47,7 +46,6 @@ export interface IUpdateJobApplication {
 
 export interface IJobApplicationQuery {
   user_id?: string;
-  guest_id?: string;
   /** When `statuses` is non-empty, the service ignores `status` (multi-status wins). */
   status?: ApplicationStatus;
   statuses?: ApplicationStatus[];

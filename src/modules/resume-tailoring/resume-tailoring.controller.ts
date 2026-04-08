@@ -161,7 +161,6 @@ export class ResumeTailoringController {
    * - Reduced API calls through smart batching
    */
   @Post('generate')
-  @Public()
   @TransformUserContext()
   @RateLimitFeature(FeatureType.RESUME_GENERATION)
   @UseInterceptors(FileInterceptor('resumeFile'), ValidationLoggingInterceptor)

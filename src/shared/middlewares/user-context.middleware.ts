@@ -42,8 +42,7 @@ export class UserContextMiddleware implements NestMiddleware {
         );
       }
 
-      if (!userContext) {
-        userContext = await this.userService.getOrCreateGuestUser(req);
+      if (userContext) {
         userContext.ipAddress = req.ip;
         userContext.userAgent = req.headers['user-agent'] || '';
       }
@@ -70,14 +69,13 @@ export class UserContextMiddleware implements NestMiddleware {
    *
    * Separation of concerns:
    * - JWT verification errors (invalid signature, expired, malformed) are caught
-   *   here and result in null — the caller falls back to guest context.
+   *   here and result in null — unauthenticated requests have no userContext.
    * - Application errors (user not found, inactive account) are thrown so the
    *   outer handler can respond with the appropriate HTTP error.
    * - Session update is fire-and-forget; a DB hiccup must never block a valid
    *   authenticated request.
    *
-   * Returns null when the token cannot be verified, so the request is treated
-   * as an unauthenticated (guest) request rather than an error.
+   * Returns null when the token cannot be verified (unauthenticated request).
    */
   private async buildAuthenticatedContext(
     req: Request,
@@ -96,16 +94,14 @@ export class UserContextMiddleware implements NestMiddleware {
           : jwtError instanceof jwt.JsonWebTokenError
             ? 'invalid'
             : 'verification failed';
-      this.logger.warn(`JWT ${reason}, treating request as guest`, {
+      this.logger.warn(`JWT ${reason}, no user context`, {
         reason: (jwtError as Error).message,
       });
       return null;
     }
 
     if (!payload?.sub) {
-      this.logger.warn(
-        'JWT verified but missing sub claim, treating as guest user',
-      );
+      this.logger.warn('JWT verified but missing sub claim, no user context');
       return null;
     }
 

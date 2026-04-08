@@ -18,7 +18,6 @@ export interface ResumeSelectionOptions {
 
 export interface UserContext {
   userId?: string;
-  guestId?: string;
   userType: UserType;
   plan?: UserPlan;
 }
@@ -50,7 +49,7 @@ export class ResumeSelectionService {
    * Guest users cannot use this feature
    */
   canUsePreProcessedResume(userContext: UserContext): boolean {
-    return userContext.userType !== UserType.GUEST && !!userContext.userId;
+    return !!userContext.userId;
   }
 
   /**
@@ -59,8 +58,8 @@ export class ResumeSelectionService {
   private validateUserPermissions(userContext: UserContext): void {
     if (!this.canUsePreProcessedResume(userContext)) {
       throw new UnauthorizedException(
-        'Pre-processed resume selection is not available for guest users. Please upload a resume file.',
-        ERROR_CODES.FEATURE_NOT_AVAILABLE_FOR_GUEST_USERS,
+        'Pre-processed resume selection requires a signed-in user. Please upload a resume file.',
+        ERROR_CODES.AUTH_REQUIRED,
       );
     }
   }

@@ -4,6 +4,8 @@ import {
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
+import { UnauthorizedException } from '../exceptions/custom-http-exceptions';
+import { ERROR_CODES } from '../constants/error-codes';
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { TRANSFORM_USER_CONTEXT_KEY } from '../decorators/transform-user-context.decorator';
@@ -53,12 +55,17 @@ export class TransformUserContextInterceptor implements NestInterceptor {
     // Get the request object
     const request = context.switchToHttp().getRequest<RequestWithUserContext>();
 
-    // Transform the user context using the generic transformation
     try {
+      if (!request.userContext) {
+        throw new UnauthorizedException(
+          'Authentication required',
+          ERROR_CODES.AUTH_REQUIRED,
+        );
+      }
+
       const transformedContext =
         this.userContextTransformationService.transform(request.userContext);
 
-      // Update the request with transformed context
       Object.assign(request, { userContext: transformedContext });
     } catch (error) {
       // Log the error but don't break the request flow

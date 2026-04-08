@@ -40,9 +40,6 @@ export class JobApplication {
   @Column({ type: 'uuid', nullable: true })
   user_id: string;
 
-  @Column({ nullable: true })
-  guest_id: string;
-
   // Job Details
   @Column({ type: 'varchar', length: 200 })
   company_name: string;
