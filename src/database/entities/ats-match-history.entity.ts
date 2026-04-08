@@ -14,10 +14,7 @@ export class AtsMatchHistory {
   id: string;
 
   @Column({ nullable: true })
-  user_id: string; // Registered user
-
-  @Column({ nullable: true })
-  guest_id: string; // Guest user/session
+  user_id: string;
 
   @Column('text')
   resume_content: string;

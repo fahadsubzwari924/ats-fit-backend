@@ -21,7 +21,7 @@ export interface CommonValidationContext extends IValidationContext {
    */
   user?: {
     id?: string;
-    type: 'guest' | 'registered';
+    type: 'registered';
     plan?: 'freemium' | 'premium';
   };
 

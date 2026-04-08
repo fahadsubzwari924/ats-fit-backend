@@ -17,20 +17,16 @@ export enum FeatureType {
 
 @Entity({ name: 'usage_tracking' })
 @Index(['user_id', 'feature_type', 'month', 'year'])
-@Index(['guest_id', 'feature_type', 'month', 'year'])
 @Index(['ip_address', 'feature_type', 'month', 'year'])
 export class UsageTracking {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ nullable: true })
-  user_id: string; // For registered users
+  user_id: string;
 
   @Column({ nullable: true })
-  guest_id: string; // For guest users
-
-  @Column({ nullable: true })
-  ip_address: string; // For additional tracking
+  ip_address: string;
 
   @Column({
     type: 'enum',

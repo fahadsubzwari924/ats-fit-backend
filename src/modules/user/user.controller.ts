@@ -31,7 +31,7 @@ import { ResumeQueueService } from '../resume-tailoring/services/resume-queue.se
 import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
 import { ResumeProfileEnrichmentService } from '../resume-tailoring/services/resume-profile-enrichment.service';
 import { ResumeProfileStatusResponse } from '../resume-tailoring/interfaces/resume-profile-enrichment.interface';
-import { User, UserType } from '../../database/entities/user.entity';
+import { User } from '../../database/entities/user.entity';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { IFeatureUsage } from '../../shared/interfaces';
 import {
@@ -247,13 +247,10 @@ export class UserController {
       s3Url: resume.s3Url,
     };
 
-    // Trigger async processing for all registered (non-guest) users.
+    // Trigger async processing for authenticated users.
     // Profile question generation is a core onboarding step required on every plan;
     // gating it on isPremium would silently break onboarding for freemium users.
-    const isRegisteredUser =
-      request?.userContext?.userType === UserType.REGISTERED;
-
-    if (isRegisteredUser) {
+    if (userId) {
       this.logger.log(
         `Starting async resume processing for user ${userId}, file: ${resume.fileName}`,
       );

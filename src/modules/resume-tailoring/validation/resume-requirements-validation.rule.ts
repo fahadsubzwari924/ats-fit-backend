@@ -53,17 +53,7 @@ export class ResumeRequirementsValidationRule extends BaseValidationRule<ResumeV
       return this.createFailureResult(errors);
     }
 
-    // Guest users always require file upload
-    if (userContext.userType === 'guest') {
-      if (!resumeFile) {
-        errors.push('Resume file is required for guest users');
-      }
-      return errors.length > 0
-        ? this.createFailureResult(errors, warnings)
-        : this.createSuccessResult(warnings);
-    }
-
-    // For registered users, check existing resumes
+    // Check existing resumes for signed-in users
     const hasExistingResumes = await this.checkUserHasExistingResumes(
       userContext.userId,
     );
@@ -200,21 +190,11 @@ export class ResumeRequirementsValidationRule extends BaseValidationRule<ResumeV
    */
   private convertToResumeSelectionUserContext(userContext: UserContext): {
     userId?: string;
-    guestId?: string;
     userType: UserType;
     plan?: UserPlan;
   } {
-    if (userContext.userType === 'guest') {
-      return {
-        userId: userContext.userId,
-        guestId: userContext.guestId,
-        userType: UserType.GUEST,
-      };
-    }
-
     return {
       userId: userContext.userId,
-      guestId: userContext.guestId,
       userType: UserType.REGISTERED,
       plan:
         userContext.userType === 'freemium'

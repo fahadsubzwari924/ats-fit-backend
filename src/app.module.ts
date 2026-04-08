@@ -66,11 +66,11 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
   providers: [
     {
       provide: APP_GUARD,
-      useClass: RateLimitGuard,
+      useClass: JwtAuthGuard,
     },
     {
       provide: APP_GUARD,
-      useClass: JwtAuthGuard,
+      useClass: RateLimitGuard,
     },
     Reflector,
   ],

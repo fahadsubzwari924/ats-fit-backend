@@ -10,7 +10,10 @@ import { RateLimitService } from './rate-limit.service';
 import { FeatureType } from '../../database/entities/usage-tracking.entity';
 import { UserContext } from '../auth/types/user-context.type';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
-import { ForbiddenException } from '../../shared/exceptions/custom-http-exceptions';
+import {
+  ForbiddenException,
+  UnauthorizedException,
+} from '../../shared/exceptions/custom-http-exceptions';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
 
 export const RATE_LIMIT_FEATURE_KEY = 'rateLimitFeature';
@@ -55,6 +58,13 @@ export class RateLimitGuard implements CanActivate {
     feature: FeatureType,
     request: RequestWithUserContext,
   ): Promise<void> {
+    if (!userContext?.userId) {
+      throw new UnauthorizedException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+
     const rateLimitResult = await this.rateLimitService.checkRateLimit(
       userContext,
       feature,

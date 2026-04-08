@@ -5,7 +5,6 @@ import { IResumeContentProvider } from '../../shared/interfaces/resume-content-p
 import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-provider.token';
 import { Inject } from '@nestjs/common';
 import { BadRequestException } from '../../shared/exceptions/custom-http-exceptions';
-import { UserType } from '../../database/entities/user.entity';
 
 @Controller('ats-match')
 export class AtsMatchController {
@@ -29,18 +28,6 @@ export class AtsMatchController {
       throw new BadRequestException(
         'Authentication required to view available resumes',
         ERROR_CODES.AUTHENTICATION_REQUIRED,
-      );
-    }
-
-    // Check if user can use pre-processed resume feature
-    if (
-      !this.resumeContentService.canUsePreProcessedResume(
-        userContext.userType as UserType,
-      )
-    ) {
-      throw new BadRequestException(
-        'Pre-processed resume feature is not available for your user type',
-        ERROR_CODES.FEATURE_NOT_AVAILABLE_FOR_GUEST_USERS,
       );
     }
 

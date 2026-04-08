@@ -16,7 +16,6 @@ export enum UserPlan {
 }
 
 export enum UserType {
-  GUEST = 'guest',
   REGISTERED = 'registered',
 }
 
@@ -62,9 +61,6 @@ export class User {
 
   @Column({ type: 'jsonb', nullable: true })
   oauth_provider_data: Record<string, any>;
-
-  @Column({ nullable: true })
-  guest_id: string; // For tracking guest users
 
   @Column({ nullable: true })
   ip_address: string; // For rate limiting

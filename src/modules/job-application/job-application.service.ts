@@ -95,7 +95,6 @@ export class JobApplicationService {
       // Create job application entity
       const jobApplication = this.jobApplicationRepository.create({
         user_id: data.user_id,
-        guest_id: data.guest_id,
         company_name: data.company_name,
         job_position: data.job_position,
         job_description: data.job_description,
@@ -203,7 +202,7 @@ export class JobApplicationService {
    */
   async getJobApplicationById(
     id: string,
-    userContext: { userId?: string; guestId?: string },
+    userContext: { userId?: string },
     fields?: string[],
   ): Promise<IJobApplicationWithRelations> {
     try {
@@ -227,18 +226,12 @@ export class JobApplicationService {
         );
       }
 
-      // Add user/guest context filter
-      if (userContext.userId) {
-        queryBuilder.andWhere('jobApplication.user_id = :userId', {
-          userId: userContext.userId,
-        });
-      } else if (userContext.guestId) {
-        queryBuilder.andWhere('jobApplication.guest_id = :guestId', {
-          guestId: userContext.guestId,
-        });
-      } else {
+      if (!userContext.userId) {
         throw new ForbiddenException('Access denied', ERROR_CODES.FORBIDDEN);
       }
+      queryBuilder.andWhere('jobApplication.user_id = :userId', {
+        userId: userContext.userId,
+      });
 
       const application = await queryBuilder.getOne();
 
@@ -282,7 +275,7 @@ export class JobApplicationService {
   async updateJobApplication(
     id: string,
     data: IUpdateJobApplication,
-    userContext: { userId?: string; guestId?: string },
+    userContext: { userId?: string },
   ): Promise<JobApplication> {
     try {
       this.logger.log(`Updating job application with ID: ${id}`);
@@ -327,7 +320,7 @@ export class JobApplicationService {
    */
   async deleteJobApplication(
     id: string,
-    userContext: { userId?: string; guestId?: string },
+    userContext: { userId?: string },
   ): Promise<void> {
     try {
       this.logger.log(`Deleting job application with ID: ${id}`);
@@ -358,7 +351,6 @@ export class JobApplicationService {
    */
   async getJobApplicationStats(userContext: {
     userId?: string;
-    guestId?: string;
   }): Promise<IJobApplicationStats> {
     try {
       this.logger.log('Generating job application statistics');
@@ -367,14 +359,9 @@ export class JobApplicationService {
         .createQueryBuilder('ja')
         .where('1 = 1');
 
-      // Add user/guest context filter
       if (userContext.userId) {
         queryBuilder.andWhere('ja.user_id = :userId', {
           userId: userContext.userId,
-        });
-      } else if (userContext.guestId) {
-        queryBuilder.andWhere('ja.guest_id = :guestId', {
-          guestId: userContext.guestId,
         });
       }
 
@@ -405,16 +392,18 @@ export class JobApplicationService {
   private async validateCreateJobApplicationRequest(
     payload: ICreateJobApplication,
   ): Promise<void> {
-    if (payload.user_id) {
-      const user = await this.userRepository.findOne({
-        where: { id: payload.user_id },
-      });
-      if (!user) {
-        throw new NotFoundException(
-          'User not found',
-          ERROR_CODES.USER_NOT_FOUND,
-        );
-      }
+    if (!payload.user_id) {
+      throw new BadRequestException(
+        'User ID is required',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id: payload.user_id },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
     }
 
     // Validate resume generation exists if provided
@@ -444,14 +433,9 @@ export class JobApplicationService {
         'resume_generation',
       );
 
-    // Add user/guest context filter
     if (query.user_id) {
       queryBuilder.where('jobApplication.user_id = :userId', {
         userId: query.user_id,
-      });
-    } else if (query.guest_id) {
-      queryBuilder.where('jobApplication.guest_id = :guestId', {
-        guestId: query.guest_id,
       });
     }
 

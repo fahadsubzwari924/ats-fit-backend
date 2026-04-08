@@ -26,7 +26,6 @@ export const JOB_APPLICATION_FIELD_CONFIG: FieldSelectionConfig = {
     'created_at',
     'updated_at',
     'user_id',
-    'guest_id',
   ],
   defaultFields: [
     'id',

@@ -1,6 +1,5 @@
 export type UserContext = {
   userId?: string;
-  guestId?: string;
   userType: string;
   plan?: string;
   isPremium?: boolean;

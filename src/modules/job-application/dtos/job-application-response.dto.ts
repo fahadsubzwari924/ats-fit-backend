@@ -124,11 +124,6 @@ export class JobApplicationResponseDto {
     description: 'User ID (for registered users)',
   })
   user_id?: string;
-
-  @ApiPropertyOptional({
-    description: 'Guest ID (for guest users)',
-  })
-  guest_id?: string;
 }
 
 export class JobApplicationListResponseDto {

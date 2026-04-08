@@ -159,12 +159,11 @@ export class ResumeGenerationOrchestratorService {
       const pdfS3Key =
         await this.tailoredResumePdfStorageService.uploadGeneratedPdf(
           pdfBuffer,
-          input.userContext.userId || input.userContext.guestId || 'guest',
+          input.userContext.userId,
         );
 
       const savedGeneration = await this.saveResumeGenerationRecord({
         user_id: input.userContext.userId,
-        guest_id: input.userContext.guestId,
         file_path:
           input.resumeFile?.originalname ||
           `resume-${input.resumeId || 'processed'}`,
@@ -332,7 +331,6 @@ export class ResumeGenerationOrchestratorService {
         error: errorMessage,
         payload: {
           user_id: payload.user_id,
-          guest_id: payload.guest_id,
           template_id: payload.template_id,
           company_name: payload.company_name,
         },

@@ -56,7 +56,6 @@ export class JobApplicationController {
     const jobApplication =
       await this.jobApplicationService.createJobApplication({
         user_id: userContext?.userId,
-        guest_id: userContext?.guestId,
         company_name: dto.company_name,
         job_position: dto.job_position,
         job_description: dto.job_description,
@@ -98,7 +97,6 @@ export class JobApplicationController {
     const { applications, total } =
       await this.jobApplicationService.getJobApplications({
         user_id: userContext?.userId,
-        guest_id: userContext?.guestId,
         status: query.status,
         statuses: query.statuses,
         company_name: query.company_name,
@@ -135,7 +133,6 @@ export class JobApplicationController {
     const userContext = request?.userContext;
     const stats = await this.jobApplicationService.getJobApplicationStats({
       userId: userContext?.userId,
-      guestId: userContext?.guestId,
     });
 
     // Field selection could be applied to stats as well if needed
@@ -176,7 +173,6 @@ export class JobApplicationController {
       id,
       {
         userId: userContext?.userId,
-        guestId: userContext?.guestId,
       },
       fields,
     );
@@ -232,7 +228,6 @@ export class JobApplicationController {
       },
       {
         userId: userContext?.userId,
-        guestId: userContext?.guestId,
       },
     );
 
@@ -267,7 +262,6 @@ export class JobApplicationController {
     const userContext = request?.userContext;
     await this.jobApplicationService.deleteJobApplication(id, {
       userId: userContext?.userId,
-      guestId: userContext?.guestId,
     });
   }
 
@@ -299,7 +293,6 @@ export class JobApplicationController {
       created_at: application.created_at,
       updated_at: application.updated_at,
       user_id: application.user_id,
-      guest_id: application.guest_id,
     };
   }
 }

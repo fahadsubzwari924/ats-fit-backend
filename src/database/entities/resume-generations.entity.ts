@@ -16,9 +16,6 @@ export class ResumeGeneration {
   @Column({ nullable: true })
   user_id: string;
 
-  @Column({ nullable: true })
-  guest_id: string;
-
   @Column()
   file_path: string;
 

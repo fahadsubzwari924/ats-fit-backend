@@ -25,7 +25,6 @@ import { User } from './user.entity';
  */
 @Entity('resume_generation_results')
 @Index(['userId'])
-@Index(['guestId'])
 @Index(['queueMessageId'])
 @Index(['expiresAt'])
 @Index(['userId', 'createdAt'])
@@ -47,9 +46,6 @@ export class ResumeGenerationResult {
   @ManyToOne(() => User, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: User;
-
-  @Column({ type: 'varchar', length: 255, nullable: true, name: 'guest_id' })
-  guestId: string;
 
   // PDF Storage
   @Column({ type: 'text', nullable: true, name: 'pdf_content' })
