@@ -43,6 +43,7 @@ import { RequestWithUserContext } from '../../shared/interfaces/request-user.int
 import { TransformUserContext } from '../../shared/decorators/transform-user-context.decorator';
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { BULK_TAILORING_MAX_RESUMES } from '../../shared/constants/resume-tailoring.constants';
 
 @ApiTags('Resume Tailoring')
 @Controller('resume-tailoring')
@@ -307,7 +308,7 @@ export class ResumeTailoringController {
   @Post('batch-generate')
   @HttpCode(HttpStatus.OK)
   @TransformUserContext()
-  @RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)
+  // @RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)
   async batchGenerateTailoredResumes(
     @Body() dto: BatchGenerateDto,
     @Req() request: RequestWithUserContext,
@@ -317,6 +318,13 @@ export class ResumeTailoringController {
       throw new BadRequestException(
         'Authentication required',
         ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+
+    if (dto.jobs.length > BULK_TAILORING_MAX_RESUMES) {
+      throw new BadRequestException(
+        `Maximum ${BULK_TAILORING_MAX_RESUMES} resumes allowed per batch request. Please reduce your selection and try again.`,
+        ERROR_CODES.BATCH_LIMIT_EXCEEDED,
       );
     }
 
