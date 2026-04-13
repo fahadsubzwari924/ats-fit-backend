@@ -26,6 +26,10 @@ Turn a **job description + candidate context** into a **downloadable tailored re
 - [ ] **AC-RTL-04:** Authenticated user can list generation history, fetch one generation, download PDF, and fetch diff for **their own** generations only.
 - [ ] **AC-RTL-05:** Cover letter endpoint accepts either `resumeGenerationId` or full job fields; enforced rate limit type `COVER_LETTER`.
 - [ ] **AC-RTL-06:** Batch endpoint processes jobs **sequentially** and returns per-job success/failure without failing the entire batch on one error.
+- [ ] **AC-RTL-07:** Batch endpoint rejects requests with more than **3 jobs** with `400 Bad Request` and descriptive error message.
+- [ ] **AC-RTL-08:** The diff endpoint (`GET /resume-tailoring/diff/:generationId`) is shared across single and batch generation — any `resumeGenerationId` from either flow can be passed.
+- [ ] **AC-RTL-09:** The frontend exposes a full AI change-comparison view ("See what changed") for **both** single and batch tailored resumes, using the same `ResumeComparisonComponent`.
+- [ ] **AC-RTL-10:** Resume history detail panel exposes a "See full changes" button that opens the full `ResumeComparisonComponent` in-place (no page navigation), consistent with the post-generation flow.
 
 ## Templates
 
@@ -43,7 +47,7 @@ Turn a **job description + candidate context** into a **downloadable tailored re
 - **`GET /resume-tailoring/history`** — Authenticated; optional pagination query params (`page`, `limit`, `search`, `sortOrder`). Without `page`, returns non-paginated list with `limit`.
 - **`GET /resume-tailoring/history/:generationId`** — Single generation detail for the current user.
 - **`GET /resume-tailoring/download/:generationId`** — PDF download for owned generation.
-- **`GET /resume-tailoring/diff/:generationId`** — JSON `{ changesDiff }` for AI-produced before/after diff (authenticated, owner).
+- **`GET /resume-tailoring/diff/:generationId`** — JSON `{ changesDiff }` for AI-produced before/after diff (authenticated, owner). Shared by single and batch flows — any generation id works.
 
 ## Cover letter
 
@@ -54,7 +58,9 @@ Turn a **job description + candidate context** into a **downloadable tailored re
 
 - **`POST /resume-tailoring/batch-generate`** — Authenticated; rate limit `FeatureType.RESUME_BATCH_GENERATION` (premium-oriented).
 - **Body:** shared `templateId` / `resumeId`, array `jobs` with per-job description fields.
+- **Constraint:** Maximum **3 jobs** per batch request (hard limit; requests exceeding this return `400 Bad Request`).
 - **Behavior:** Processes jobs **sequentially** in one request; each item succeeds or fails independently; response includes `batchId`, `results[]`, and `summary` (counts, timing).
+- **Processing time:** Generating **3 resumes** takes approximately **2 minutes**.
 
 ## Orchestration (conceptual)
 

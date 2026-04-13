@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddBatchGenerateFeatureType1762793060000
-  implements MigrationInterface
-{
+export class AddBatchGenerateFeatureType1762793060000 implements MigrationInterface {
   name = 'AddBatchGenerateFeatureType1762793060000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -37,7 +35,7 @@ export class AddBatchGenerateFeatureType1762793060000
     // Premium registered: 5 batches/month
     await queryRunner.query(
       `INSERT INTO "rate_limit_configs" ("plan", "user_type", "feature_type", "monthly_limit", "is_active", "description")
-       VALUES ('premium', 'registered', 'resume_batch_generation', 5, true, 'Batch resume generation for premium users (5 batches/month, up to 10 jobs each)')
+       VALUES ('premium', 'registered', 'resume_batch_generation', 5, true, 'Batch resume generation for premium users (5 batches/month, up to 3 jobs each)')
        ON CONFLICT ("plan", "user_type", "feature_type") DO NOTHING`,
     );
 

@@ -131,3 +131,8 @@ migration.log
 # Configuration files with sensitive data
 config/production.json
 config/secrets.json
+
+
+/vendor
+.claude/agents/ 
+.claude/skills/

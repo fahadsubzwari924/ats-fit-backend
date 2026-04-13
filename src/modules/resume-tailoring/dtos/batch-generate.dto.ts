@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { BULK_TAILORING_MAX_RESUMES } from '../../../shared/constants/resume-tailoring.constants';
 
 export class BatchJobItemDto {
   @ApiProperty({ example: 'Senior Frontend Engineer' })
@@ -31,11 +32,15 @@ export class BatchJobItemDto {
 }
 
 export class BatchGenerateDto {
-  @ApiProperty({ type: [BatchJobItemDto], minItems: 2, maxItems: 10 })
+  @ApiProperty({
+    type: [BatchJobItemDto],
+    minItems: 2,
+    maxItems: BULK_TAILORING_MAX_RESUMES,
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @ArrayMinSize(2)
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(BULK_TAILORING_MAX_RESUMES)
   @Type(() => BatchJobItemDto)
   jobs: BatchJobItemDto[];
 
