@@ -1,27 +1,31 @@
 # Freemium + Pro Pricing Model Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Dispatch each task using the Agency specialist agent below. Use `subagent_type: "engineering-backend-architect"` for all implementation tasks and `subagent_type: "testing-api-tester"` for test-only tasks. Follow the superpowers:subagent-driven-development skill for transport (fresh context, two-stage review, status handling).
 
 **Goal:** Replace the old three-plan seed data and misaligned rate limit configs with a clean Freemium + Pro two-tier pricing model, enforcing all per-plan limits in the backend.
 
-**Architecture:** All changes are confined to six existing files — no new files, no migrations. The `BillingCycle` enum loses `WEEKLY`, seed data is rewritten with two Pro plans, the rate limit service gains full coverage for all gated features, the history service enforces a 30-day lookback for FREEMIUM users, and the batch route is gated behind `PremiumUserGuard`.
+**Architecture:** Two new files are introduced (`plan-limits.constants.ts` and `resume-history.model.ts`) alongside changes to six existing files. The `BillingCycle` enum loses `WEEKLY`, seed data is rewritten with two Pro plans, the rate limit service gains full coverage for all gated features, the history service enforces a configurable lookback for FREEMIUM users using a model class for mapping, and the batch route is gated behind `PremiumUserGuard`. No database migrations — pre-launch with no real subscribers.
 
 **Tech Stack:** NestJS, TypeORM, Jest, TypeScript
 
 **Design spec:** `docs/superpowers/specs/2026-04-13-freemium-pro-pricing-model-design.md`
 
+> **Commit policy:** Do NOT commit after individual tasks. All changes are staged and reviewed by the user at the end before any commit or push.
+
 ---
 
 ## File Map
 
-| File | Change |
-|------|--------|
-| `src/modules/subscription/enums/billing-cycle.enum.ts` | Remove `WEEKLY` |
-| `src/scripts/seed/seed-subscription-plans.ts` | Replace 3 old plans with Pro Monthly + Pro Annual |
-| `src/scripts/seed/seed-subscription-plans-service.ts` | Same replacement |
-| `src/modules/rate-limit/rate-limit.service.ts` | Rewrite `initializeRateLimitConfigs()`; expand `getUserUsageStats()` and `getFormattedFeatureUsage()` |
-| `src/modules/resume-tailoring/services/resume.service.ts` | Add `plan` param + 30-day filter to both history methods |
-| `src/modules/resume-tailoring/resume-tailoring.controller.ts` | Pass `plan` to history calls; add `PremiumUserGuard` + uncomment `@RateLimitFeature` on batch route |
+| File | Create / Modify |
+|------|----------------|
+| `src/shared/constants/plan-limits.constants.ts` | **Create** — configurable plan limit values |
+| `src/modules/resume-tailoring/models/resume-history.model.ts` | **Create** — `ResumeHistoryItem`, `ResumeHistoryDetail`, `PaginatedResumeHistory` |
+| `src/modules/subscription/enums/billing-cycle.enum.ts` | Modify — remove `WEEKLY` |
+| `src/scripts/seed/seed-subscription-plans.ts` | Modify — replace 3 old plans with Pro Monthly + Pro Annual |
+| `src/scripts/seed/seed-subscription-plans-service.ts` | Modify — same replacement |
+| `src/modules/rate-limit/rate-limit.service.ts` | Modify — rewrite `initializeRateLimitConfigs()`; expand `getUserUsageStats()` and `getFormattedFeatureUsage()` using `FeatureType` enum values |
+| `src/modules/resume-tailoring/services/resume.service.ts` | Modify — use constant + model class in both history methods; remove old inline interfaces |
+| `src/modules/resume-tailoring/resume-tailoring.controller.ts` | Modify — pass `plan` to history calls; add `PremiumUserGuard` + uncomment `@RateLimitFeature` on batch route |
 
 ---
 
@@ -30,11 +34,11 @@
 **Files:**
 - Modify: `src/modules/subscription/enums/billing-cycle.enum.ts`
 
-No test needed — TypeScript compilation validates that no code references the removed value. Run the build after this step to catch any lingering references.
+No test needed — TypeScript compilation validates that no code references the removed value.
 
 - [ ] **Step 1: Remove `WEEKLY` from the enum**
 
-Replace the entire file content:
+Replace the entire file:
 
 ```typescript
 /**
@@ -51,7 +55,7 @@ export enum BillingCycle {
 - [ ] **Step 2: Verify no remaining references**
 
 ```bash
-grep -r "BillingCycle.WEEKLY\|billing_cycle.*weekly\|WEEKLY" src/ --include="*.ts"
+grep -r "BillingCycle.WEEKLY\|WEEKLY" src/ --include="*.ts"
 ```
 
 Expected: no output (zero matches).
@@ -64,13 +68,6 @@ npm run build
 
 Expected: build succeeds with no errors.
 
-- [ ] **Step 4: Commit**
-
-```bash
-git add src/modules/subscription/enums/billing-cycle.enum.ts
-git commit -m "chore: remove WEEKLY billing cycle — no plan uses it"
-```
-
 ---
 
 ## Task 2: Replace subscription plan seed data
@@ -79,7 +76,7 @@ git commit -m "chore: remove WEEKLY billing cycle — no plan uses it"
 - Modify: `src/scripts/seed/seed-subscription-plans.ts`
 - Modify: `src/scripts/seed/seed-subscription-plans-service.ts`
 
-Both files define the same plan array. Update both to the two Pro plans. Placeholder Lemon Squeezy variant IDs will be swapped before launch.
+Both files contain the same plan array. Both are replaced with the two Pro plans. Lemon Squeezy variant IDs are placeholder strings to be swapped before launch.
 
 - [ ] **Step 1: Rewrite `seed-subscription-plans.ts`**
 
@@ -175,6 +172,13 @@ async function seedSubscriptionPlans() {
     const app = await NestFactory.createApplicationContext(AppModule);
     const subscriptionPlanService = app.get(SubscriptionPlanService);
 
+    const existingPlans = await subscriptionPlanService.findAll();
+    if (existingPlans.length > 0) {
+      logger.log('Subscription plans already exist. Skipping seeding.');
+      await app.close();
+      return;
+    }
+
     const subscriptionPlans = [
       {
         plan_name: 'Pro Monthly',
@@ -217,13 +221,6 @@ async function seedSubscriptionPlans() {
       },
     ];
 
-    const existingPlans = await subscriptionPlanService.findAll();
-    if (existingPlans.length > 0) {
-      logger.log('Subscription plans already exist. Skipping seeding.');
-      await app.close();
-      return;
-    }
-
     for (const planData of subscriptionPlans) {
       await subscriptionPlanService.create(planData);
       logger.log(
@@ -242,19 +239,13 @@ async function seedSubscriptionPlans() {
 void seedSubscriptionPlans();
 ```
 
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/scripts/seed/seed-subscription-plans.ts src/scripts/seed/seed-subscription-plans-service.ts
-git commit -m "feat: replace old plan seeds with Pro Monthly and Pro Annual"
-```
-
 ---
 
 ## Task 3: Rewrite `initializeRateLimitConfigs()` with complete new config set
 
 **Files:**
-- Modify: `src/modules/rate-limit/rate-limit.service.ts` (only `initializeRateLimitConfigs` method, lines 289–329)
+- Modify: `src/modules/rate-limit/rate-limit.service.ts` — `initializeRateLimitConfigs` method only
+- Create: `src/modules/rate-limit/rate-limit.service.spec.ts`
 
 - [ ] **Step 1: Write a failing test**
 
@@ -264,17 +255,16 @@ Create `src/modules/rate-limit/rate-limit.service.spec.ts`:
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RateLimitService } from './rate-limit.service';
-import { UsageTracking } from '../../database/entities/usage-tracking.entity';
+import { UsageTracking, FeatureType } from '../../database/entities/usage-tracking.entity';
 import { RateLimitConfig } from '../../database/entities/rate-limit-config.entity';
 import { UserPlan, UserType } from '../../database/entities/user.entity';
-import { FeatureType } from '../../database/entities/usage-tracking.entity';
 
 describe('RateLimitService.initializeRateLimitConfigs', () => {
   let service: RateLimitService;
   let savedConfigs: any[];
 
   const mockRateLimitConfigRepo = {
-    findOne: jest.fn().mockResolvedValue(null), // nothing exists yet
+    findOne: jest.fn().mockResolvedValue(null),
     save: jest.fn().mockImplementation((config) => {
       savedConfigs.push(config);
       return Promise.resolve(config);
@@ -289,6 +279,8 @@ describe('RateLimitService.initializeRateLimitConfigs', () => {
 
   beforeEach(async () => {
     savedConfigs = [];
+    jest.clearAllMocks();
+    mockRateLimitConfigRepo.findOne.mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -381,7 +373,6 @@ describe('RateLimitService.initializeRateLimitConfigs', () => {
   it('skips saving a config that already exists', async () => {
     mockRateLimitConfigRepo.findOne.mockResolvedValueOnce({ id: 'exists' });
     await service.initializeRateLimitConfigs();
-    // Only 4 saved (first one skipped)
     expect(savedConfigs).toHaveLength(4);
   });
 });
@@ -393,20 +384,21 @@ describe('RateLimitService.initializeRateLimitConfigs', () => {
 npm test -- --testPathPattern="rate-limit.service.spec" --no-coverage
 ```
 
-Expected: FAIL — tests fail because the current method has wrong limits (5, 50, 25) and is missing COVER_LETTER configs.
+Expected: FAIL — current method has wrong limits (5, 50, 25) and is missing `COVER_LETTER` configs.
 
 - [ ] **Step 3: Rewrite `initializeRateLimitConfigs()` in `rate-limit.service.ts`**
 
-Replace lines 288–329 (the entire method):
+Replace the entire method (currently lines 288–329):
 
 ```typescript
   /**
    * Initialize rate limit configurations if they don't exist.
    * Freemium + Pro two-tier model:
-   *   Free:  3 resume generations, 1 cover letter per month
-   *   Pro:  30 resume generations, 15 cover letters, 10 batch generations per month
-   * Batch generation has no FREEMIUM config row — it is blocked at the route level
-   * by PremiumUserGuard before the rate limit guard ever runs.
+   *   Free: 3 resume generations, 1 cover letter per month
+   *   Pro:  30 resume generations, 15 cover letters, 10 batch generation runs per month
+   *
+   * No FREEMIUM batch generation row — batch is blocked at the route level
+   * by PremiumUserGuard before the rate limit guard runs.
    */
   async initializeRateLimitConfigs(): Promise<void> {
     const configs = [
@@ -472,38 +464,23 @@ npm test -- --testPathPattern="rate-limit.service.spec" --no-coverage
 
 Expected: all 8 tests PASS.
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/modules/rate-limit/rate-limit.service.ts src/modules/rate-limit/rate-limit.service.spec.ts
-git commit -m "feat: rewrite rate limit configs for Freemium + Pro model"
-```
-
 ---
 
-## Task 4: Expand `getUserUsageStats()` and `getFormattedFeatureUsage()` to cover all features
+## Task 4: Expand `getUserUsageStats()` and `getFormattedFeatureUsage()` — use `FeatureType` enum, no hardcoded strings
 
 **Files:**
-- Modify: `src/modules/rate-limit/rate-limit.service.ts`
+- Modify: `src/modules/rate-limit/rate-limit.service.ts` — two methods
+- Modify: `src/modules/rate-limit/rate-limit.service.spec.ts` — append new describe block
 
-Currently both methods only surface `resume_generation`. They need to include `cover_letter` for all users and `resume_batch_generation` for PREMIUM users only.
+Both methods currently only surface `resume_generation` as a hardcoded string. They are expanded to include `cover_letter` and (for PREMIUM) `resume_batch_generation`, using `FeatureType` enum values throughout — no bare string literals.
 
-- [ ] **Step 1: Write failing tests — add to `rate-limit.service.spec.ts`**
+- [ ] **Step 1: Write failing tests — append to `rate-limit.service.spec.ts`**
 
-Append this new `describe` block to the existing spec file:
+Add the following `describe` block at the bottom of the existing spec file:
 
 ```typescript
-describe('RateLimitService.getUserUsageStats', () => {
+describe('RateLimitService — getUserUsageStats and getFormattedFeatureUsage', () => {
   let service: RateLimitService;
-
-  const makeRateLimitResult = (limit: number) => ({
-    allowed: true,
-    currentUsage: 1,
-    limit,
-    remaining: limit - 1,
-    resetDate: new Date(),
-    usagePercentage: Math.round((1 / limit) * 100),
-  });
 
   const mockRateLimitConfigRepo = {
     findOne: jest.fn().mockImplementation(({ where }) => {
@@ -516,7 +493,9 @@ describe('RateLimitService.getUserUsageStats', () => {
       };
       const key = `${where.plan}:${where.feature_type}`;
       const limit = limits[key];
-      return Promise.resolve(limit ? { monthly_limit: limit, is_active: true } : null);
+      return Promise.resolve(
+        limit ? { monthly_limit: limit, is_active: true } : null,
+      );
     }),
     save: jest.fn(),
   };
@@ -528,6 +507,8 @@ describe('RateLimitService.getUserUsageStats', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RateLimitService,
@@ -546,8 +527,8 @@ describe('RateLimitService.getUserUsageStats', () => {
   });
 
   const freemiumContext = {
-    userId: 'user-1',
-    userType: 'registered',
+    userId: 'user-free',
+    userType: UserType.REGISTERED,
     plan: UserPlan.FREEMIUM,
     isPremium: false,
     ipAddress: '127.0.0.1',
@@ -556,19 +537,20 @@ describe('RateLimitService.getUserUsageStats', () => {
 
   const premiumContext = {
     ...freemiumContext,
+    userId: 'user-pro',
     plan: UserPlan.PREMIUM,
     isPremium: true,
   };
 
   describe('getUserUsageStats', () => {
-    it('returns resume_generation and cover_letter for FREEMIUM user', async () => {
+    it('returns resume_generation and cover_letter for FREEMIUM — no batch field', async () => {
       const stats = await service.getUserUsageStats(freemiumContext);
       expect(stats.resume_generation).toBeDefined();
       expect(stats.cover_letter).toBeDefined();
       expect(stats.resume_batch_generation).toBeUndefined();
     });
 
-    it('returns resume_generation, cover_letter and resume_batch_generation for PREMIUM user', async () => {
+    it('returns all three fields for PREMIUM', async () => {
       const stats = await service.getUserUsageStats(premiumContext);
       expect(stats.resume_generation).toBeDefined();
       expect(stats.cover_letter).toBeDefined();
@@ -590,22 +572,22 @@ describe('RateLimitService.getUserUsageStats', () => {
   });
 
   describe('getFormattedFeatureUsage', () => {
-    it('returns 2 entries for FREEMIUM user', async () => {
+    it('returns 2 entries for FREEMIUM — resume_generation and cover_letter', async () => {
       const result = await service.getFormattedFeatureUsage(freemiumContext);
       expect(result).toHaveLength(2);
       expect(result.map((r) => r.feature)).toEqual([
-        'resume_generation',
-        'cover_letter',
+        FeatureType.RESUME_GENERATION,
+        FeatureType.COVER_LETTER,
       ]);
     });
 
-    it('returns 3 entries for PREMIUM user', async () => {
+    it('returns 3 entries for PREMIUM — resume_generation, cover_letter, resume_batch_generation', async () => {
       const result = await service.getFormattedFeatureUsage(premiumContext);
       expect(result).toHaveLength(3);
       expect(result.map((r) => r.feature)).toEqual([
-        'resume_generation',
-        'cover_letter',
-        'resume_batch_generation',
+        FeatureType.RESUME_GENERATION,
+        FeatureType.COVER_LETTER,
+        FeatureType.RESUME_BATCH_GENERATION,
       ]);
     });
   });
@@ -618,11 +600,11 @@ describe('RateLimitService.getUserUsageStats', () => {
 npm test -- --testPathPattern="rate-limit.service.spec" --no-coverage
 ```
 
-Expected: FAIL — `getUserUsageStats` currently returns only `resume_generation`, and `getFormattedFeatureUsage` only has 1 entry.
+Expected: FAIL — `getUserUsageStats` currently returns only `resume_generation` and `getFormattedFeatureUsage` has 1 hardcoded string entry.
 
-- [ ] **Step 3: Update `getUserUsageStats()` in `rate-limit.service.ts`**
+- [ ] **Step 3: Replace `getUserUsageStats()` in `rate-limit.service.ts`**
 
-Replace the existing `getUserUsageStats` method (lines ~252–264):
+Replace the existing method (lines ~252–264):
 
 ```typescript
   /**
@@ -664,14 +646,15 @@ Replace the existing `getUserUsageStats` method (lines ~252–264):
   }
 ```
 
-- [ ] **Step 4: Update `getFormattedFeatureUsage()` in `rate-limit.service.ts`**
+- [ ] **Step 4: Replace `getFormattedFeatureUsage()` in `rate-limit.service.ts`**
 
-Replace the existing `getFormattedFeatureUsage` method (lines ~266–284):
+Replace the existing method (lines ~266–284):
 
 ```typescript
   /**
-   * Get formatted feature usage for API responses.
+   * Get formatted feature usage for the dashboard API (GET /users/feature-usage).
    * Returns 2 entries for FREEMIUM, 3 for PREMIUM.
+   * Feature keys use FeatureType enum values — no hardcoded strings.
    */
   async getFormattedFeatureUsage(
     userContext: UserContext,
@@ -680,7 +663,7 @@ Replace the existing `getFormattedFeatureUsage` method (lines ~266–284):
 
     const result: FormattedFeatureUsage[] = [
       {
-        feature: 'resume_generation',
+        feature: FeatureType.RESUME_GENERATION,
         allowed: stats.resume_generation.limit,
         remaining: stats.resume_generation.remaining,
         used: stats.resume_generation.currentUsage,
@@ -688,7 +671,7 @@ Replace the existing `getFormattedFeatureUsage` method (lines ~266–284):
         resetDate: stats.resume_generation.resetDate,
       },
       {
-        feature: 'cover_letter',
+        feature: FeatureType.COVER_LETTER,
         allowed: stats.cover_letter.limit,
         remaining: stats.cover_letter.remaining,
         used: stats.cover_letter.currentUsage,
@@ -699,7 +682,7 @@ Replace the existing `getFormattedFeatureUsage` method (lines ~266–284):
 
     if (stats.resume_batch_generation) {
       result.push({
-        feature: 'resume_batch_generation',
+        feature: FeatureType.RESUME_BATCH_GENERATION,
         allowed: stats.resume_batch_generation.limit,
         remaining: stats.resume_batch_generation.remaining,
         used: stats.resume_batch_generation.currentUsage,
@@ -720,22 +703,225 @@ npm test -- --testPathPattern="rate-limit.service.spec" --no-coverage
 
 Expected: all tests PASS.
 
-- [ ] **Step 6: Commit**
+---
+
+## Task 5: Create `plan-limits.constants.ts` — configurable plan limit values
+
+**Files:**
+- Create: `src/shared/constants/plan-limits.constants.ts`
+
+The 30-day history lookback is a business rule, not magic number. It lives in a constants file so it can be updated in one place and reused anywhere.
+
+- [ ] **Step 1: Create the constants file**
+
+Create `src/shared/constants/plan-limits.constants.ts`:
+
+```typescript
+/**
+ * Configurable plan-level feature limits.
+ *
+ * Centralised here so business rules can be updated in one place
+ * and reused across services without magic numbers in logic code.
+ */
+
+/**
+ * Number of days of generation history visible to Free plan users.
+ * Pro users see their full history with no date restriction.
+ */
+export const FREEMIUM_HISTORY_LOOKBACK_DAYS = 30;
+```
+
+- [ ] **Step 2: Verify the file is importable**
 
 ```bash
-git add src/modules/rate-limit/rate-limit.service.ts src/modules/rate-limit/rate-limit.service.spec.ts
-git commit -m "feat: expand usage stats and dashboard to cover all plan features"
+npm run build
 ```
+
+Expected: build succeeds with no errors.
 
 ---
 
-## Task 5: Enforce 30-day history lookback for FREEMIUM users
+## Task 6: Create `ResumeHistoryItem` and `ResumeHistoryDetail` model classes
+
+**Files:**
+- Create: `src/modules/resume-tailoring/models/resume-history.model.ts`
+
+Currently `ResumeHistoryItem` and `ResumeHistoryDetail` are plain interfaces exported from `resume.service.ts` with inline field mapping scattered in every query method. A dedicated model class centralises the mapping and makes the query methods read cleanly: `records.map((r) => new ResumeHistoryItem(r))`.
+
+- [ ] **Step 1: Write a failing test**
+
+Create `src/modules/resume-tailoring/models/resume-history.model.spec.ts`:
+
+```typescript
+import { ResumeHistoryItem, ResumeHistoryDetail } from './resume-history.model';
+import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
+
+const makeEntity = (overrides: Partial<ResumeGeneration> = {}): ResumeGeneration =>
+  ({
+    id: 'gen-uuid',
+    company_name: 'Acme Corp',
+    job_position: 'Senior Engineer',
+    optimization_confidence: 87.5,
+    keywords_added: 6,
+    sections_optimized: 4,
+    achievements_quantified: 3,
+    template_id: 'tpl-modern',
+    created_at: new Date('2026-04-01T10:00:00Z'),
+    pdf_s3_key: 'pdfs/gen-uuid.pdf',
+    changes_diff: { added: ['TypeScript'], removed: [] },
+    ...overrides,
+  } as ResumeGeneration);
+
+describe('ResumeHistoryItem', () => {
+  it('maps entity fields to camelCase properties', () => {
+    const item = new ResumeHistoryItem(makeEntity());
+    expect(item.id).toBe('gen-uuid');
+    expect(item.companyName).toBe('Acme Corp');
+    expect(item.jobPosition).toBe('Senior Engineer');
+    expect(item.optimizationConfidence).toBe(87.5);
+    expect(item.keywordsAdded).toBe(6);
+    expect(item.sectionsOptimized).toBe(4);
+    expect(item.templateId).toBe('tpl-modern');
+    expect(item.createdAt).toEqual(new Date('2026-04-01T10:00:00Z'));
+  });
+
+  it('sets canDownload to true when pdf_s3_key is present', () => {
+    const item = new ResumeHistoryItem(makeEntity({ pdf_s3_key: 'some/key' }));
+    expect(item.canDownload).toBe(true);
+  });
+
+  it('sets canDownload to false when pdf_s3_key is absent', () => {
+    const item = new ResumeHistoryItem(makeEntity({ pdf_s3_key: null }));
+    expect(item.canDownload).toBe(false);
+  });
+
+  it('sets nullable fields to null when absent on entity', () => {
+    const item = new ResumeHistoryItem(
+      makeEntity({
+        optimization_confidence: null,
+        keywords_added: null,
+        sections_optimized: null,
+        template_id: null,
+      }),
+    );
+    expect(item.optimizationConfidence).toBeNull();
+    expect(item.keywordsAdded).toBeNull();
+    expect(item.sectionsOptimized).toBeNull();
+    expect(item.templateId).toBeNull();
+  });
+});
+
+describe('ResumeHistoryDetail', () => {
+  it('includes all ResumeHistoryItem fields plus achievementsQuantified and changesDiff', () => {
+    const detail = new ResumeHistoryDetail(makeEntity());
+    expect(detail.id).toBe('gen-uuid');
+    expect(detail.companyName).toBe('Acme Corp');
+    expect(detail.achievementsQuantified).toBe(3);
+    expect(detail.changesDiff).toEqual({ added: ['TypeScript'], removed: [] });
+  });
+
+  it('sets achievementsQuantified to null when absent', () => {
+    const detail = new ResumeHistoryDetail(
+      makeEntity({ achievements_quantified: null }),
+    );
+    expect(detail.achievementsQuantified).toBeNull();
+  });
+
+  it('sets changesDiff to null when absent', () => {
+    const detail = new ResumeHistoryDetail(
+      makeEntity({ changes_diff: null }),
+    );
+    expect(detail.changesDiff).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+```bash
+npm test -- --testPathPattern="resume-history.model.spec" --no-coverage
+```
+
+Expected: FAIL — module does not exist yet.
+
+- [ ] **Step 3: Create `src/modules/resume-tailoring/models/resume-history.model.ts`**
+
+```typescript
+import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
+
+/**
+ * API-facing model for a single resume generation history entry.
+ * Maps snake_case entity fields to camelCase and centralises
+ * any presentation logic (e.g. canDownload derived from pdf_s3_key).
+ */
+export class ResumeHistoryItem {
+  id: string;
+  companyName: string;
+  jobPosition: string;
+  optimizationConfidence: number | null;
+  keywordsAdded: number | null;
+  sectionsOptimized: number | null;
+  templateId: string | null;
+  createdAt: Date;
+  /** True when a PDF is stored in S3 and download-by-id will succeed. */
+  canDownload: boolean;
+
+  constructor(entity: ResumeGeneration) {
+    this.id = entity.id;
+    this.companyName = entity.company_name;
+    this.jobPosition = entity.job_position;
+    this.optimizationConfidence = entity.optimization_confidence ?? null;
+    this.keywordsAdded = entity.keywords_added ?? null;
+    this.sectionsOptimized = entity.sections_optimized ?? null;
+    this.templateId = entity.template_id ?? null;
+    this.createdAt = entity.created_at;
+    this.canDownload = Boolean(entity.pdf_s3_key);
+  }
+}
+
+/**
+ * Extended model returned by the single-generation detail endpoint.
+ * Includes the full AI diff and achievements count on top of the list fields.
+ */
+export class ResumeHistoryDetail extends ResumeHistoryItem {
+  achievementsQuantified: number | null;
+  changesDiff: any;
+
+  constructor(entity: ResumeGeneration) {
+    super(entity);
+    this.achievementsQuantified = entity.achievements_quantified ?? null;
+    this.changesDiff = entity.changes_diff ?? null;
+  }
+}
+
+/**
+ * Paginated wrapper returned by the paginated history endpoint.
+ */
+export interface PaginatedResumeHistory {
+  items: ResumeHistoryItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+```bash
+npm test -- --testPathPattern="resume-history.model.spec" --no-coverage
+```
+
+Expected: all 8 tests PASS.
+
+---
+
+## Task 7: Enforce 30-day history lookback for FREEMIUM — use constant and model class
 
 **Files:**
 - Modify: `src/modules/resume-tailoring/services/resume.service.ts`
 - Modify: `src/modules/resume-tailoring/resume-tailoring.controller.ts`
 
-The two history methods (`getResumeGenerationHistory` and `getResumeGenerationHistoryPaginated`) receive a new optional `plan` argument. When `plan === UserPlan.FREEMIUM`, a 30-day date filter is applied to the query. PREMIUM users get no filter — full history.
+This task wires together Tasks 5 and 6. Both history methods use `FREEMIUM_HISTORY_LOOKBACK_DAYS` (not the literal `30`) and `new ResumeHistoryItem(r)` / `new ResumeHistoryDetail(record)` (not inline object spreads).
 
 - [ ] **Step 1: Write failing tests**
 
@@ -753,6 +939,7 @@ import { AIContentService } from '../../../shared/services/ai-content.service';
 import { ConfigService } from '@nestjs/config';
 import { S3Service } from '../../../shared/modules/external/services/s3.service';
 import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
+import { FREEMIUM_HISTORY_LOOKBACK_DAYS } from '../../../shared/constants/plan-limits.constants';
 
 describe('ResumeService — history 30-day lookback', () => {
   let service: ResumeService;
@@ -769,7 +956,7 @@ describe('ResumeService — history 30-day lookback', () => {
     template_id: 'tpl-1',
     created_at: new Date(),
     pdf_s3_key: 'key',
-  };
+  } as ResumeGeneration;
 
   beforeEach(async () => {
     findSpy = jest.fn().mockResolvedValue([mockRecord]);
@@ -796,7 +983,10 @@ describe('ResumeService — history 30-day lookback', () => {
         { provide: ResumeTemplateService, useValue: {} },
         { provide: AIContentService, useValue: {} },
         { provide: ConfigService, useValue: { get: jest.fn() } },
-        { provide: getRepositoryToken(ResumeGeneration), useValue: mockResumeGenerationRepo },
+        {
+          provide: getRepositoryToken(ResumeGeneration),
+          useValue: mockResumeGenerationRepo,
+        },
         { provide: getRepositoryToken(Resume), useValue: {} },
         { provide: getRepositoryToken(User), useValue: {} },
         { provide: S3Service, useValue: {} },
@@ -810,30 +1000,40 @@ describe('ResumeService — history 30-day lookback', () => {
   describe('getResumeGenerationHistory', () => {
     it('applies no date filter for PREMIUM users', async () => {
       await service.getResumeGenerationHistory('user-1', 10, UserPlan.PREMIUM);
-      const call = findSpy.mock.calls[0][0];
-      expect(call.where.created_at).toBeUndefined();
+      const callArg = findSpy.mock.calls[0][0];
+      expect(callArg.where.created_at).toBeUndefined();
     });
 
-    it('applies 30-day date filter for FREEMIUM users', async () => {
+    it('applies a date filter for FREEMIUM users', async () => {
       await service.getResumeGenerationHistory('user-1', 10, UserPlan.FREEMIUM);
-      const call = findSpy.mock.calls[0][0];
-      expect(call.where.created_at).toBeDefined();
-      // cutoff should be approximately 30 days ago
-      const cutoff: Date = call.where.created_at.value;
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      expect(cutoff.getTime()).toBeCloseTo(thirtyDaysAgo.getTime(), -3);
+      const callArg = findSpy.mock.calls[0][0];
+      expect(callArg.where.created_at).toBeDefined();
     });
 
-    it('applies no date filter when plan is undefined (default)', async () => {
+    it('cutoff is approximately FREEMIUM_HISTORY_LOOKBACK_DAYS days ago', async () => {
+      await service.getResumeGenerationHistory('user-1', 10, UserPlan.FREEMIUM);
+      const callArg = findSpy.mock.calls[0][0];
+      const cutoff: Date = callArg.where.created_at.value;
+      const expected = new Date();
+      expected.setDate(expected.getDate() - FREEMIUM_HISTORY_LOOKBACK_DAYS);
+      expect(cutoff.getTime()).toBeCloseTo(expected.getTime(), -3);
+    });
+
+    it('applies no date filter when plan is undefined', async () => {
       await service.getResumeGenerationHistory('user-1', 10);
-      const call = findSpy.mock.calls[0][0];
-      expect(call.where.created_at).toBeUndefined();
+      const callArg = findSpy.mock.calls[0][0];
+      expect(callArg.where.created_at).toBeUndefined();
+    });
+
+    it('returns ResumeHistoryItem instances', async () => {
+      const { ResumeHistoryItem } = await import('../models/resume-history.model');
+      const result = await service.getResumeGenerationHistory('user-1', 10);
+      expect(result[0]).toBeInstanceOf(ResumeHistoryItem);
     });
   });
 
   describe('getResumeGenerationHistoryPaginated', () => {
-    it('does not call andWhere for date for PREMIUM users', async () => {
+    it('does not add a date andWhere clause for PREMIUM users', async () => {
       await service.getResumeGenerationHistoryPaginated('user-1', {
         plan: UserPlan.PREMIUM,
       });
@@ -843,7 +1043,7 @@ describe('ResumeService — history 30-day lookback', () => {
       expect(dateCalls).toHaveLength(0);
     });
 
-    it('calls andWhere with created_at filter for FREEMIUM users', async () => {
+    it('adds a date andWhere clause for FREEMIUM users', async () => {
       await service.getResumeGenerationHistoryPaginated('user-1', {
         plan: UserPlan.FREEMIUM,
       });
@@ -863,11 +1063,11 @@ describe('ResumeService — history 30-day lookback', () => {
 npm test -- --testPathPattern="resume.service.spec" --no-coverage
 ```
 
-Expected: FAIL — current methods don't accept a `plan` argument and don't apply a date filter.
+Expected: FAIL — current methods have no `plan` param, no date filter, and no model class usage.
 
 - [ ] **Step 3: Update imports in `resume.service.ts`**
 
-Change the existing TypeORM import at the top of the file from:
+Change the existing `typeorm` import from:
 
 ```typescript
 import { Repository } from 'typeorm';
@@ -879,7 +1079,7 @@ to:
 import { Repository, MoreThanOrEqual, FindOptionsWhere } from 'typeorm';
 ```
 
-Also update the user entity import from:
+Change the existing user entity import from:
 
 ```typescript
 import { User } from '../../../database/entities/user.entity';
@@ -891,9 +1091,30 @@ to:
 import { User, UserPlan } from '../../../database/entities/user.entity';
 ```
 
-- [ ] **Step 4: Update `getResumeGenerationHistory()` in `resume.service.ts`**
+Add these two new imports after the existing entity imports:
 
-Replace the existing method (lines 228–260):
+```typescript
+import {
+  ResumeHistoryItem,
+  ResumeHistoryDetail,
+  PaginatedResumeHistory,
+} from '../models/resume-history.model';
+import { FREEMIUM_HISTORY_LOOKBACK_DAYS } from '../../../shared/constants/plan-limits.constants';
+```
+
+- [ ] **Step 4: Remove the old inline interfaces from `resume.service.ts`**
+
+Delete these three exported interfaces that are now replaced by the model file (currently lines 18–41):
+
+```typescript
+export interface ResumeHistoryItem { ... }   // DELETE
+export interface ResumeHistoryDetail extends ResumeHistoryItem { ... }  // DELETE
+export interface PaginatedResumeHistory { ... }  // DELETE
+```
+
+- [ ] **Step 5: Replace `getResumeGenerationHistory()` in `resume.service.ts`**
+
+Replace the existing method (lines ~228–260):
 
 ```typescript
   async getResumeGenerationHistory(
@@ -905,7 +1126,7 @@ Replace the existing method (lines 228–260):
 
     if (plan === UserPlan.FREEMIUM) {
       const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 30);
+      cutoff.setDate(cutoff.getDate() - FREEMIUM_HISTORY_LOOKBACK_DAYS);
       where.created_at = MoreThanOrEqual(cutoff);
     }
 
@@ -926,23 +1147,13 @@ Replace the existing method (lines 228–260):
       ],
     });
 
-    return records.map((r) => ({
-      id: r.id,
-      companyName: r.company_name,
-      jobPosition: r.job_position,
-      optimizationConfidence: r.optimization_confidence,
-      keywordsAdded: r.keywords_added,
-      sectionsOptimized: r.sections_optimized,
-      templateId: r.template_id,
-      createdAt: r.created_at,
-      canDownload: Boolean(r.pdf_s3_key),
-    }));
+    return records.map((r) => new ResumeHistoryItem(r));
   }
 ```
 
-- [ ] **Step 5: Update `getResumeGenerationHistoryPaginated()` in `resume.service.ts`**
+- [ ] **Step 6: Replace `getResumeGenerationHistoryPaginated()` in `resume.service.ts`**
 
-Replace the existing method (lines 262–318):
+Replace the existing method (lines ~262–318):
 
 ```typescript
   async getResumeGenerationHistoryPaginated(
@@ -964,7 +1175,7 @@ Replace the existing method (lines 262–318):
 
     if (plan === UserPlan.FREEMIUM) {
       const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 30);
+      cutoff.setDate(cutoff.getDate() - FREEMIUM_HISTORY_LOOKBACK_DAYS);
       qb.andWhere('rg.created_at >= :cutoff', { cutoff });
     }
 
@@ -993,17 +1204,7 @@ Replace the existing method (lines 262–318):
     const [records, total] = await qb.getManyAndCount();
 
     return {
-      items: records.map((r) => ({
-        id: r.id,
-        companyName: r.company_name,
-        jobPosition: r.job_position,
-        optimizationConfidence: r.optimization_confidence,
-        keywordsAdded: r.keywords_added,
-        sectionsOptimized: r.sections_optimized,
-        templateId: r.template_id,
-        createdAt: r.created_at,
-        canDownload: Boolean(r.pdf_s3_key),
-      })),
+      items: records.map((r) => new ResumeHistoryItem(r)),
       total,
       page,
       limit,
@@ -1011,7 +1212,44 @@ Replace the existing method (lines 262–318):
   }
 ```
 
-- [ ] **Step 6: Update the `getResumeHistory` handler in `resume-tailoring.controller.ts`**
+- [ ] **Step 7: Replace `getResumeGenerationDetail()` in `resume.service.ts` to use `ResumeHistoryDetail`**
+
+Replace the existing method (lines ~320–361):
+
+```typescript
+  async getResumeGenerationDetail(
+    generationId: string,
+    userId: string,
+  ): Promise<ResumeHistoryDetail> {
+    const record = await this.resumeGenerationRepository.findOne({
+      where: { id: generationId, user_id: userId },
+      select: [
+        'id',
+        'company_name',
+        'job_position',
+        'optimization_confidence',
+        'keywords_added',
+        'sections_optimized',
+        'achievements_quantified',
+        'changes_diff',
+        'template_id',
+        'created_at',
+        'pdf_s3_key',
+      ],
+    });
+
+    if (!record) {
+      throw new NotFoundException(
+        'Resume generation not found',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    return new ResumeHistoryDetail(record);
+  }
+```
+
+- [ ] **Step 8: Update `getResumeHistory` handler in `resume-tailoring.controller.ts`**
 
 Replace the existing `getResumeHistory` handler (lines 69–99):
 
@@ -1053,7 +1291,7 @@ Replace the existing `getResumeHistory` handler (lines 69–99):
   }
 ```
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [ ] **Step 9: Run tests to verify they pass**
 
 ```bash
 npm test -- --testPathPattern="resume.service.spec" --no-coverage
@@ -1061,96 +1299,68 @@ npm test -- --testPathPattern="resume.service.spec" --no-coverage
 
 Expected: all tests PASS.
 
-- [ ] **Step 8: Commit**
-
-```bash
-git add src/modules/resume-tailoring/services/resume.service.ts \
-        src/modules/resume-tailoring/services/resume.service.spec.ts \
-        src/modules/resume-tailoring/resume-tailoring.controller.ts
-git commit -m "feat: enforce 30-day history lookback for Free plan users"
-```
-
 ---
 
-## Task 6: Gate batch generation behind `PremiumUserGuard` and re-enable rate limiting
+## Task 8: Gate batch generation behind `PremiumUserGuard` and re-enable rate limiting
 
 **Files:**
 - Modify: `src/modules/resume-tailoring/resume-tailoring.controller.ts`
+- Modify: `src/modules/resume-tailoring/resume-tailoring.controller.spec.ts`
 
-Two changes to the `POST /resume-tailoring/batch-generate` route:
-1. Add `@UseGuards(PremiumUserGuard)` — FREEMIUM users get `403` with `PREMIUM_REQUIRED` before touching the handler
-2. Uncomment `@RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)` — Pro users are capped at 10 batches/month
+- [ ] **Step 1: Write failing tests — append to `resume-tailoring.controller.spec.ts`**
 
-- [ ] **Step 1: Write a failing test**
-
-Add a new `describe` block to `src/modules/resume-tailoring/resume-tailoring.controller.spec.ts`:
+Add this `describe` block at the bottom of the existing spec file:
 
 ```typescript
 import { PremiumUserGuard } from '../auth/guards/premium-user.guard';
-import { Reflector } from '@nestjs/core';
 
-describe('ResumeTailoringController — batch route Premium gate', () => {
-  it('PremiumUserGuard blocks FREEMIUM users with PREMIUM_REQUIRED', () => {
-    const guard = new PremiumUserGuard();
+describe('PremiumUserGuard — unit behaviour used on batch route', () => {
+  const guard = new PremiumUserGuard();
 
-    const freemiumContext = {
-      userId: 'user-1',
-      userType: 'registered',
-      plan: 'freemium',
-      isPremium: false,
-      ipAddress: '127.0.0.1',
-      userAgent: 'test',
-    };
-
-    const mockRequest = { userContext: freemiumContext };
-    const mockContext = {
-      switchToHttp: () => ({ getRequest: () => mockRequest }),
-    } as any;
-
-    expect(() => guard.canActivate(mockContext)).toThrow();
+  const makeContext = (isPremium: boolean) => ({
+    switchToHttp: () => ({
+      getRequest: () => ({
+        userContext: {
+          userId: 'user-1',
+          userType: 'registered',
+          plan: isPremium ? 'premium' : 'freemium',
+          isPremium,
+          ipAddress: '127.0.0.1',
+          userAgent: 'test',
+        },
+      }),
+    }),
   });
 
-  it('PremiumUserGuard allows PREMIUM users through', () => {
-    const guard = new PremiumUserGuard();
+  it('throws ForbiddenException for FREEMIUM users', () => {
+    expect(() => guard.canActivate(makeContext(false) as any)).toThrow();
+  });
 
-    const premiumContext = {
-      userId: 'user-1',
-      userType: 'registered',
-      plan: 'premium',
-      isPremium: true,
-      ipAddress: '127.0.0.1',
-      userAgent: 'test',
-    };
-
-    const mockRequest = { userContext: premiumContext };
-    const mockContext = {
-      switchToHttp: () => ({ getRequest: () => mockRequest }),
-    } as any;
-
-    expect(guard.canActivate(mockContext)).toBe(true);
+  it('returns true for PREMIUM users', () => {
+    expect(guard.canActivate(makeContext(true) as any)).toBe(true);
   });
 });
 ```
 
-- [ ] **Step 2: Run test to verify it passes as written**
+- [ ] **Step 2: Run tests to verify they pass as written**
 
 ```bash
 npm test -- --testPathPattern="resume-tailoring.controller.spec" --no-coverage
 ```
 
-Expected: the two new guard tests PASS (the guard logic already exists — this test confirms the behaviour is correct before wiring it to the route).
+Expected: the two new guard unit tests PASS (guard logic already exists — this confirms the behaviour before wiring it to the route).
 
 - [ ] **Step 3: Add `PremiumUserGuard` import to `resume-tailoring.controller.ts`**
 
-Add this import alongside the existing guard imports at the top of the file:
+Add alongside the existing guard imports:
 
 ```typescript
 import { PremiumUserGuard } from '../auth/guards/premium-user.guard';
 ```
 
-- [ ] **Step 4: Update the batch route decorators in `resume-tailoring.controller.ts`**
+- [ ] **Step 4: Update the batch route decorator stack in `resume-tailoring.controller.ts`**
 
-Replace the three decorator lines above `async batchGenerateTailoredResumes` (currently lines ~308–311):
+Replace the existing decorators above `async batchGenerateTailoredResumes` (the three lines starting at `@Post('batch-generate')`):
 
 ```typescript
   @Post('batch-generate')
@@ -1161,7 +1371,7 @@ Replace the three decorator lines above `async batchGenerateTailoredResumes` (cu
   async batchGenerateTailoredResumes(
 ```
 
-The `// @RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)` comment is removed and the decorator is now active.
+The commented-out `// @RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)` line is removed and the active decorator is in its place.
 
 - [ ] **Step 5: Run the full test suite**
 
@@ -1179,19 +1389,11 @@ npm run build
 
 Expected: build succeeds with no errors.
 
-- [ ] **Step 7: Commit**
-
-```bash
-git add src/modules/resume-tailoring/resume-tailoring.controller.ts \
-        src/modules/resume-tailoring/resume-tailoring.controller.spec.ts
-git commit -m "feat: gate batch generation behind PremiumUserGuard and re-enable rate limiting"
-```
-
 ---
 
-## Final verification
+## Final verification before handing back for review
 
-- [ ] **Run full test suite one last time**
+- [ ] **Run full test suite**
 
 ```bash
 npm test -- --no-coverage
@@ -1207,18 +1409,34 @@ npm run lint
 
 Expected: no lint errors.
 
-- [ ] **Verify BillingCycle.WEEKLY is gone**
+- [ ] **Verify no hardcoded magic number `30` in history logic**
+
+```bash
+grep -n "setDate.*30\|lookback.*30\|days.*30" src/modules/resume-tailoring/services/resume.service.ts
+```
+
+Expected: no output — only `FREEMIUM_HISTORY_LOOKBACK_DAYS` is referenced.
+
+- [ ] **Verify no bare feature strings in rate limit service**
+
+```bash
+grep -n "'resume_generation'\|'cover_letter'\|'resume_batch_generation'" src/modules/rate-limit/rate-limit.service.ts
+```
+
+Expected: no output — only `FeatureType.*` enum references.
+
+- [ ] **Verify batch route has both decorators active (no comment prefix)**
+
+```bash
+grep -A 6 "batch-generate" src/modules/resume-tailoring/resume-tailoring.controller.ts | head -8
+```
+
+Expected: output includes `PremiumUserGuard` and `@RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)` with no `//` prefix.
+
+- [ ] **Verify `WEEKLY` is gone from the codebase**
 
 ```bash
 grep -r "WEEKLY" src/ --include="*.ts"
 ```
 
 Expected: no output.
-
-- [ ] **Verify batch route has both decorators active**
-
-```bash
-grep -A 6 "batch-generate" src/modules/resume-tailoring/resume-tailoring.controller.ts | head -10
-```
-
-Expected output contains both `PremiumUserGuard` and `RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)` with no comment prefix.
