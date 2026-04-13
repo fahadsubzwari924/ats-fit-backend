@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Edit(**)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(pnpm:*)",
+      "Bash(yarn:*)",
+      "Bash(node:*)"
+    ]
+  },
+  "meta": {
+    "projectName": "ats-fit-backend",
+    "generatedBy": "ai-dev-setup"
+  }
+}
