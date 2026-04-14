@@ -52,7 +52,10 @@ export class ChangesDiffComputationService {
       targetKeywords,
     );
 
-    const skillsDiff = this.computeSkillsDiff(original.skills, optimized.skills);
+    const skillsDiff = this.computeSkillsDiff(
+      original.skills,
+      optimized.skills,
+    );
 
     const experienceDiffs = this.computeExperienceDiffs(
       original.experience ?? [],
@@ -144,8 +147,10 @@ export class ChangesDiffComputationService {
     let anyChanged = false;
 
     const byCategory: SkillsCategoryDiff[] = categories.map((cat) => {
-      const orig: string[] = (original as unknown as Record<string, string[]>)?.[cat] ?? [];
-      const opt: string[] = (optimized as unknown as Record<string, string[]>)?.[cat] ?? [];
+      const orig: string[] =
+        (original as unknown as Record<string, string[]>)?.[cat] ?? [];
+      const opt: string[] =
+        (optimized as unknown as Record<string, string[]>)?.[cat] ?? [];
 
       const origSet = new Set(orig.map((s) => s.toLowerCase()));
       const optSet = new Set(opt.map((s) => s.toLowerCase()));
@@ -198,8 +203,7 @@ export class ChangesDiffComputationService {
         };
       }
 
-      const titleChanged =
-        (origExp.position ?? '') !== (optExp.position ?? '');
+      const titleChanged = (origExp.position ?? '') !== (optExp.position ?? '');
 
       const bulletChanges = this.matchBullets(
         origExp.responsibilities ?? [],
@@ -260,9 +264,7 @@ export class ChangesDiffComputationService {
           targetKeywords,
         );
         const changeType: DiffChangeType =
-          origBullet.trim() === optBullet.trim()
-            ? 'unchanged'
-            : 'modified';
+          origBullet.trim() === optBullet.trim() ? 'unchanged' : 'modified';
 
         results.push({
           changeType,
@@ -321,7 +323,8 @@ export class ChangesDiffComputationService {
 
     const newlyAdded = targetKeywords.filter(
       (kw) =>
-        optMatchSet.has(kw.toLowerCase()) && !origMatchSet.has(kw.toLowerCase()),
+        optMatchSet.has(kw.toLowerCase()) &&
+        !origMatchSet.has(kw.toLowerCase()),
     );
     const stillMissing = targetKeywords.filter(
       (kw) => !optMatchSet.has(kw.toLowerCase()),
@@ -388,9 +391,7 @@ export class ChangesDiffComputationService {
           .filter((b) => b.original)
           .map((b) => b.original)
           .join('\n'),
-        optimized: expDiff.bulletChanges
-          .map((b) => b.optimized)
-          .join('\n'),
+        optimized: expDiff.bulletChanges.map((b) => b.optimized).join('\n'),
         addedKeywords: uniqueKeywords,
       });
     }
@@ -465,7 +466,9 @@ export class ChangesDiffComputationService {
     if (content.title) parts.push(content.title);
     if (content.summary) parts.push(content.summary);
 
-    const skills = content.skills as unknown as Record<string, string[]> | undefined;
+    const skills = content.skills as unknown as
+      | Record<string, string[]>
+      | undefined;
     if (skills) {
       Object.values(skills).forEach((arr) => {
         if (Array.isArray(arr)) parts.push(arr.join(' '));

@@ -16,9 +16,7 @@ export class RemoveGuestUserType20260406140000 implements MigrationInterface {
       `UPDATE "users" SET "user_type" = 'registered' WHERE "user_type"::text = 'guest'`,
     );
 
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "IDX_users_guest_id"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_users_guest_id"`);
     await queryRunner.query(
       `DROP INDEX IF EXISTS "IDX_58394bc638089670195fcc9bf5"`,
     );
@@ -26,7 +24,9 @@ export class RemoveGuestUserType20260406140000 implements MigrationInterface {
       `DROP INDEX IF EXISTS "idx_resume_generation_results_guest_id"`,
     );
 
-    await queryRunner.query(`ALTER TABLE "users" DROP COLUMN IF EXISTS "guest_id"`);
+    await queryRunner.query(
+      `ALTER TABLE "users" DROP COLUMN IF EXISTS "guest_id"`,
+    );
     await queryRunner.query(
       `ALTER TABLE "usage_tracking" DROP COLUMN IF EXISTS "guest_id"`,
     );

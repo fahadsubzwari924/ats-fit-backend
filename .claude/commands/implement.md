@@ -4,6 +4,14 @@
 
 Execute an implementation plan using Agency specialists via Claude Code's native `subagent_type` — never `general-purpose`.
 
+## Superpowers phase gate (non-negotiable)
+
+Complete these **before** pre-flight and execution. If a skill path is missing under `.claude/skills/`, stop and tell the user to run `npx ai-dev-setup init --vendor-only --force`.
+
+1. **using-superpowers** — Invoke the Skill tool for `.claude/skills/using-superpowers/` (or read `SKILL.md` there).
+2. **subagent-driven-development** — Read `.claude/skills/subagent-driven-development/` (implementer prompt, reviewer prompts, orchestration). Apply its transport and review gates; substitute Agency `subagent_type` per this command’s execution rules (never `general-purpose` for implementers).
+3. After all tasks: **verification-before-completion** — Load `.claude/skills/verification-before-completion/` and satisfy it before claiming the run is done (evidence: commands run, outcomes stated).
+
 ## Before running this command
 
 1. You have a **plan** from `/kickoff` (or another source) with **tasks**, **paths**, and an **Agency `subagent_type`** assigned per task (exact string, e.g. `engineering-backend-architect`).
@@ -33,7 +41,7 @@ Execute an implementation plan using Agency specialists via Claude Code's native
 
 4. **If the plan did not name a role for a task:** map it per `.ai/agents.md` tables (API/server → `engineering-backend-architect`, UI → `engineering-frontend-developer`, tests → `testing-api-tester`, infra → `engineering-devops-automator`, etc.) **before** dispatching. Update the plan file with the assignment so the decision is traceable.
 
-5. **Run `npm run test` / `npm run lint`** after each task; `/review` handles pre-merge gates.
+5. **Run `npm run test` / `npm run lint`** after each task; `/review` handles pre-merge gates. If the user then asks to ship or open a PR, follow **`.claude/commands/ship.md`** (full verify + git + PR sequence).
 
 ## Anti-patterns (will produce bad work)
 

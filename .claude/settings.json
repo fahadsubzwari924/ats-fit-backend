@@ -10,6 +10,20 @@
       "Bash(node:*)"
     ]
   },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/vendor/superpowers/hooks/session-start",
+            "async": false
+          }
+        ]
+      }
+    ]
+  },
   "meta": {
     "projectName": "ats-fit-backend",
     "generatedBy": "ai-dev-setup"

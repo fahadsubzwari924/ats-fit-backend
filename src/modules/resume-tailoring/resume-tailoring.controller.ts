@@ -38,6 +38,8 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { RateLimitFeature } from '../rate-limit/rate-limit.guard';
 import { FeatureType } from '../../database/entities/usage-tracking.entity';
+import { PremiumUserGuard } from '../auth/guards/premium-user.guard';
+import { UserPlan } from '../../database/entities/user.entity';
 import { Public } from '../auth/decorators/public.decorator';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
 import { TransformUserContext } from '../../shared/decorators/transform-user-context.decorator';
@@ -83,18 +85,25 @@ export class ResumeTailoringController {
       );
     }
 
+    const rawPlan = req.userContext?.plan;
+    const plan = Object.values(UserPlan).includes(rawPlan as UserPlan)
+      ? (rawPlan as UserPlan)
+      : undefined;
+
     if (page !== undefined) {
       return this.resumeService.getResumeGenerationHistoryPaginated(userId, {
         page: parseInt(page, 10) || 1,
         limit: parseInt(limit ?? '10', 10) || 10,
         search,
         sortOrder: sortOrder ?? 'DESC',
+        plan,
       });
     }
 
     return this.resumeService.getResumeGenerationHistory(
       userId,
       parseInt(limit ?? '10', 10) || 10,
+      plan,
     );
   }
 
@@ -308,7 +317,8 @@ export class ResumeTailoringController {
   @Post('batch-generate')
   @HttpCode(HttpStatus.OK)
   @TransformUserContext()
-  // @RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)
+  @UseGuards(PremiumUserGuard)
+  @RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)
   async batchGenerateTailoredResumes(
     @Body() dto: BatchGenerateDto,
     @Req() request: RequestWithUserContext,

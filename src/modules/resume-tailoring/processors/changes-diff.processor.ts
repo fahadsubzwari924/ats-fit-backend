@@ -73,11 +73,14 @@ export class ChangesDiffProcessor implements OnModuleInit {
 
       await job.progress(70);
 
+      /* eslint-disable @typescript-eslint/no-unsafe-assignment -- jsonb column typed as any on entity */
       await this.resumeGenerationRepository.update(
         { id: resumeGenerationId, user_id: userId },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { changes_diff: diff as any },
+        {
+          changes_diff: diff as unknown as ResumeGeneration['changes_diff'],
+        },
       );
+      /* eslint-enable @typescript-eslint/no-unsafe-assignment */
 
       await job.progress(90);
 

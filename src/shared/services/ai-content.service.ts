@@ -34,7 +34,10 @@ export class AIContentService {
         json_schema: {
           name: 'tailored_resume_content',
           strict: true,
-          schema: TailoredContentJsonSchema as unknown as Record<string, unknown>,
+          schema: TailoredContentJsonSchema as unknown as Record<
+            string,
+            unknown
+          >,
         },
       },
       temperature: 0,

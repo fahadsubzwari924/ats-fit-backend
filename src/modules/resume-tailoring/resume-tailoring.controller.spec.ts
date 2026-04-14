@@ -1,15 +1,23 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ExecutionContext } from '@nestjs/common';
 import { ResumeTailoringController } from './resume-tailoring.controller';
 import { ResumeTemplateService } from './services/resume-templates.service';
 import { ResumeGenerationOrchestratorService } from './services/resume-generation-orchestrator.service';
 import { ResumeService } from './services/resume.service';
 import { CoverLetterGenerationService } from './services/cover-letter-generation.service';
-import { BadRequestException } from '../../shared/exceptions/custom-http-exceptions';
+import {
+  BadRequestException,
+  ForbiddenException,
+} from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { BatchGenerateDto, BatchJobItemDto } from './dtos/batch-generate.dto';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
 import { UserContext } from '../../modules/auth/types/user-context.type';
 import { ResumeGenerationResult } from './interfaces/resume-generation.interface';
+import { PremiumUserGuard } from '../auth/guards/premium-user.guard';
+import { RateLimitGuard } from '../rate-limit/rate-limit.guard';
+import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { Reflector } from '@nestjs/core';
 
 describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
   let controller: ResumeTailoringController;
@@ -570,6 +578,129 @@ describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
         expect(
           resumeGenerationOrchestratorService.generateOptimizedResume,
         ).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('PremiumUserGuard and RateLimitGuard batch-route access control', () => {
+      const buildContext = (
+        userCtx: Partial<UserContext>,
+      ): ExecutionContext => {
+        const request = { userContext: userCtx } as RequestWithUserContext;
+        return {
+          switchToHttp: () => ({ getRequest: () => request }),
+          getHandler: () => ({}),
+          getClass: () => ({}),
+        } as unknown as ExecutionContext;
+      };
+
+      it('should block FREEMIUM user with 403 ForbiddenException (PremiumUserGuard)', () => {
+        const guard = new PremiumUserGuard();
+        const ctx = buildContext({
+          userId: 'freemium-user-id',
+          userType: 'authenticated',
+          isPremium: false,
+          ipAddress: '127.0.0.1',
+          userAgent: 'test-agent',
+        });
+
+        expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
+        try {
+          guard.canActivate(ctx);
+        } catch (error) {
+          expect(error).toBeInstanceOf(ForbiddenException);
+          const response = (
+            error as ForbiddenException
+          ).getResponse?.() as Record<string, unknown>;
+          expect(response?.errorCode).toBe(ERROR_CODES.PREMIUM_REQUIRED);
+        }
+      });
+
+      it('should allow PREMIUM user within rate limit to reach the handler', async () => {
+        // PremiumUserGuard passes for isPremium === true
+        const guard = new PremiumUserGuard();
+        const ctx = buildContext({
+          userId: 'premium-user-id',
+          userType: 'authenticated',
+          isPremium: true,
+          ipAddress: '127.0.0.1',
+          userAgent: 'test-agent',
+        });
+
+        const result = guard.canActivate(ctx);
+        expect(result).toBe(true);
+
+        // RateLimitGuard passes when rateLimitService.checkRateLimit returns allowed
+        const mockRateLimitService = {
+          checkRateLimit: jest.fn().mockResolvedValue({
+            allowed: true,
+            currentUsage: 0,
+            limit: 3,
+            remaining: 3,
+            resetDate: new Date(),
+          }),
+        } as unknown as RateLimitService;
+
+        const mockReflector = {
+          get: jest.fn().mockReturnValue('RESUME_BATCH_GENERATION'),
+        } as unknown as Reflector;
+
+        const rateLimitGuard = new RateLimitGuard(
+          mockReflector,
+          mockRateLimitService,
+        );
+        const rateLimitCtx = buildContext({
+          userId: 'premium-user-id',
+          userType: 'authenticated',
+          isPremium: true,
+          ipAddress: '127.0.0.1',
+          userAgent: 'test-agent',
+        });
+
+        const rateLimitResult = await rateLimitGuard.canActivate(rateLimitCtx);
+        expect(rateLimitResult).toBe(true);
+        expect(mockRateLimitService.checkRateLimit).toHaveBeenCalledTimes(1);
+      });
+
+      it('should block PREMIUM user who has exceeded rate limit with ForbiddenException', async () => {
+        const mockRateLimitService = {
+          checkRateLimit: jest.fn().mockResolvedValue({
+            allowed: false,
+            currentUsage: 3,
+            limit: 3,
+            remaining: 0,
+            resetDate: new Date(),
+          }),
+        } as unknown as RateLimitService;
+
+        const mockReflector = {
+          get: jest.fn().mockReturnValue('RESUME_BATCH_GENERATION'),
+        } as unknown as Reflector;
+
+        const rateLimitGuard = new RateLimitGuard(
+          mockReflector,
+          mockRateLimitService,
+        );
+        const ctx = buildContext({
+          userId: 'premium-user-id',
+          userType: 'authenticated',
+          isPremium: true,
+          ipAddress: '127.0.0.1',
+          userAgent: 'test-agent',
+        });
+
+        await expect(rateLimitGuard.canActivate(ctx)).rejects.toThrow(
+          ForbiddenException,
+        );
+
+        try {
+          await rateLimitGuard.canActivate(ctx);
+        } catch (error) {
+          expect(error).toBeInstanceOf(ForbiddenException);
+          const response = (
+            error as ForbiddenException
+          ).getResponse?.() as Record<string, unknown>;
+          expect(response?.errorCode).toBe(ERROR_CODES.RATE_LIMIT_EXCEEDED);
+        }
       });
     });
 

@@ -55,7 +55,9 @@ describe('TailoredResumePdfStorageService', () => {
 
   it('returns key with tailored-resumes/{owner}/{uuid}.pdf on success', async () => {
     configGet.mockImplementation((key: string) =>
-      key === 'AWS_S3_GENERATED_RESUMES_BUCKET' ? 'generated-bucket' : undefined,
+      key === 'AWS_S3_GENERATED_RESUMES_BUCKET'
+        ? 'generated-bucket'
+        : undefined,
     );
     uploadFile.mockResolvedValue(undefined);
     const buf = Buffer.from('%PDF-1');

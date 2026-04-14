@@ -8,37 +8,19 @@ import { BadRequestException } from '../../../shared/exceptions/custom-http-exce
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, MoreThanOrEqual, Repository } from 'typeorm';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 import { Resume } from '../../../database/entities/resume.entity';
-import { User } from '../../../database/entities/user.entity';
+import { User, UserPlan } from '../../../database/entities/user.entity';
 import { S3Service } from '../../../shared/modules/external/services/s3.service';
 import { MimeTypes } from '../../../shared/constants/mime-types.enum';
-
-export interface ResumeHistoryItem {
-  id: string;
-  companyName: string;
-  jobPosition: string;
-  optimizationConfidence: number | null;
-  keywordsAdded: number | null;
-  sectionsOptimized: number | null;
-  templateId: string | null;
-  createdAt: Date;
-  /** True when a PDF is stored in S3 and download-by-id will succeed */
-  canDownload: boolean;
-}
-
-export interface ResumeHistoryDetail extends ResumeHistoryItem {
-  achievementsQuantified: number | null;
-  changesDiff: any;
-}
-
-export interface PaginatedResumeHistory {
-  items: ResumeHistoryItem[];
-  total: number;
-  page: number;
-  limit: number;
-}
+import {
+  ResumeHistoryItem,
+  ResumeHistoryDetail,
+  PaginatedResumeHistory,
+  ResumeHistoryQueryOptions,
+} from '../models/resume-history.model';
+import { FREEMIUM_HISTORY_LOOKBACK_DAYS } from '../../../shared/constants/plan-limits.constants';
 
 @Injectable()
 export class ResumeService {
@@ -225,12 +207,28 @@ export class ResumeService {
     });
   }
 
+  /**
+   * Returns the oldest date from which FREEMIUM users may view their history.
+   * Extracted to a dedicated method to avoid inline magic-number arithmetic.
+   */
+  private getFreemiumHistoryCutoffDate(): Date {
+    const ms = FREEMIUM_HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+    return new Date(Date.now() - ms);
+  }
+
   async getResumeGenerationHistory(
     userId: string,
     limit = 10,
+    plan?: UserPlan,
   ): Promise<ResumeHistoryItem[]> {
+    const where: FindOptionsWhere<ResumeGeneration> = { user_id: userId };
+
+    if (plan === UserPlan.FREEMIUM) {
+      where.created_at = MoreThanOrEqual(this.getFreemiumHistoryCutoffDate());
+    }
+
     const records = await this.resumeGenerationRepository.find({
-      where: { user_id: userId },
+      where,
       order: { created_at: 'DESC' },
       take: limit,
       select: [
@@ -246,34 +244,24 @@ export class ResumeService {
       ],
     });
 
-    return records.map((r) => ({
-      id: r.id,
-      companyName: r.company_name,
-      jobPosition: r.job_position,
-      optimizationConfidence: r.optimization_confidence,
-      keywordsAdded: r.keywords_added,
-      sectionsOptimized: r.sections_optimized,
-      templateId: r.template_id,
-      createdAt: r.created_at,
-      canDownload: Boolean(r.pdf_s3_key),
-    }));
+    return records.map((r) => new ResumeHistoryItem(r));
   }
 
   async getResumeGenerationHistoryPaginated(
     userId: string,
-    options: {
-      page?: number;
-      limit?: number;
-      search?: string;
-      sortOrder?: 'ASC' | 'DESC';
-    } = {},
+    options: ResumeHistoryQueryOptions = {},
   ): Promise<PaginatedResumeHistory> {
-    const { page = 1, limit = 10, search, sortOrder = 'DESC' } = options;
+    const { page = 1, limit = 10, search, sortOrder = 'DESC', plan } = options;
     const skip = (page - 1) * limit;
 
     const qb = this.resumeGenerationRepository
       .createQueryBuilder('rg')
       .where('rg.user_id = :userId', { userId });
+
+    if (plan === UserPlan.FREEMIUM) {
+      const cutoff = this.getFreemiumHistoryCutoffDate();
+      qb.andWhere('rg.created_at >= :cutoff', { cutoff });
+    }
 
     if (search) {
       qb.andWhere(
@@ -300,17 +288,7 @@ export class ResumeService {
     const [records, total] = await qb.getManyAndCount();
 
     return {
-      items: records.map((r) => ({
-        id: r.id,
-        companyName: r.company_name,
-        jobPosition: r.job_position,
-        optimizationConfidence: r.optimization_confidence,
-        keywordsAdded: r.keywords_added,
-        sectionsOptimized: r.sections_optimized,
-        templateId: r.template_id,
-        createdAt: r.created_at,
-        canDownload: Boolean(r.pdf_s3_key),
-      })),
+      items: records.map((r) => new ResumeHistoryItem(r)),
       total,
       page,
       limit,
@@ -345,22 +323,10 @@ export class ResumeService {
       );
     }
 
-    return {
-      id: record.id,
-      companyName: record.company_name,
-      jobPosition: record.job_position,
-      optimizationConfidence: record.optimization_confidence,
-      keywordsAdded: record.keywords_added,
-      sectionsOptimized: record.sections_optimized,
-      achievementsQuantified: record.achievements_quantified,
-      changesDiff: record.changes_diff ?? null,
-      canDownload: Boolean(record.pdf_s3_key),
-      templateId: record.template_id,
-      createdAt: record.created_at,
-    };
+    return new ResumeHistoryDetail(record);
   }
 
-  async getChangesDiff(generationId: string, userId: string): Promise<any> {
+  async getChangesDiff(generationId: string, userId: string): Promise<unknown> {
     const record = await this.resumeGenerationRepository.findOne({
       where: { id: generationId, user_id: userId },
       select: ['id', 'changes_diff'],

@@ -9,7 +9,6 @@ import {
   IsDateString,
   IsNumber,
   Min,
-  Max,
   IsObject,
 } from 'class-validator';
 import { TrimString } from '../../../shared/utils/transformers';

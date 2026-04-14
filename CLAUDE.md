@@ -17,6 +17,19 @@
 
 Do not treat Superpowers or Agency as optional add-ons. If `vendor/` is missing, run `npx ai-dev-setup init` without `--skip-vendor`.
 
+## Every message / every task (non-negotiable)
+
+Same contract as Cursor’s always-on `routing.mdc`: **Superpowers** for phase discipline, **Agency** for execution. Applies whether the user typed a slash command or started a random conversation.
+
+- **Default:** Use Superpowers skills for the current phase (brainstorming, writing-plans, systematic-debugging, subagent-driven-development, verification-before-completion, requesting-code-review, test-driven-development, etc.). Use Agency specialists for every implementation Task (`subagent_type` from `.claude/agents/_index.json`). Override only when the user opts out explicitly.
+- **Bug, error, or failing test:** systematic-debugging → then plan/implement with the right Agency role (e.g. `testing-api-tester` for tests, `engineering-backend-architect` for server logic).
+- **New feature or unclear scope:** brainstorming when creativity/requirements are unclear → writing-plans → implement with Agency per task.
+- **Review or ship (including “create PR”, “open PR”, “ship this feature”):** requesting-code-review / review skills plus verification-before-completion; for ship/PR work follow **`.claude/commands/ship.md`** in order (test → build → lint → fix → stash if dirty → `master` + pull → `feature|bugfix/<task>` → push → PR). Keep Agency on implementation work, not on Superpowers reviewer **gates** (see Rule 4).
+- **PLANNING:** Every plan task must have an Agency `subagent_type` before the plan is final (same as `/kickoff`). If a skill omits roles, add them from `.ai/agents.md` / `_index.json`.
+- **DISPATCH:** Never `general-purpose` for implementers — Rules 1–5 below.
+
+SessionStart (`.claude/settings.json`) injects **using-superpowers** when the session starts; still follow the phase gate in slash commands and here for every turn.
+
 ## Dispatch rules (non-negotiable)
 
 **NEVER dispatch an implementation Task with `subagent_type: "general-purpose"`.** Every implementation worker is bound to an Agency specialist via Claude Code's native `subagent_type` mechanism.
@@ -92,7 +105,7 @@ Load `docs/API-PATTERNS.md` on every task that touches HTTP routes or request ha
 | `/kickoff` | New feature: scope, risks, plan with Agency role per task |
 | `/implement` | Execute a plan: wires Agency specialists + quality checks |
 | `/review` | Pre-merge review checklist |
-| `/ship` | Release/merge readiness |
+| `/ship` | Release/merge readiness and **PR workflow** (see command file: verify → stash → latest `master` → task branch → PR) |
 
 ## Docs index
 

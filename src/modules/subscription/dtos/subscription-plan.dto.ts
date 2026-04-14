@@ -9,6 +9,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingCycle } from '../enums';
+import { PlanFeature } from '../../../shared/types/plan-feature.type';
 
 export class CreateSubscriptionPlanDto {
   @ApiProperty({ description: 'Name of the subscription plan' })
@@ -34,11 +35,13 @@ export class CreateSubscriptionPlanDto {
   })
   payment_gateway_variant_id: string;
 
-  @ApiPropertyOptional({ description: 'List of features included in the plan' })
+  @ApiPropertyOptional({
+    description:
+      'Feature bullets: strings or { title, subitems[] } for nested lines',
+  })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  features?: string[];
+  features?: PlanFeature[];
 
   @ApiPropertyOptional({
     description: 'Billing cycle for the plan',
@@ -78,11 +81,13 @@ export class UpdateSubscriptionPlanDto {
   @IsOptional()
   @IsString()
   payment_gateway_variant_id?: string;
-  @ApiPropertyOptional({ description: 'List of features included in the plan' })
+  @ApiPropertyOptional({
+    description:
+      'Feature bullets: strings or { title, subitems[] } for nested lines',
+  })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  features?: string[];
+  features?: PlanFeature[];
 
   @ApiPropertyOptional({
     description: 'Billing cycle for the plan',
@@ -120,8 +125,13 @@ export class SubscriptionPlanResponseDto {
   @ApiProperty()
   is_active: boolean;
 
-  @ApiProperty({ type: [String] })
-  features: string[];
+  @ApiProperty({
+    description:
+      'Feature bullets: strings or { title, subitems[] } for nested lines',
+    type: 'array',
+    isArray: true,
+  })
+  features: PlanFeature[];
 
   @ApiProperty({ enum: BillingCycle })
   billing_cycle: BillingCycle;
