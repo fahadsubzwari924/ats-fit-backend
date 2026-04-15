@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddJobAnalysisDiffToResumeGenerations1762793058000
-  implements MigrationInterface
-{
+export class AddJobAnalysisDiffToResumeGenerations1762793058000 implements MigrationInterface {
   name = 'AddJobAnalysisDiffToResumeGenerations1762793058000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

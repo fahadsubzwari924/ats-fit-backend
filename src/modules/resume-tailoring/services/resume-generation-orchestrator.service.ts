@@ -183,7 +183,10 @@ export class ResumeGenerationOrchestratorService {
           optimizationResult.optimizationMetrics.confidenceScore,
         pdf_s3_key: pdfS3Key,
         job_analysis: jobAnalysis,
-        candidate_content: resumeContent.content,
+        candidate_content: resumeContent.content as unknown as Record<
+          string,
+          unknown
+        >,
         changes_diff: null,
       });
       const dbTime = Date.now() - dbStart;

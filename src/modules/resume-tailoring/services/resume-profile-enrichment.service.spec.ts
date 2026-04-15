@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ResumeProfileEnrichmentService } from './resume-profile-enrichment.service';
 import { EnrichedResumeProfile } from '../../../database/entities/enriched-resume-profile.entity';
@@ -34,6 +35,12 @@ describe('ResumeProfileEnrichmentService', () => {
         },
         { provide: ClaudeService, useValue: {} },
         { provide: PromptService, useValue: {} },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue('claude-haiku-4-5-20251001'),
+          },
+        },
       ],
     }).compile();
 
@@ -42,10 +49,7 @@ describe('ResumeProfileEnrichmentService', () => {
 
   describe('resolveTailoringContextForResume', () => {
     it('returns standard with empty facts when userId is missing', async () => {
-      const r = await service.resolveTailoringContextForResume(
-        '',
-        resumeId,
-      );
+      const r = await service.resolveTailoringContextForResume('', resumeId);
       expect(r).toEqual({ verifiedFacts: [], tailoringMode: 'standard' });
       expect(questionFind).not.toHaveBeenCalled();
     });
@@ -55,7 +59,10 @@ describe('ResumeProfileEnrichmentService', () => {
         .mockResolvedValueOnce([]) // getAnsweredProfileFacts
         .mockResolvedValueOnce([]); // stats query
 
-      const r = await service.resolveTailoringContextForResume(userId, resumeId);
+      const r = await service.resolveTailoringContextForResume(
+        userId,
+        resumeId,
+      );
       expect(r.tailoringMode).toBe('standard');
       expect(r.verifiedFacts).toEqual([]);
     });
@@ -76,7 +83,10 @@ describe('ResumeProfileEnrichmentService', () => {
         .mockResolvedValueOnce([answeredRow])
         .mockResolvedValueOnce(allRows as TailoringQuestion[]);
 
-      const r = await service.resolveTailoringContextForResume(userId, resumeId);
+      const r = await service.resolveTailoringContextForResume(
+        userId,
+        resumeId,
+      );
       expect(r.tailoringMode).toBe('enhanced');
       expect(r.verifiedFacts).toEqual([
         { originalBulletPoint: 'Led team', userResponse: 'Team of 5' },
@@ -101,7 +111,10 @@ describe('ResumeProfileEnrichmentService', () => {
         .mockResolvedValueOnce(rows as TailoringQuestion[])
         .mockResolvedValueOnce(rows as TailoringQuestion[]);
 
-      const r = await service.resolveTailoringContextForResume(userId, resumeId);
+      const r = await service.resolveTailoringContextForResume(
+        userId,
+        resumeId,
+      );
       expect(r.tailoringMode).toBe('precision');
       expect(r.verifiedFacts).toHaveLength(2);
     });
@@ -115,7 +128,10 @@ describe('ResumeProfileEnrichmentService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce(rows as TailoringQuestion[]);
 
-      const r = await service.resolveTailoringContextForResume(userId, resumeId);
+      const r = await service.resolveTailoringContextForResume(
+        userId,
+        resumeId,
+      );
       expect(r.verifiedFacts).toEqual([]);
       expect(r.tailoringMode).toBe('precision');
     });

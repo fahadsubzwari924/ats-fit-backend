@@ -135,8 +135,9 @@ export class ResumeProfileEnrichmentService {
         `No answered questions with responses for user ${userId}; using original content`,
       );
     } else {
-      const prompt =
-        this.promptService.getProfileEnrichmentPrompt(questionsAndResponses);
+      const prompt = this.promptService.getProfileEnrichmentPrompt(
+        questionsAndResponses,
+      );
 
       try {
         const response = await this.claudeService.chatCompletion({
@@ -371,8 +372,9 @@ export class ResumeProfileEnrichmentService {
     });
 
     const questionsTotal = profileQuestions.length;
-    const questionsAnswered = profileQuestions.filter((q) => q.isAnswered)
-      .length;
+    const questionsAnswered = profileQuestions.filter(
+      (q) => q.isAnswered,
+    ).length;
     const profileCompleteness =
       questionsTotal > 0 ? questionsAnswered / questionsTotal : 1.0;
 

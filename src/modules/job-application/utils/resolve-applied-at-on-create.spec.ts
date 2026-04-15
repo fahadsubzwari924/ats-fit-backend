@@ -19,8 +19,8 @@ describe('resolveAppliedAtOnCreate', () => {
     const before = Date.now();
     const d = resolveAppliedAtOnCreate({ ...base });
     expect(d).toBeDefined();
-    expect(d!.getTime()).toBeGreaterThanOrEqual(before - 1000);
-    expect(d!.getTime()).toBeLessThanOrEqual(Date.now() + 1000);
+    expect(d.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    expect(d.getTime()).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
   it('returns undefined for direct_apply without applied_at', () => {
@@ -39,6 +39,6 @@ describe('resolveAppliedAtOnCreate', () => {
       applied_at: 'not-a-date',
     });
     expect(d).toBeDefined();
-    expect(d!.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    expect(d.getTime()).toBeGreaterThanOrEqual(before - 1000);
   });
 });

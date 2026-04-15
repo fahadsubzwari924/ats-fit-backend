@@ -106,7 +106,6 @@ export class ResumeValidationService {
     }
 
     // Extract compatibility information from validation context
-    const userContext = input.userContext;
     const requiresFileUpload = !input.resumeId;
     const hasExistingResumes = !!input.resumeId;
     const templateExists = !result.errors.some(

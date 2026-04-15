@@ -64,19 +64,18 @@ export class ResumeExtractionProcessor implements OnModuleInit {
       await job.progress(10);
 
       const fileBuffer = await this.resumeService.getResumeBufferFromS3(s3Url);
-      const extractedText =
-        await this.resumeService.extractTextFromResume({
-          fieldname: 'resumeFile',
-          originalname: fileName,
-          encoding: '7bit',
-          mimetype: 'application/pdf',
-          buffer: fileBuffer,
-          size: fileBuffer.length,
-          stream: null,
-          destination: '',
-          filename: '',
-          path: '',
-        } as Express.Multer.File);
+      const extractedText = await this.resumeService.extractTextFromResume({
+        fieldname: 'resumeFile',
+        originalname: fileName,
+        encoding: '7bit',
+        mimetype: 'application/pdf',
+        buffer: fileBuffer,
+        size: fileBuffer.length,
+        stream: null,
+        destination: '',
+        filename: '',
+        path: '',
+      } as Express.Multer.File);
       await job.progress(50);
 
       const structuredContent =

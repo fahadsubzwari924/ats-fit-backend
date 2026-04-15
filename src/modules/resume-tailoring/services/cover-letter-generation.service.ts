@@ -15,7 +15,6 @@ import { CoverLetterResult } from '../interfaces/cover-letter.interface';
 import { JobAnalysisService } from './job-analysis.service';
 import { ResumeContentProcessorService } from './resume-content-processor.service';
 import { UserContext } from '../interfaces/user-context.interface';
-import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 
 @Injectable()
 export class CoverLetterGenerationService {
@@ -98,7 +97,10 @@ export class CoverLetterGenerationService {
 
     return this.generateCoverLetter({
       jobAnalysis: jobAnalysis as unknown as Record<string, unknown>,
-      candidateContent: resumeContent.content as unknown as Record<string, unknown>,
+      candidateContent: resumeContent.content as unknown as Record<
+        string,
+        unknown
+      >,
       companyName,
       jobPosition,
       verifiedFacts: resumeContent.verifiedFacts as Array<{
@@ -113,7 +115,10 @@ export class CoverLetterGenerationService {
     candidateContent: Record<string, unknown>;
     companyName: string;
     jobPosition: string;
-    verifiedFacts?: Array<{ originalBulletPoint: string; userResponse: string }>;
+    verifiedFacts?: Array<{
+      originalBulletPoint: string;
+      userResponse: string;
+    }>;
   }): Promise<CoverLetterResult> {
     const cacheKey = this.cacheService.generateKey({
       jobPosition: input.jobPosition,
@@ -121,9 +126,8 @@ export class CoverLetterGenerationService {
       candidateName: (
         input.candidateContent?.contactInfo as Record<string, unknown>
       )?.name,
-      primaryKeywords: (
-        input.jobAnalysis?.keywords as Record<string, unknown>
-      )?.primary,
+      primaryKeywords: (input.jobAnalysis?.keywords as Record<string, unknown>)
+        ?.primary,
     });
 
     const cached = this.cacheService.get<CoverLetterResult>(
@@ -192,10 +196,19 @@ export class CoverLetterGenerationService {
       }
 
       return parsed;
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error('Failed to parse cover letter response', {
         content: content.substring(0, 500),
-        error,
+        error:
+          error instanceof Error
+            ? error.message
+            : typeof error === 'object' && error !== null
+              ? JSON.stringify(error)
+              : typeof error === 'string'
+                ? error
+                : typeof error === 'number' || typeof error === 'boolean'
+                  ? String(error)
+                  : 'unknown',
       });
       throw new InternalServerErrorException(
         'Failed to parse cover letter response',

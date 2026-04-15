@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import { UnauthorizedException } from '../../../exceptions/custom-http-exceptions';
-import { ERROR_CODES } from 'src/shared/constants/error-codes';
+import { ERROR_CODES } from '../../../../shared/constants/error-codes';
 
 @Injectable()
 export class GoogleService {

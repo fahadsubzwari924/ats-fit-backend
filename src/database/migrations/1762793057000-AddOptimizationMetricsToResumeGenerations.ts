@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddOptimizationMetricsToResumeGenerations1762793057000
-  implements MigrationInterface
-{
+export class AddOptimizationMetricsToResumeGenerations1762793057000 implements MigrationInterface {
   name = 'AddOptimizationMetricsToResumeGenerations1762793057000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

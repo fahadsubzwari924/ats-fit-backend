@@ -1,5 +1,6 @@
 import { BillingCycle } from '../enums';
 import { SubscriptionStatus } from '../enums/subscription-status.enum';
+import { PlanFeature } from '../../../shared/types/plan-feature.type';
 
 export interface ICreateSubscriptionPlanData {
   plan_name: string;
@@ -7,7 +8,7 @@ export interface ICreateSubscriptionPlanData {
   price: number;
   currency?: string;
   payment_gateway_variant_id: string;
-  features?: string[];
+  features?: PlanFeature[];
   billing_cycle?: BillingCycle;
 }
 
@@ -17,7 +18,7 @@ export interface IUpdateSubscriptionPlanData {
   price?: number;
   currency?: string;
   payment_gateway_variant_id?: string;
-  features?: string[];
+  features?: PlanFeature[];
   billing_cycle?: BillingCycle;
   is_active?: boolean;
 }

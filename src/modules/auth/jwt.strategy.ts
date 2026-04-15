@@ -31,7 +31,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * Confirms the user still exists and is active in the database.
    * A lightweight, cached query is used so this adds negligible overhead.
    */
-  async validate(payload: JwtPayload): Promise<{ userId: string; email: string }> {
+  async validate(
+    payload: JwtPayload,
+  ): Promise<{ userId: string; email: string }> {
     const user = await this.userRepository.findOne({
       where: { id: payload.sub, is_active: true },
       select: ['id', 'email', 'is_active'],

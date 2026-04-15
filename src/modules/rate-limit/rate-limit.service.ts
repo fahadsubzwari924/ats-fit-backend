@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   UsageTracking,
   FeatureType,
@@ -10,24 +10,13 @@ import { UserPlan, UserType } from '../../database/entities/user.entity';
 import { BadRequestException } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { UserContext } from '../auth/types/user-context.type';
+import {
+  FormattedFeatureUsage,
+  RateLimitResult,
+  UserUsageStats,
+} from './interfaces/rate-limit.interfaces';
 
-export interface RateLimitResult {
-  allowed: boolean;
-  currentUsage: number;
-  limit: number;
-  remaining: number;
-  resetDate: Date;
-  usagePercentage: number;
-}
-
-export interface FormattedFeatureUsage {
-  feature: string;
-  allowed: number;
-  remaining: number;
-  used: number;
-  usagePercentage: string;
-  resetDate: Date;
-}
+export type { RateLimitResult, FormattedFeatureUsage, UserUsageStats };
 
 @Injectable()
 export class RateLimitService {
@@ -195,6 +184,60 @@ export class RateLimitService {
   }
 
   /**
+   * Fetch all rate-limit configs for a given plan/userType/featureTypes in one DB call.
+   */
+  private async getRateLimitConfigsBatch(
+    plan: UserPlan,
+    userType: UserType,
+    featureTypes: FeatureType[],
+  ): Promise<Map<FeatureType, RateLimitConfig>> {
+    const configs = await this.rateLimitConfigRepository.find({
+      where: {
+        plan,
+        user_type: userType,
+        feature_type: In(featureTypes),
+        is_active: true,
+      },
+    });
+
+    const configMap = new Map<FeatureType, RateLimitConfig>();
+    for (const config of configs) {
+      configMap.set(config.feature_type, config);
+    }
+    return configMap;
+  }
+
+  /**
+   * Fetch all usage records for a set of features in one DB call.
+   * Returns a map of featureType → usage count (0 when no record exists).
+   */
+  private async getCurrentUsageBatch(
+    userContext: UserContext,
+    featureTypes: FeatureType[],
+    month: number,
+    year: number,
+  ): Promise<Map<FeatureType, number>> {
+    const usageMap = new Map<FeatureType, number>(
+      featureTypes.map((ft) => [ft, 0]),
+    );
+
+    const records = await this.usageTrackingRepository.find({
+      where: {
+        user_id: userContext.userId,
+        feature_type: In(featureTypes),
+        month,
+        year,
+      },
+    });
+
+    for (const record of records) {
+      usageMap.set(record.feature_type, record.usage_count);
+    }
+
+    return usageMap;
+  }
+
+  /**
    * Get rate limit configuration
    */
   public async getRateLimitConfig(
@@ -248,43 +291,159 @@ export class RateLimitService {
   }
 
   /**
-   * Get usage statistics for a user.
+   * Compute a RateLimitResult from pre-fetched config and usage maps.
+   * Throws BadRequestException if config is missing (data integrity error).
    */
-  async getUserUsageStats(userContext: UserContext): Promise<{
-    resume_generation: RateLimitResult;
-  }> {
-    const resumeGeneration = await this.checkRateLimit(
-      userContext,
-      FeatureType.RESUME_GENERATION,
+  private computeRateLimitResult(
+    featureType: FeatureType,
+    configMap: Map<FeatureType, RateLimitConfig>,
+    usageMap: Map<FeatureType, number>,
+    resetDate: Date,
+  ): RateLimitResult {
+    const config = configMap.get(featureType);
+    if (!config) {
+      throw new BadRequestException(
+        `Rate limit configuration not found for ${featureType}`,
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+
+    const currentUsage = usageMap.get(featureType) ?? 0;
+    const remaining = Math.max(0, config.monthly_limit - currentUsage);
+    const usagePercentage = Math.round(
+      (currentUsage / config.monthly_limit) * 100,
     );
 
     return {
-      resume_generation: resumeGeneration,
+      allowed: currentUsage < config.monthly_limit,
+      currentUsage,
+      limit: config.monthly_limit,
+      remaining,
+      resetDate,
+      usagePercentage,
     };
   }
 
   /**
+   * Get usage statistics for a user.
+   * Issues exactly 2 parallel DB calls regardless of plan tier.
+   *
+   * FREEMIUM: resume_generation + cover_letter
+   * PREMIUM:  resume_generation + cover_letter + resume_batch_generation
+   */
+  async getUserUsageStats(userContext: UserContext): Promise<UserUsageStats> {
+    const isPremium = (userContext.plan as UserPlan) === UserPlan.PREMIUM;
+
+    const featureTypes: FeatureType[] = isPremium
+      ? [
+          FeatureType.RESUME_GENERATION,
+          FeatureType.COVER_LETTER,
+          FeatureType.RESUME_BATCH_GENERATION,
+        ]
+      : [FeatureType.RESUME_GENERATION, FeatureType.COVER_LETTER];
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const resetDate = new Date(currentYear, currentMonth, 1);
+
+    const [configMap, usageMap] = await Promise.all([
+      this.getRateLimitConfigsBatch(
+        userContext.plan as UserPlan,
+        userContext.userType as UserType,
+        featureTypes,
+      ),
+      this.getCurrentUsageBatch(
+        userContext,
+        featureTypes,
+        currentMonth,
+        currentYear,
+      ),
+    ]);
+
+    const result: UserUsageStats = {
+      resume_generation: this.computeRateLimitResult(
+        FeatureType.RESUME_GENERATION,
+        configMap,
+        usageMap,
+        resetDate,
+      ),
+      cover_letter: this.computeRateLimitResult(
+        FeatureType.COVER_LETTER,
+        configMap,
+        usageMap,
+        resetDate,
+      ),
+    };
+
+    if (isPremium) {
+      result.resume_batch_generation = this.computeRateLimitResult(
+        FeatureType.RESUME_BATCH_GENERATION,
+        configMap,
+        usageMap,
+        resetDate,
+      );
+    }
+
+    return result;
+  }
+
+  /**
    * Get formatted feature usage for API responses.
+   * FREEMIUM: resume_generation + cover_letter
+   * PREMIUM:  resume_generation + cover_letter + resume_batch_generation
    */
   async getFormattedFeatureUsage(
     userContext: UserContext,
   ): Promise<FormattedFeatureUsage[]> {
     const stats = await this.getUserUsageStats(userContext);
 
-    return [
+    const entries: FormattedFeatureUsage[] = [
       {
-        feature: 'resume_generation',
+        feature: FeatureType.RESUME_GENERATION,
         allowed: stats.resume_generation.limit,
         remaining: stats.resume_generation.remaining,
         used: stats.resume_generation.currentUsage,
         usagePercentage: `${stats.resume_generation.usagePercentage}%`,
         resetDate: stats.resume_generation.resetDate,
       },
+      {
+        feature: FeatureType.COVER_LETTER,
+        allowed: stats.cover_letter.limit,
+        remaining: stats.cover_letter.remaining,
+        used: stats.cover_letter.currentUsage,
+        usagePercentage: `${stats.cover_letter.usagePercentage}%`,
+        resetDate: stats.cover_letter.resetDate,
+      },
     ];
+
+    if (stats.resume_batch_generation) {
+      entries.push({
+        feature: FeatureType.RESUME_BATCH_GENERATION,
+        allowed: stats.resume_batch_generation.limit,
+        remaining: stats.resume_batch_generation.remaining,
+        used: stats.resume_batch_generation.currentUsage,
+        usagePercentage: `${stats.resume_batch_generation.usagePercentage}%`,
+        resetDate: stats.resume_batch_generation.resetDate,
+      });
+    }
+
+    return entries;
   }
 
   /**
-   * Initialize rate limit configurations if they don't exist
+   * Initialize rate limit configurations if they don't exist.
+   *
+   * Canonical set (5 configs):
+   *   FREEMIUM / RESUME_GENERATION        → 3
+   *   FREEMIUM / COVER_LETTER             → 1
+   *   PREMIUM  / RESUME_GENERATION        → 30
+   *   PREMIUM  / COVER_LETTER             → 15
+   *   PREMIUM  / RESUME_BATCH_GENERATION  → 10
+   *
+   * Intentional omissions:
+   *   - FREEMIUM / RESUME_BATCH_GENERATION: blocked at route level by PremiumUserGuard
+   *   - JOB_APPLICATION_TRACKING: unlimited for all plans; no @RateLimitFeature usage
    */
   async initializeRateLimitConfigs(): Promise<void> {
     const configs = [
@@ -292,23 +451,36 @@ export class RateLimitService {
         plan: UserPlan.FREEMIUM,
         user_type: UserType.REGISTERED,
         feature_type: FeatureType.RESUME_GENERATION,
-        monthly_limit: 5,
-        description: 'Freemium users can generate 5 resumes per month',
+        monthly_limit: 3,
+        description: 'Freemium users can generate 3 resumes per month',
       },
-      // Premium - Registered users (future use)
+      {
+        plan: UserPlan.FREEMIUM,
+        user_type: UserType.REGISTERED,
+        feature_type: FeatureType.COVER_LETTER,
+        monthly_limit: 1,
+        description: 'Freemium users can generate 1 cover letter per month',
+      },
       {
         plan: UserPlan.PREMIUM,
         user_type: UserType.REGISTERED,
         feature_type: FeatureType.RESUME_GENERATION,
-        monthly_limit: 50,
-        description: 'Premium users can generate 50 resumes per month',
+        monthly_limit: 30,
+        description: 'Premium users can generate 30 resumes per month',
+      },
+      {
+        plan: UserPlan.PREMIUM,
+        user_type: UserType.REGISTERED,
+        feature_type: FeatureType.COVER_LETTER,
+        monthly_limit: 15,
+        description: 'Premium users can generate 15 cover letters per month',
       },
       {
         plan: UserPlan.PREMIUM,
         user_type: UserType.REGISTERED,
         feature_type: FeatureType.RESUME_BATCH_GENERATION,
-        monthly_limit: 25,
-        description: 'Premium users can run 25 batch generations per month',
+        monthly_limit: 10,
+        description: 'Premium users can run 10 batch generations per month',
       },
     ];
 
