@@ -201,7 +201,7 @@ export class ResumeGenerationOrchestratorService {
         .addChangesDiffJob({
           resumeGenerationId: savedGeneration.id,
           userId: input.userContext.userId || '',
-          originalContent: resumeContent.content as unknown as Record<
+          originalContent: resumeContent.rawContent as unknown as Record<
             string,
             unknown
           >,

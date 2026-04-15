@@ -46,6 +46,12 @@ export interface VerifiedFact {
  */
 export interface ResumeContentResult {
   content: any; // TailoredContent - keeping as any for now due to existing dependencies
+  /**
+   * Raw extracted resume content — never enriched or optimized.
+   * Always reflects what the user originally submitted.
+   * Used as the diff "before" baseline.
+   */
+  rawContent: any;
   source: ContentSource;
   originalText: string;
   /** v4: quality mode when using enriched profile */

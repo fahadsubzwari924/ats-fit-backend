@@ -157,6 +157,7 @@ export class ResumeContentProcessorService {
 
       return {
         content: structuredContent,
+        rawContent: structuredContent,
         source: 'file_upload',
         originalText: resumeText,
         tailoringMode: 'standard',
@@ -220,6 +221,7 @@ export class ResumeContentProcessorService {
         );
         return {
           content: enrichedProfile.enrichedContent,
+          rawContent: enrichedProfile.originalContent,
           source: 'database_existing',
           originalText: selectionResult.extractedText,
           tailoringMode: profileCtx.tailoringMode,
@@ -242,6 +244,7 @@ export class ResumeContentProcessorService {
 
         return {
           content: selectionResult.structuredContent as TailoredContent,
+          rawContent: selectionResult.structuredContent as TailoredContent,
           source: 'database_existing',
           originalText: selectionResult.extractedText,
           tailoringMode: profileCtx.tailoringMode,
@@ -268,6 +271,7 @@ export class ResumeContentProcessorService {
 
       return {
         content: structuredContent,
+        rawContent: structuredContent,
         source: 'database_extraction',
         originalText: selectionResult.extractedText,
         tailoringMode: profileCtx.tailoringMode,
