@@ -193,10 +193,9 @@ describe('Payment Abstraction Layer', () => {
           email: 'test@example.com',
           redirectUrl: 'https://app.com/success',
         }),
-      ).rejects.toThrow('Provider-specific error: Invalid API key');
+      ).rejects.toThrow('ERR_INTERNAL_SERVER');
 
-      // The service doesn't need to know about provider-specific errors
-      // It just forwards them consistently
+      // Provider-specific errors are logged and surfaced as a stable internal error code.
     });
   });
 });

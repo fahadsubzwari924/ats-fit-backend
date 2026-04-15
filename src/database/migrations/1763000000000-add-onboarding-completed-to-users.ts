@@ -21,4 +21,3 @@ export class AddOnboardingCompletedToUsers1763000000000 implements MigrationInte
     );
   }
 }
-

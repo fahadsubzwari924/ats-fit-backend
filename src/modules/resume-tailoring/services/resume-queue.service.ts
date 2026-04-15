@@ -161,7 +161,10 @@ export class ResumeQueueService {
 
     this.logger.log(
       `Enqueued profile enrichment job ${job.id} for user ${userId}`,
-      { queueMessageId: queueMessage.id, correlationId: queueMessage.correlationId },
+      {
+        queueMessageId: queueMessage.id,
+        correlationId: queueMessage.correlationId,
+      },
     );
   }
 
@@ -203,7 +206,10 @@ export class ResumeQueueService {
 
     this.logger.log(
       `Enqueued changes diff job ${job.id} for resume generation ${params.resumeGenerationId}`,
-      { queueMessageId: queueMessage.id, correlationId: queueMessage.correlationId },
+      {
+        queueMessageId: queueMessage.id,
+        correlationId: queueMessage.correlationId,
+      },
     );
   }
 }

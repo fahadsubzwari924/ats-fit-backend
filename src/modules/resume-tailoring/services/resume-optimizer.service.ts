@@ -6,9 +6,7 @@ import { CacheService } from '../../../shared/services/cache.service';
 import { AIErrorUtil } from '../../../shared/utils/ai-error.util';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import { JobAnalysisResult } from '../interfaces/job-analysis.interface';
-import {
-  ResumeOptimizationResult,
-} from '../interfaces/resume-optimization.interface';
+import { ResumeOptimizationResult } from '../interfaces/resume-optimization.interface';
 import {
   InternalServerErrorException,
   BadRequestException,
@@ -255,7 +253,10 @@ export class ResumeOptimizerService {
       const parsedResult = JSON.parse(jsonMatch[0]);
       this.validateOptimizationResult(parsedResult);
 
-      return parsedResult as Omit<ResumeOptimizationResult, 'processingMetadata'>;
+      return parsedResult as Omit<
+        ResumeOptimizationResult,
+        'processingMetadata'
+      >;
     } catch (error: unknown) {
       this.logger.error('Failed to parse optimization response', {
         content: content.substring(0, 500),
@@ -278,10 +279,7 @@ export class ResumeOptimizerService {
    * Validate the parsed optimization result structure
    */
   private validateOptimizationResult(result: any): void {
-    const requiredFields = [
-      'optimizedContent',
-      'optimizationMetrics',
-    ];
+    const requiredFields = ['optimizedContent', 'optimizationMetrics'];
 
     for (const field of requiredFields) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -474,7 +472,10 @@ export class ResumeOptimizerService {
     try {
       const parsedResult: unknown = JSON.parse(content);
       this.validateOptimizationResult(parsedResult);
-      return parsedResult as Omit<ResumeOptimizationResult, 'processingMetadata'>;
+      return parsedResult as Omit<
+        ResumeOptimizationResult,
+        'processingMetadata'
+      >;
     } catch (error) {
       this.logger.error('Failed to parse OpenAI optimization response', {
         content: content.substring(0, 500),

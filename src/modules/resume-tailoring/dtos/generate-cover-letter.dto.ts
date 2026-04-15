@@ -1,8 +1,10 @@
 import { IsString, IsOptional, MinLength, MaxLength } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GenerateCoverLetterDto {
-  @ApiPropertyOptional({ description: 'Resume generation ID for context reuse' })
+  @ApiPropertyOptional({
+    description: 'Resume generation ID for context reuse',
+  })
   @IsOptional()
   @IsString()
   resumeGenerationId?: string;

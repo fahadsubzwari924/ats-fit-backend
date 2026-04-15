@@ -32,7 +32,7 @@ import {
   NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { MESSAGES } from '../../../shared/constants/messages';
-import { ERROR_CODES } from 'src/shared/constants/error-codes';
+import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
 import { ExternalPaymentGatewayEvents } from '../externals/enums';
 import {

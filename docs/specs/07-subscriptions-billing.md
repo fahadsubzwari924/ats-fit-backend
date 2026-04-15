@@ -2,7 +2,7 @@
 doc_type: domain-spec
 status: draft
 owner: TBD
-last_reviewed: 2026-04-06
+last_reviewed: 2026-04-14
 ---
 
 # Subscriptions and billing (intended behavior)
@@ -32,7 +32,25 @@ Let users **discover plans**, **pay through a trusted gateway**, and receive **e
 - [ ] **AC-SUB-07:** Production webhook requests are signature-verified when secret is configured (**see** NFR-SEC-02).
 - [ ] **AC-SUB-08:** Authenticated user can read their payment history; admin-style user-id paths behave as implemented and documented in code.
 
-## Plans
+## Pricing tiers
+
+The product has two tiers:
+
+| Tier | Cost | `UserPlan` value | Notes |
+|------|------|-----------------|-------|
+| **Freemium** | Free | `FREEMIUM` | Default on sign-up; no checkout required |
+| **Pro** | Paid | `PREMIUM` | Activated via checkout → webhook flow |
+
+Pro is offered in two billing cycles:
+
+| Plan name | Price | Billing cycle |
+|-----------|-------|---------------|
+| **Pro Monthly** | $12.00 USD / month | `monthly` |
+| **Pro Annual** | $89.00 USD / year | `yearly` (~38 % saving vs monthly) |
+
+Plan names, prices, and `payment_gateway_variant_id` values are seeded via `scripts/seed/seed-subscription-plans-service.ts`. Gateway variant IDs must be set to real Lemon Squeezy variant IDs before going live (placeholders are used in development).
+
+## Plans API
 
 - **`GET /subscriptions/plans`** — Active subscription plans (**JWT required**; controller uses global auth except `@Public` webhook/test utilities).
 - **`GET /subscriptions/plans/:id`** — Plan by UUID (**JWT required**).

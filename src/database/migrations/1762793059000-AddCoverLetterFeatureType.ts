@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddCoverLetterFeatureType1762793059000
-  implements MigrationInterface
-{
+export class AddCoverLetterFeatureType1762793059000 implements MigrationInterface {
   name = 'AddCoverLetterFeatureType1762793059000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

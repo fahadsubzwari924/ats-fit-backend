@@ -44,27 +44,6 @@ Include `next_cursor` or `page`/`page_size` consistently.
 | `message` | Human readable, safe for clients |
 | `details` | Optional structured context (no secrets) |
 
-## Request constraints and limits
-
-### Bulk operations
-
-| Endpoint | Constraint | HTTP Status | Error Code |
-|----------|------------|-------------|-----------|
-| `POST /resume-tailoring/batch-generate` | Maximum 3 jobs per request | 400 | `BAD_REQUEST` |
-
-**Rationale:** Bulk operations are limited to ensure fast response times and prevent abuse. Processing 3 resumes takes approximately 2 minutes.
-
-**Error response format:**
-```json
-{
-  "code": "BAD_REQUEST",
-  "message": "Maximum 3 resumes allowed per batch request. Please reduce your selection and try again.",
-  "statusCode": 400
-}
-```
-
-**Client-side enforcement:** The web UI prevents users from submitting more than 3 jobs in the batch form, with clear messaging about the limit upfront. This prevents the error state from occurring in normal usage.
-
 ## Idempotency
 
 - Use idempotency keys for `POST` that create billable or side-effectful resources

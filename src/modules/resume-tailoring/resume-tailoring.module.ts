@@ -44,6 +44,7 @@ import { SharedModule } from '../../shared/shared.module';
 import { ExternalModule } from '../../shared/modules/external/external.module';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { AtsMatchModule } from '../ats-match/ats-match.module';
+import { AuthModule } from '../auth/auth.module';
 import { QueueModule } from '../queue/queue.module';
 import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-provider.token';
 import { ResumeExtractionProcessor } from './processors/resume-extraction.processor';
@@ -69,6 +70,7 @@ import { ChangesDiffComputationService } from './services/changes-diff-computati
     forwardRef(() => RateLimitModule),
     forwardRef(() => AtsMatchModule),
     forwardRef(() => QueueModule),
+    forwardRef(() => AuthModule),
   ],
   providers: [
     ResumeService,

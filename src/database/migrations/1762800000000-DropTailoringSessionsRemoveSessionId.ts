@@ -4,9 +4,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Removes legacy per-job tailoring sessions. Profile questions are the only flow;
  * tailoring_questions rows are scoped by user_id + extracted_resume_content_id only.
  */
-export class DropTailoringSessionsRemoveSessionId1762800000000
-  implements MigrationInterface
-{
+export class DropTailoringSessionsRemoveSessionId1762800000000 implements MigrationInterface {
   name = 'DropTailoringSessionsRemoveSessionId1762800000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

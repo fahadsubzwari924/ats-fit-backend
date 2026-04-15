@@ -10,6 +10,7 @@ import {
 import { PaymentHistory } from './payment-history.entity';
 import { UserSubscription } from './user-subscription.entity';
 import { BillingCycle } from '../../modules/subscription/enums';
+import { PlanFeature } from '../../shared/types/plan-feature.type';
 
 @Entity('subscription_plans')
 @Index(['payment_gateway_variant_id'], { unique: true })
@@ -29,14 +30,14 @@ export class SubscriptionPlan {
   @Column({ length: 3 })
   currency: string;
 
-  @Column({ name: 'payment_gateway_variant_id', unique: true })
+  @Column({ name: 'lemon_squeezy_variant_id', unique: true })
   payment_gateway_variant_id: string;
 
   @Column({ name: 'is_active', default: true })
   is_active: boolean;
 
   @Column({ type: 'jsonb', nullable: true })
-  features: string[];
+  features: PlanFeature[];
 
   @Column({
     name: 'billing_cycle',

@@ -2,7 +2,7 @@
 doc_type: domain-spec
 status: draft
 owner: TBD
-last_reviewed: 2026-04-06
+last_reviewed: 2026-04-14
 ---
 
 # Rate limits and usage
@@ -53,9 +53,18 @@ Used for quotas and guard metadata:
 
 - **`GET /users/feature-usage`** — Authenticated; returns feature usage with `allowed`, `used`, `remaining`, `usagePercentage`, `resetDate` (see controller Swagger schema).
 
+## Generation history access
+
+History visibility is a **product-level rule** enforced in the resume tailoring service, separate from per-feature monthly quotas:
+
+| Plan | History access |
+|------|---------------|
+| **Freemium** | Last **30 days** only (`FREEMIUM_HISTORY_LOOKBACK_DAYS = 30` in `shared/constants/plan-limits.constants.ts`) |
+| **Pro** | Full history (no date filter) |
+
 ## Configuration source
 
-Limits per **plan** and **user type** live in DB/config services (`RateLimitService`). **Do not** hardcode limits in this spec; **see** seed data / admin tooling / runbook.
+Monthly feature limits per **plan** and **user type** live in DB/config services (`RateLimitService`). **Do not** hardcode those limits in this spec; **see** seed data / admin tooling / runbook.
 
 ## Related specs
 
