@@ -15,10 +15,12 @@ export class GenerateTailoredResumeResponseDto {
   resumeGenerationId: string;
 
   @ApiProperty({
-    description: 'ATS score of the generated resume (0-100)',
+    description:
+      'ATS score of the generated resume (0-100). Deprecated — use matchScore instead.',
     example: 87,
     minimum: 0,
     maximum: 100,
+    deprecated: true,
   })
   atsScore: number;
 
@@ -69,4 +71,38 @@ export class GenerateTailoredResumeResponseDto {
     },
   })
   metadata: GenerationMetadata;
+
+  @ApiProperty({
+    description:
+      'Keyword match score before and after tailoring, with the improvement delta',
+    type: 'object',
+    properties: {
+      before: { type: 'number', example: 42 },
+      after: { type: 'number', example: 78 },
+      delta: { type: 'number', example: 36 },
+    },
+  })
+  matchScore: { before: number; after: number; delta: number };
+
+  @ApiProperty({
+    description: 'Number of ATS format checks passed out of total checks',
+    type: 'object',
+    properties: {
+      passed: { type: 'number', example: 8 },
+      total: { type: 'number', example: 10 },
+    },
+  })
+  atsChecks: { passed: number; total: number };
+
+  @ApiProperty({
+    description:
+      'Number of resume bullets containing quantified achievements before and after tailoring',
+    type: 'object',
+    properties: {
+      before: { type: 'number', example: 3 },
+      after: { type: 'number', example: 7 },
+      total: { type: 'number', example: 7 },
+    },
+  })
+  bulletsQuantified: { before: number; after: number; total: number };
 }

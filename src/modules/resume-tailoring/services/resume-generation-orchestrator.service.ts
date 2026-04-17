@@ -8,6 +8,8 @@ import { PdfGenerationOrchestratorService } from './pdf-generation-orchestrator.
 import { ResumeValidationService } from './resume-validation.service';
 import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
 import { ResumeQueueService } from './resume-queue.service';
+import { AtsChecksComputationService } from './ats-checks-computation.service';
+import { BulletsQuantifiedComputationService } from './bullets-quantified-computation.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import {
@@ -20,6 +22,7 @@ import {
   NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
+import { MATCH_SCORE_MAX_PERCENTAGE } from '../../../shared/constants/resume-tailoring.constants';
 
 /**
  * Resume Generation Orchestrator Service
@@ -45,6 +48,8 @@ export class ResumeGenerationOrchestratorService {
     private readonly pdfGenerationOrchestratorService: PdfGenerationOrchestratorService,
     private readonly tailoredResumePdfStorageService: TailoredResumePdfStorageService,
     private readonly resumeQueueService: ResumeQueueService,
+    private readonly atsChecksComputationService: AtsChecksComputationService,
+    private readonly bulletsQuantifiedComputationService: BulletsQuantifiedComputationService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
   ) {}
@@ -62,259 +67,518 @@ export class ResumeGenerationOrchestratorService {
         `Starting resume generation for ${input.jobPosition} at ${input.companyName}`,
       );
 
-      // STEP 0: Comprehensive upfront validation (FAIL FAST)
-      const validationStart = Date.now();
-      const validationResult =
-        await this.validatorService.validateGenerationRequest(input);
-      const validationTime = Date.now() - validationStart;
-
-      if (!validationResult.isValid) {
-        this.logger.warn(
-          `Validation failed in ${validationTime}ms: ${validationResult.validationErrors.join(', ')}`,
-        );
-        throw new BadRequestException(
-          `Validation failed: ${validationResult.validationErrors.join('; ')}`,
-          ERROR_CODES.BAD_REQUEST,
-        );
-      }
-
-      this.logger.debug(
-        `All validations passed in ${validationTime}ms. ` +
-          `Template exists: ${validationResult.templateExists}, ` +
-          `Has existing resumes: ${validationResult.hasExistingResumes}, ` +
-          `Requires file upload: ${validationResult.requiresFileUpload}`,
+      const validationTime = await this.runValidation(input);
+      const { jobAnalysis, resumeContent, parallelOperationsTime } =
+        await this.runAnalysisAndProcessing(input);
+      const { optimizationResult, optimizationTime } =
+        await this.runOptimization(input, jobAnalysis, resumeContent);
+      const scores = this.computeScores(
+        jobAnalysis,
+        resumeContent,
+        optimizationResult,
+      );
+      const { pdfResult, pdfGenerationTime } = await this.runPdfGeneration(
+        input,
+        optimizationResult,
+      );
+      const { savedGeneration, dbTime } = await this.persistGeneration(
+        input,
+        resumeContent,
+        optimizationResult,
+        pdfResult,
+        jobAnalysis,
+        scores,
       );
 
-      // Now proceed with the pipeline - all prerequisites are validated
-
-      // PERFORMANCE OPTIMIZATION: Run independent operations in parallel
-      this.logger.debug(
-        'Starting parallel job analysis and content processing',
+      this.dispatchDiffJob(
+        savedGeneration.id,
+        input,
+        resumeContent,
+        optimizationResult,
+        jobAnalysis,
       );
-      const parallelOperationsStart = Date.now();
-
-      // Execute job analysis and resume content processing in parallel
-      const [jobAnalysis, resumeContent] = await Promise.all([
-        // Step 1: Analyze job description using GPT-4 Turbo
-        this.jobAnalysisService.analyzeJobDescription(
-          input.jobDescription,
-          input.jobPosition,
-          input.companyName,
-        ),
-        // Step 2: Process resume content (guest vs registered user handling)
-        this.resumeContentProcessorService.processResumeContent(
-          input.userContext,
-          input.resumeFile,
-          input.resumeId,
-        ),
-      ]);
-
-      const parallelOperationsTime = Date.now() - parallelOperationsStart;
-
-      this.logger.debug(
-        `Parallel operations completed in ${parallelOperationsTime}ms. ` +
-          `Job analysis found ${jobAnalysis.keywords.primary.length} primary keywords. ` +
-          `Content processing used ${resumeContent.source} source.`,
-      );
-
-      // Step 3: Optimize resume content using Claude 3.5 Sonnet
-      const optimizationStart = Date.now();
-      const optimizationResult =
-        await this.resumeOptimizerService.optimizeResumeContent(
-          jobAnalysis,
-          resumeContent.content as TailoredContent,
-          input.companyName,
-          input.jobPosition,
-          resumeContent.tailoringMode,
-          resumeContent.verifiedFacts,
-        );
-      const optimizationTime = Date.now() - optimizationStart;
-
-      this.logger.debug(
-        `Content optimization completed in ${optimizationTime}ms. ` +
-          `Added ${optimizationResult.optimizationMetrics.keywordsAdded} keywords, ` +
-          `confidence: ${optimizationResult.optimizationMetrics.confidenceScore}%`,
-      );
-
-      // Step 4: Generate PDF from optimized content
-      const pdfGenerationStart = Date.now();
-      const pdfResult =
-        await this.pdfGenerationOrchestratorService.generateOptimizedResumePdf(
-          optimizationResult,
-          input.templateId,
-          input.companyName,
-          input.jobPosition,
-        );
-      const pdfGenerationTime = Date.now() - pdfGenerationStart;
-
-      this.logger.debug(
-        `PDF generation completed in ${pdfGenerationTime}ms. ` +
-          `Generated ${pdfResult.generationMetadata.pdfSizeBytes} byte PDF.`,
-      );
-
-      // Step 4.5: Save resume generation record and upload PDF to S3
-      const dbStart = Date.now();
-
-      const pdfBuffer = Buffer.from(pdfResult.pdfContent, 'base64');
-      const pdfS3Key =
-        await this.tailoredResumePdfStorageService.uploadGeneratedPdf(
-          pdfBuffer,
-          input.userContext.userId,
-        );
-
-      const savedGeneration = await this.saveResumeGenerationRecord({
-        user_id: input.userContext.userId,
-        file_path:
-          input.resumeFile?.originalname ||
-          `resume-${input.resumeId || 'processed'}`,
-        original_content: resumeContent.originalText || '',
-        tailored_content: optimizationResult.optimizedContent,
-        template_id: input.templateId,
-        job_description: input.jobDescription,
-        company_name: input.companyName,
-        job_position: input.jobPosition,
-        analysis: optimizationResult.optimizedContent,
-        keywords_added: optimizationResult.optimizationMetrics.keywordsAdded,
-        sections_optimized:
-          optimizationResult.optimizationMetrics.sectionsOptimized,
-        achievements_quantified:
-          optimizationResult.optimizationMetrics.achievementsQuantified,
-        optimization_confidence:
-          optimizationResult.optimizationMetrics.confidenceScore,
-        pdf_s3_key: pdfS3Key,
-        job_analysis: jobAnalysis,
-        candidate_content: resumeContent.content as unknown as Record<
-          string,
-          unknown
-        >,
-        changes_diff: null,
-      });
-      const dbTime = Date.now() - dbStart;
-
-      this.logger.debug(
-        `Resume generation record saved in ${dbTime}ms with ID: ${savedGeneration.id}`,
-      );
-
-      // Step 5a: Dispatch changes diff computation as a background Bull job.
-      // This is fire-and-forget — users get their PDF without waiting.
-      void this.resumeQueueService
-        .addChangesDiffJob({
-          resumeGenerationId: savedGeneration.id,
-          userId: input.userContext.userId || '',
-          originalContent: resumeContent.rawContent as unknown as Record<
-            string,
-            unknown
-          >,
-          optimizedContent:
-            optimizationResult.optimizedContent as unknown as Record<
-              string,
-              unknown
-            >,
-          jobAnalysisKeywords: {
-            mandatorySkills: jobAnalysis.technical.mandatorySkills,
-            primaryKeywords: jobAnalysis.keywords.primary,
-          },
-        })
-        .catch((error: unknown) => {
-          this.logger.warn(
-            '[Background] Changes diff job dispatch failed — diff will be unavailable for this generation',
-            error,
-          );
-        });
 
       const totalProcessingTime = Date.now() - startTime;
-
       this.logger.log(
         `Resume generation completed in ${totalProcessingTime}ms ` +
           `(Validation: ${validationTime}ms, Parallel: ${parallelOperationsTime}ms, ` +
           `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, Diff: background)`,
       );
 
-      // Build comprehensive result — ATS score available after background task completes
-      return {
-        // Primary outputs
-        pdfContent: pdfResult.pdfContent,
-        filename: pdfResult.filename,
-
-        // Generation tracking
-        resumeGenerationId: savedGeneration.id,
-
-        // Optimization metrics
-        keywordsAdded: optimizationResult.optimizationMetrics.keywordsAdded,
-        sectionsOptimized:
-          optimizationResult.optimizationMetrics.sectionsOptimized,
-        achievementsQuantified:
-          optimizationResult.optimizationMetrics.achievementsQuantified,
-        optimizationConfidence:
-          optimizationResult.optimizationMetrics.confidenceScore,
-
-        // Processing metadata
-        processingMetrics: {
-          validationTimeMs: validationTime,
-          parallelOperationsTimeMs: parallelOperationsTime,
-          optimizationTimeMs: optimizationTime,
-          pdfGenerationTimeMs: pdfGenerationTime,
-          dbSaveTimeMs: dbTime,
-          totalProcessingTimeMs: totalProcessingTime,
+      return this.buildResult(
+        input,
+        pdfResult,
+        savedGeneration,
+        resumeContent,
+        optimizationResult,
+        jobAnalysis,
+        scores,
+        {
+          validationTime,
+          parallelOperationsTime,
+          optimizationTime,
+          pdfGenerationTime,
+          dbTime,
+          totalProcessingTime,
         },
-        contentSource: resumeContent.source,
-        tailoringMode: resumeContent.tailoringMode,
-
-        // PDF metadata
-        pdfSizeBytes: pdfResult.generationMetadata.pdfSizeBytes,
-        templateUsed: input.templateId,
-
-        // Job analysis insights
-        primaryKeywordsFound: jobAnalysis.keywords.primary.length,
-        mandatorySkillsAligned: jobAnalysis.technical.mandatorySkills.length,
-      };
+      );
     } catch (error) {
-      const processingTime = Date.now() - startTime;
-      this.logger.error(
-        `Resume generation failed after ${processingTime}ms`,
-        error,
+      this.handlePipelineError(error, Date.now() - startTime);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pipeline steps
+  // ---------------------------------------------------------------------------
+
+  private async runValidation(input: ResumeGenerationInput): Promise<number> {
+    const start = Date.now();
+    const validationResult =
+      await this.validatorService.validateGenerationRequest(input);
+    const elapsed = Date.now() - start;
+
+    if (!validationResult.isValid) {
+      this.logger.warn(
+        `Validation failed in ${elapsed}ms: ${validationResult.validationErrors.join(', ')}`,
+      );
+      throw new BadRequestException(
+        `Validation failed: ${validationResult.validationErrors.join('; ')}`,
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+
+    this.logger.debug(
+      `All validations passed in ${elapsed}ms. ` +
+        `Template exists: ${validationResult.templateExists}, ` +
+        `Has existing resumes: ${validationResult.hasExistingResumes}, ` +
+        `Requires file upload: ${validationResult.requiresFileUpload}`,
+    );
+
+    return elapsed;
+  }
+
+  private async runAnalysisAndProcessing(input: ResumeGenerationInput) {
+    this.logger.debug('Starting parallel job analysis and content processing');
+    const start = Date.now();
+
+    const [jobAnalysis, resumeContent] = await Promise.all([
+      this.jobAnalysisService.analyzeJobDescription(
+        input.jobDescription,
+        input.jobPosition,
+        input.companyName,
+      ),
+      this.resumeContentProcessorService.processResumeContent(
+        input.userContext,
+        input.resumeFile,
+        input.resumeId,
+      ),
+    ]);
+
+    const parallelOperationsTime = Date.now() - start;
+    this.logger.debug(
+      `Parallel operations completed in ${parallelOperationsTime}ms. ` +
+        `Job analysis found ${jobAnalysis.keywords.primary.length} primary keywords. ` +
+        `Content processing used ${resumeContent.source} source.`,
+    );
+
+    return { jobAnalysis, resumeContent, parallelOperationsTime };
+  }
+
+  private async runOptimization(
+    input: ResumeGenerationInput,
+    jobAnalysis: Awaited<
+      ReturnType<typeof this.jobAnalysisService.analyzeJobDescription>
+    >,
+    resumeContent: Awaited<
+      ReturnType<typeof this.resumeContentProcessorService.processResumeContent>
+    >,
+  ) {
+    const start = Date.now();
+    const optimizationResult =
+      await this.resumeOptimizerService.optimizeResumeContent(
+        jobAnalysis,
+        resumeContent.content as TailoredContent,
+        input.companyName,
+        input.jobPosition,
+        resumeContent.tailoringMode,
+        resumeContent.verifiedFacts,
+      );
+    const optimizationTime = Date.now() - start;
+
+    this.logger.debug(
+      `Content optimization completed in ${optimizationTime}ms. ` +
+        `Added ${optimizationResult.optimizationMetrics.keywordsAdded} keywords, ` +
+        `confidence: ${optimizationResult.optimizationMetrics.confidenceScore}%`,
+    );
+
+    return { optimizationResult, optimizationTime };
+  }
+
+  private computeScores(
+    jobAnalysis: Awaited<
+      ReturnType<typeof this.jobAnalysisService.analyzeJobDescription>
+    >,
+    resumeContent: Awaited<
+      ReturnType<typeof this.resumeContentProcessorService.processResumeContent>
+    >,
+    optimizationResult: Awaited<
+      ReturnType<typeof this.resumeOptimizerService.optimizeResumeContent>
+    >,
+  ) {
+    const targetKeywords: string[] = [
+      ...jobAnalysis.keywords.primary,
+      ...jobAnalysis.technical.mandatorySkills,
+    ];
+
+    const matchScoreBefore = this.computeKeywordMatchScore(
+      resumeContent.rawContent as TailoredContent,
+      targetKeywords,
+    );
+    const matchScoreAfter = this.computeKeywordMatchScore(
+      optimizationResult.optimizedContent,
+      targetKeywords,
+    );
+    const matchScoreDelta = matchScoreAfter - matchScoreBefore;
+
+    this.logger.debug(
+      `Keyword match scores — before: ${matchScoreBefore}%, after: ${matchScoreAfter}%, delta: ${matchScoreDelta}%`,
+    );
+
+    const atsChecks = this.atsChecksComputationService.computeChecks(
+      optimizationResult.optimizedContent,
+    );
+    const bulletsQuantified =
+      this.bulletsQuantifiedComputationService.computeQuantified(
+        resumeContent.rawContent as TailoredContent,
+        optimizationResult.optimizedContent,
       );
 
-      // Re-throw known business exceptions as-is
-      if (
-        error instanceof BadRequestException ||
-        error instanceof NotFoundException
-      ) {
-        throw error;
-      }
+    this.logger.debug(
+      `ATS checks: ${atsChecks.passed}/${atsChecks.total} passed. ` +
+        `Quantified bullets — before: ${bulletsQuantified.before}, after: ${bulletsQuantified.after}, total: ${bulletsQuantified.total}`,
+    );
 
-      // Handle specific AI service failures
-      if (
-        error instanceof Error &&
-        (error.message.includes('timeout') ||
-          error.message.includes('AI service') ||
-          error.message.includes('Claude') ||
-          error.message.includes('OpenAI') ||
-          error.message.includes('GPT'))
-      ) {
-        throw new InternalServerErrorException(
-          'AI processing services are temporarily unavailable. Please try again in a few moments.',
-          ERROR_CODES.INTERNAL_SERVER,
+    return {
+      matchScoreBefore,
+      matchScoreAfter,
+      matchScoreDelta,
+      atsChecks,
+      bulletsQuantified,
+    };
+  }
+
+  private async runPdfGeneration(
+    input: ResumeGenerationInput,
+    optimizationResult: Awaited<
+      ReturnType<typeof this.resumeOptimizerService.optimizeResumeContent>
+    >,
+  ) {
+    const start = Date.now();
+    const pdfResult =
+      await this.pdfGenerationOrchestratorService.generateOptimizedResumePdf(
+        optimizationResult,
+        input.templateId,
+        input.companyName,
+        input.jobPosition,
+      );
+    const pdfGenerationTime = Date.now() - start;
+
+    this.logger.debug(
+      `PDF generation completed in ${pdfGenerationTime}ms. ` +
+        `Generated ${pdfResult.generationMetadata.pdfSizeBytes} byte PDF.`,
+    );
+
+    return { pdfResult, pdfGenerationTime };
+  }
+
+  private async persistGeneration(
+    input: ResumeGenerationInput,
+    resumeContent: Awaited<
+      ReturnType<typeof this.resumeContentProcessorService.processResumeContent>
+    >,
+    optimizationResult: Awaited<
+      ReturnType<typeof this.resumeOptimizerService.optimizeResumeContent>
+    >,
+    pdfResult: Awaited<
+      ReturnType<
+        typeof this.pdfGenerationOrchestratorService.generateOptimizedResumePdf
+      >
+    >,
+    jobAnalysis: Awaited<
+      ReturnType<typeof this.jobAnalysisService.analyzeJobDescription>
+    >,
+    scores: ReturnType<typeof this.computeScores>,
+  ) {
+    const start = Date.now();
+
+    const pdfBuffer = Buffer.from(pdfResult.pdfContent, 'base64');
+    const pdfS3Key =
+      await this.tailoredResumePdfStorageService.uploadGeneratedPdf(
+        pdfBuffer,
+        input.userContext.userId,
+      );
+
+    const { matchScoreBefore, matchScoreAfter, atsChecks, bulletsQuantified } =
+      scores;
+
+    const savedGeneration = await this.saveResumeGenerationRecord({
+      user_id: input.userContext.userId,
+      file_path:
+        input.resumeFile?.originalname ||
+        `resume-${input.resumeId || 'processed'}`,
+      original_content: resumeContent.originalText || '',
+      tailored_content: optimizationResult.optimizedContent,
+      template_id: input.templateId,
+      job_description: input.jobDescription,
+      company_name: input.companyName,
+      job_position: input.jobPosition,
+      analysis: optimizationResult.optimizedContent,
+      keywords_added: optimizationResult.optimizationMetrics.keywordsAdded,
+      sections_optimized:
+        optimizationResult.optimizationMetrics.sectionsOptimized,
+      achievements_quantified:
+        optimizationResult.optimizationMetrics.achievementsQuantified,
+      optimization_confidence:
+        optimizationResult.optimizationMetrics.confidenceScore,
+      pdf_s3_key: pdfS3Key,
+      job_analysis: jobAnalysis,
+      candidate_content: resumeContent.content as unknown as Record<
+        string,
+        unknown
+      >,
+      changes_diff: null,
+      atsChecksPassed: atsChecks.passed,
+      atsChecksTotal: atsChecks.total,
+      bulletsQuantifiedBefore: bulletsQuantified.before,
+      bulletsQuantifiedAfter: bulletsQuantified.after,
+      matchScoreBefore,
+      matchScoreAfter,
+    });
+
+    const dbTime = Date.now() - start;
+    this.logger.debug(
+      `Resume generation record saved in ${dbTime}ms with ID: ${savedGeneration.id}`,
+    );
+
+    return { savedGeneration, dbTime };
+  }
+
+  private dispatchDiffJob(
+    resumeGenerationId: string,
+    input: ResumeGenerationInput,
+    resumeContent: Awaited<
+      ReturnType<typeof this.resumeContentProcessorService.processResumeContent>
+    >,
+    optimizationResult: Awaited<
+      ReturnType<typeof this.resumeOptimizerService.optimizeResumeContent>
+    >,
+    jobAnalysis: Awaited<
+      ReturnType<typeof this.jobAnalysisService.analyzeJobDescription>
+    >,
+  ): void {
+    void this.resumeQueueService
+      .addChangesDiffJob({
+        resumeGenerationId,
+        userId: input.userContext.userId || '',
+        originalContent: resumeContent.rawContent as unknown as Record<
+          string,
+          unknown
+        >,
+        optimizedContent:
+          optimizationResult.optimizedContent as unknown as Record<
+            string,
+            unknown
+          >,
+        jobAnalysisKeywords: {
+          mandatorySkills: jobAnalysis.technical.mandatorySkills,
+          primaryKeywords: jobAnalysis.keywords.primary,
+        },
+      })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          '[Background] Changes diff job dispatch failed — diff will be unavailable for this generation',
+          error,
         );
-      }
+      });
+  }
 
-      // Handle PDF generation failures
-      if (
-        error instanceof Error &&
-        (error.message.includes('PDF') || error.message.includes('template'))
-      ) {
-        throw new InternalServerErrorException(
-          'PDF generation failed. Please check your template selection and try again.',
-          ERROR_CODES.PROMPT_GENERATION_FAILED,
-        );
-      }
+  private buildResult(
+    input: ResumeGenerationInput,
+    pdfResult: Awaited<
+      ReturnType<
+        typeof this.pdfGenerationOrchestratorService.generateOptimizedResumePdf
+      >
+    >,
+    savedGeneration: ResumeGeneration,
+    resumeContent: Awaited<
+      ReturnType<typeof this.resumeContentProcessorService.processResumeContent>
+    >,
+    optimizationResult: Awaited<
+      ReturnType<typeof this.resumeOptimizerService.optimizeResumeContent>
+    >,
+    jobAnalysis: Awaited<
+      ReturnType<typeof this.jobAnalysisService.analyzeJobDescription>
+    >,
+    scores: ReturnType<typeof this.computeScores>,
+    timings: {
+      validationTime: number;
+      parallelOperationsTime: number;
+      optimizationTime: number;
+      pdfGenerationTime: number;
+      dbTime: number;
+      totalProcessingTime: number;
+    },
+  ): ResumeGenerationResult {
+    const {
+      matchScoreBefore,
+      matchScoreAfter,
+      matchScoreDelta,
+      atsChecks,
+      bulletsQuantified,
+    } = scores;
 
-      // Handle any unexpected errors
+    return {
+      pdfContent: pdfResult.pdfContent,
+      filename: pdfResult.filename,
+      resumeGenerationId: savedGeneration.id,
+      keywordsAdded: optimizationResult.optimizationMetrics.keywordsAdded,
+      sectionsOptimized:
+        optimizationResult.optimizationMetrics.sectionsOptimized,
+      achievementsQuantified:
+        optimizationResult.optimizationMetrics.achievementsQuantified,
+      optimizationConfidence:
+        optimizationResult.optimizationMetrics.confidenceScore,
+      processingMetrics: {
+        validationTimeMs: timings.validationTime,
+        parallelOperationsTimeMs: timings.parallelOperationsTime,
+        optimizationTimeMs: timings.optimizationTime,
+        pdfGenerationTimeMs: timings.pdfGenerationTime,
+        dbSaveTimeMs: timings.dbTime,
+        totalProcessingTimeMs: timings.totalProcessingTime,
+      },
+      contentSource: resumeContent.source,
+      tailoringMode: resumeContent.tailoringMode,
+      pdfSizeBytes: pdfResult.generationMetadata.pdfSizeBytes,
+      templateUsed: input.templateId,
+      primaryKeywordsFound: jobAnalysis.keywords.primary.length,
+      mandatorySkillsAligned: jobAnalysis.technical.mandatorySkills.length,
+      matchScoreBefore,
+      matchScoreAfter,
+      matchScoreDelta,
+      atsChecksPassed: atsChecks.passed,
+      atsChecksTotal: atsChecks.total,
+      bulletsQuantifiedBefore: bulletsQuantified.before,
+      bulletsQuantifiedAfter: bulletsQuantified.after,
+      bulletsQuantifiedTotal: bulletsQuantified.total,
+    };
+  }
+
+  private handlePipelineError(error: unknown, processingTime: number): never {
+    this.logger.error(
+      `Resume generation failed after ${processingTime}ms`,
+      error,
+    );
+
+    if (
+      error instanceof BadRequestException ||
+      error instanceof NotFoundException
+    ) {
+      throw error;
+    }
+
+    if (
+      error instanceof Error &&
+      (error.message.includes('timeout') ||
+        error.message.includes('AI service') ||
+        error.message.includes('Claude') ||
+        error.message.includes('OpenAI') ||
+        error.message.includes('GPT'))
+    ) {
       throw new InternalServerErrorException(
-        'Resume generation failed due to an internal error. Please try again or contact support if the issue persists.',
+        'AI processing services are temporarily unavailable. Please try again in a few moments.',
         ERROR_CODES.INTERNAL_SERVER,
       );
     }
+
+    if (
+      error instanceof Error &&
+      (error.message.includes('PDF') || error.message.includes('template'))
+    ) {
+      throw new InternalServerErrorException(
+        'PDF generation failed. Please check your template selection and try again.',
+        ERROR_CODES.PROMPT_GENERATION_FAILED,
+      );
+    }
+
+    throw new InternalServerErrorException(
+      'Resume generation failed due to an internal error. Please try again or contact support if the issue persists.',
+      ERROR_CODES.INTERNAL_SERVER,
+    );
+  }
+
+  /**
+   * Flatten a TailoredContent object into a single lowercased string
+   * for keyword matching purposes.
+   */
+  private contentToText(content: TailoredContent): string {
+    if (!content) return '';
+
+    const parts: string[] = [];
+
+    if (content.title) parts.push(content.title);
+    if (content.summary) parts.push(content.summary);
+
+    if (content.skills) {
+      const { languages, frameworks, tools, databases, concepts } =
+        content.skills;
+      parts.push(
+        ...(languages ?? []),
+        ...(frameworks ?? []),
+        ...(tools ?? []),
+        ...(databases ?? []),
+        ...(concepts ?? []),
+      );
+    }
+
+    for (const exp of content.experience ?? []) {
+      if (exp.position) parts.push(exp.position);
+      parts.push(...(exp.responsibilities ?? []));
+      parts.push(...(exp.achievements ?? []));
+      if (exp.technologies) parts.push(exp.technologies);
+    }
+
+    for (const edu of content.education ?? []) {
+      if (edu.degree) parts.push(edu.degree);
+      if (edu.institution) parts.push(edu.institution);
+    }
+
+    for (const cert of content.certifications ?? []) {
+      if (cert.name) parts.push(cert.name);
+    }
+
+    return parts.join(' ').toLowerCase();
+  }
+
+  /**
+   * Compute the percentage of keywords found (case-insensitive substring match)
+   * in the given TailoredContent. Result is capped at 95 and rounded to the
+   * nearest integer.
+   */
+  private computeKeywordMatchScore(
+    content: TailoredContent,
+    keywords: string[],
+  ): number {
+    if (!keywords || keywords.length === 0) return 0;
+
+    const text = this.contentToText(content);
+    const uniqueKeywords = [...new Set(keywords.map((k) => k.toLowerCase()))];
+
+    const matchedCount = uniqueKeywords.filter((kw) =>
+      text.includes(kw),
+    ).length;
+    const raw = (matchedCount / uniqueKeywords.length) * 100;
+
+    return Math.min(MATCH_SCORE_MAX_PERCENTAGE, Math.round(raw));
   }
 
   /**

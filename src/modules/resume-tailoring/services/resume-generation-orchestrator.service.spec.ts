@@ -8,6 +8,8 @@ import { ResumeOptimizerService } from './resume-optimizer.service';
 import { PdfGenerationOrchestratorService } from './pdf-generation-orchestrator.service';
 import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
 import { ResumeQueueService } from './resume-queue.service';
+import { AtsChecksComputationService } from './ats-checks-computation.service';
+import { BulletsQuantifiedComputationService } from './bullets-quantified-computation.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 
 describe('ResumeGenerationOrchestratorService', () => {
@@ -46,6 +48,18 @@ describe('ResumeGenerationOrchestratorService', () => {
     save: jest.fn(),
   };
 
+  const mockAtsChecksComputationService = {
+    computeChecks: jest
+      .fn()
+      .mockReturnValue({ passed: 8, total: 10, failures: [] }),
+  };
+
+  const mockBulletsQuantifiedComputationService = {
+    computeQuantified: jest
+      .fn()
+      .mockReturnValue({ before: 2, after: 5, total: 10 }),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -71,6 +85,14 @@ describe('ResumeGenerationOrchestratorService', () => {
           useValue: mockTailoredResumePdfStorageService,
         },
         { provide: ResumeQueueService, useValue: mockResumeQueueService },
+        {
+          provide: AtsChecksComputationService,
+          useValue: mockAtsChecksComputationService,
+        },
+        {
+          provide: BulletsQuantifiedComputationService,
+          useValue: mockBulletsQuantifiedComputationService,
+        },
         {
           provide: getRepositoryToken(ResumeGeneration),
           useValue: mockResumeGenerationRepository,

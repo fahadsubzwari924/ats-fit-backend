@@ -130,6 +130,14 @@ describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
           templateUsed: 'standard',
           primaryKeywordsFound: 8,
           mandatorySkillsAligned: 5,
+          matchScoreBefore: 40,
+          matchScoreAfter: 75,
+          matchScoreDelta: 35,
+          atsChecksPassed: 8,
+          atsChecksTotal: 10,
+          bulletsQuantifiedBefore: 3,
+          bulletsQuantifiedAfter: 7,
+          bulletsQuantifiedTotal: 7,
         };
 
         resumeGenerationOrchestratorService.generateOptimizedResume.mockResolvedValueOnce(
@@ -183,6 +191,14 @@ describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
           templateUsed: 'standard',
           primaryKeywordsFound: 10,
           mandatorySkillsAligned: 6,
+          matchScoreBefore: 40,
+          matchScoreAfter: 75,
+          matchScoreDelta: 35,
+          atsChecksPassed: 8,
+          atsChecksTotal: 10,
+          bulletsQuantifiedBefore: 3,
+          bulletsQuantifiedAfter: 7,
+          bulletsQuantifiedTotal: 7,
         };
 
         resumeGenerationOrchestratorService.generateOptimizedResume.mockResolvedValue(
@@ -236,6 +252,14 @@ describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
           templateUsed: 'standard',
           primaryKeywordsFound: 15,
           mandatorySkillsAligned: 8,
+          matchScoreBefore: 40,
+          matchScoreAfter: 75,
+          matchScoreDelta: 35,
+          atsChecksPassed: 8,
+          atsChecksTotal: 10,
+          bulletsQuantifiedBefore: 3,
+          bulletsQuantifiedAfter: 7,
+          bulletsQuantifiedTotal: 7,
         };
 
         resumeGenerationOrchestratorService.generateOptimizedResume.mockResolvedValue(
@@ -454,6 +478,14 @@ describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
           templateUsed: 'standard',
           primaryKeywordsFound: 8,
           mandatorySkillsAligned: 5,
+          matchScoreBefore: 40,
+          matchScoreAfter: 75,
+          matchScoreDelta: 35,
+          atsChecksPassed: 8,
+          atsChecksTotal: 10,
+          bulletsQuantifiedBefore: 3,
+          bulletsQuantifiedAfter: 7,
+          bulletsQuantifiedTotal: 7,
         };
 
         resumeGenerationOrchestratorService.generateOptimizedResume
@@ -513,6 +545,14 @@ describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
           templateUsed: 'standard',
           primaryKeywordsFound: 8,
           mandatorySkillsAligned: 5,
+          matchScoreBefore: 40,
+          matchScoreAfter: 75,
+          matchScoreDelta: 35,
+          atsChecksPassed: 8,
+          atsChecksTotal: 10,
+          bulletsQuantifiedBefore: 3,
+          bulletsQuantifiedAfter: 7,
+          bulletsQuantifiedTotal: 7,
         };
 
         resumeGenerationOrchestratorService.generateOptimizedResume.mockResolvedValue(
@@ -743,6 +783,14 @@ describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
             templateUsed: 'standard',
             primaryKeywordsFound: 8,
             mandatorySkillsAligned: 5,
+            matchScoreBefore: 40,
+            matchScoreAfter: 75,
+            matchScoreDelta: 35,
+            atsChecksPassed: 8,
+            atsChecksTotal: 10,
+            bulletsQuantifiedBefore: 3,
+            bulletsQuantifiedAfter: 7,
+            bulletsQuantifiedTotal: 7,
           };
 
           resumeGenerationOrchestratorService.generateOptimizedResume.mockResolvedValue(

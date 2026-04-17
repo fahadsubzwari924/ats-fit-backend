@@ -9,6 +9,7 @@ import {
   SkillsCategoryDiff,
 } from '../interfaces/enhanced-resume-diff.interface';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
+import { JACCARD_SIMILARITY_THRESHOLD } from '../../../shared/constants/resume-tailoring.constants';
 
 interface JobKeywords {
   mandatorySkills: string[];
@@ -253,9 +254,7 @@ export class ChangesDiffComputationService {
         }
       }
 
-      const SIMILARITY_THRESHOLD = 0.25;
-
-      if (bestIdx >= 0 && bestScore >= SIMILARITY_THRESHOLD) {
+      if (bestIdx >= 0 && bestScore >= JACCARD_SIMILARITY_THRESHOLD) {
         used.add(bestIdx);
         const origBullet = origBullets[bestIdx];
         const addedKeywords = this.findAddedKeywords(
