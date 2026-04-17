@@ -64,4 +64,18 @@ export interface ResumeGenerationResult {
   // Job analysis insights
   primaryKeywordsFound: number;
   mandatorySkillsAligned: number;
+
+  // Keyword match scores (synchronous, available immediately in the response)
+  matchScoreBefore: number;
+  matchScoreAfter: number;
+  matchScoreDelta: number;
+
+  // ATS compliance checks (synchronous)
+  atsChecksPassed: number;
+  atsChecksTotal: number;
+
+  // Quantified bullets (synchronous)
+  bulletsQuantifiedBefore: number;
+  bulletsQuantifiedAfter: number;
+  bulletsQuantifiedTotal: number;
 }

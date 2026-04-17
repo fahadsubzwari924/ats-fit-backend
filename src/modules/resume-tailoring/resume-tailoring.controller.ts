@@ -45,7 +45,12 @@ import { RequestWithUserContext } from '../../shared/interfaces/request-user.int
 import { TransformUserContext } from '../../shared/decorators/transform-user-context.decorator';
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { BULK_TAILORING_MAX_RESUMES } from '../../shared/constants/resume-tailoring.constants';
+import {
+  BULK_TAILORING_MAX_RESUMES,
+  HISTORY_DEFAULT_LIMIT,
+  HISTORY_DEFAULT_PAGE,
+} from '../../shared/constants/resume-tailoring.constants';
+import { TailoredResumeResponseMapper } from './mappers/tailored-resume-response.mapper';
 
 @ApiTags('Resume Tailoring')
 @Controller('resume-tailoring')
@@ -92,8 +97,10 @@ export class ResumeTailoringController {
 
     if (page !== undefined) {
       return this.resumeService.getResumeGenerationHistoryPaginated(userId, {
-        page: parseInt(page, 10) || 1,
-        limit: parseInt(limit ?? '10', 10) || 10,
+        page: parseInt(page, 10) || HISTORY_DEFAULT_PAGE,
+        limit:
+          parseInt(limit ?? String(HISTORY_DEFAULT_LIMIT), 10) ||
+          HISTORY_DEFAULT_LIMIT,
         search,
         sortOrder: sortOrder ?? 'DESC',
         plan,
@@ -102,7 +109,8 @@ export class ResumeTailoringController {
 
     return this.resumeService.getResumeGenerationHistory(
       userId,
-      parseInt(limit ?? '10', 10) || 10,
+      parseInt(limit ?? String(HISTORY_DEFAULT_LIMIT), 10) ||
+        HISTORY_DEFAULT_LIMIT,
       plan,
     );
   }
@@ -202,18 +210,7 @@ export class ResumeTailoringController {
       // Convert base64 to buffer for PDF download
       const pdfBuffer = Buffer.from(result.pdfContent, 'base64');
 
-      const responseForHeaders = {
-        filename: result.filename,
-        resumeGenerationId: result.resumeGenerationId,
-        tailoringMode: result.tailoringMode,
-        keywordsAdded: result.keywordsAdded,
-        sectionsOptimized: result.sectionsOptimized,
-        achievementsQuantified: result.achievementsQuantified,
-        optimizationConfidence: result.optimizationConfidence,
-      };
-
-      // Set headers for PDF download
-      this.setPdfResponseHeaders(res, responseForHeaders, pdfBuffer.length);
+      TailoredResumeResponseMapper.applyHeaders(res, result, pdfBuffer.length);
 
       // Send the PDF buffer directly
       res.end(pdfBuffer);
@@ -222,8 +219,7 @@ export class ResumeTailoringController {
       this.logger.log(
         `Resume generation completed in ${totalTime}ms. ` +
           `Resume Generation ID: ${result.resumeGenerationId}, ` +
-          `Keywords Added: ${result.keywordsAdded}, ` +
-          `Optimization Confidence: ${result.optimizationConfidence}%`,
+          `Keywords Added: ${result.keywordsAdded}`,
       );
     } catch (error) {
       const processingTime = Date.now() - startTime;
@@ -391,35 +387,5 @@ export class ResumeTailoringController {
         totalProcessingTimeMs: Date.now() - startTime,
       },
     };
-  }
-
-  /**
-   * Sets headers for PDF download response
-   */
-  private setPdfResponseHeaders(
-    res: Response,
-    response: {
-      filename: string;
-      resumeGenerationId: string;
-      tailoringMode?: string;
-      keywordsAdded: number;
-      sectionsOptimized: number;
-      achievementsQuantified: number;
-      optimizationConfidence: number;
-    },
-    contentLength: number,
-  ) {
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=${response.filename}`,
-      'Content-Length': contentLength.toString(),
-      'X-Resume-Generation-Id': response.resumeGenerationId,
-      'X-Filename': response.filename,
-      'X-Tailoring-Mode': response.tailoringMode ?? 'standard',
-      'X-Keywords-Added': response.keywordsAdded.toString(),
-      'X-Sections-Optimized': response.sectionsOptimized.toString(),
-      'X-Achievements-Quantified': response.achievementsQuantified.toString(),
-      'X-Optimization-Confidence': response.optimizationConfidence.toString(),
-    });
   }
 }

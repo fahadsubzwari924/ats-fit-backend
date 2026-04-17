@@ -51,6 +51,8 @@ import { ResumeExtractionProcessor } from './processors/resume-extraction.proces
 import { ResumeProfileEnrichmentProcessor } from './processors/resume-profile-enrichment.processor';
 import { ChangesDiffProcessor } from './processors/changes-diff.processor';
 import { ChangesDiffComputationService } from './services/changes-diff-computation.service';
+import { AtsChecksComputationService } from './services/ats-checks-computation.service';
+import { BulletsQuantifiedComputationService } from './services/bullets-quantified-computation.service';
 
 @Module({
   imports: [
@@ -109,6 +111,8 @@ import { ChangesDiffComputationService } from './services/changes-diff-computati
     ResumeProfileEnrichmentProcessor,
     ChangesDiffProcessor,
     ChangesDiffComputationService,
+    AtsChecksComputationService,
+    BulletsQuantifiedComputationService,
     // Interceptors
     {
       provide: APP_INTERCEPTOR,

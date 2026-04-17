@@ -52,6 +52,24 @@ export class ResumeGeneration {
   @Column('float', { nullable: true })
   optimization_confidence: number;
 
+  @Column({ name: 'ats_checks_passed', type: 'int', nullable: true })
+  atsChecksPassed: number;
+
+  @Column({ name: 'ats_checks_total', type: 'int', nullable: true })
+  atsChecksTotal: number;
+
+  @Column({ name: 'bullets_quantified_before', type: 'int', nullable: true })
+  bulletsQuantifiedBefore: number;
+
+  @Column({ name: 'bullets_quantified_after', type: 'int', nullable: true })
+  bulletsQuantifiedAfter: number;
+
+  @Column({ name: 'match_score_before', type: 'float', nullable: true })
+  matchScoreBefore: number;
+
+  @Column({ name: 'match_score_after', type: 'float', nullable: true })
+  matchScoreAfter: number;
+
   @Column({ nullable: true })
   pdf_s3_key: string;
 

@@ -31,7 +31,7 @@ describe('ResumeHistoryItem', () => {
     expect(item.id).toBe('test-uuid-1234');
     expect(item.companyName).toBe('Acme Corp');
     expect(item.jobPosition).toBe('Senior Engineer');
-    expect(item.optimizationConfidence).toBe(87.5);
+    expect(item.optimizationConfidence).toBeNull(); // deprecated, always null
     expect(item.keywordsAdded).toBe(12);
     expect(item.sectionsOptimized).toBe(4);
     expect(item.templateId).toBe('tpl-abc');
@@ -82,7 +82,7 @@ describe('ResumeHistoryDetail', () => {
     expect(detail.id).toBe('test-uuid-1234');
     expect(detail.companyName).toBe('Acme Corp');
     expect(detail.jobPosition).toBe('Senior Engineer');
-    expect(detail.optimizationConfidence).toBe(87.5);
+    expect(detail.optimizationConfidence).toBeNull(); // deprecated, always null
     expect(detail.keywordsAdded).toBe(12);
     expect(detail.sectionsOptimized).toBe(4);
     expect(detail.templateId).toBe('tpl-abc');
