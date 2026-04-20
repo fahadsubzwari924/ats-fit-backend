@@ -3,13 +3,14 @@ import {
   Post,
   Body,
   Get,
+  Delete,
   UseGuards,
   Param,
   Req,
   Logger,
   Headers,
   ParseUUIDPipe,
-  Inject,
+  RawBodyRequest,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -24,6 +25,9 @@ import { PaymentHistoryService } from '../services/payment-history.service';
 import { UserService } from '../../user/user.service';
 import { CreateSubscriptionDto } from '../dtos/subscription.dto';
 import { SubscriptionPlanResponseDto } from '../dtos/subscription-plan.dto';
+import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
+import { User } from '../../../database/entities/user.entity';
+import { SubscriptionPlan } from '../../../database/entities/subscription-plan.entity';
 import { CheckoutResponseDto } from '../dtos/checkout-response.dto';
 import { JwtAuthGuard } from '../../auth/jwt.guard';
 import { RequestWithUserContext } from '../../../shared/interfaces/request-user.interface';
@@ -35,16 +39,6 @@ import { MESSAGES } from '../../../shared/constants/messages';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
 import { ExternalPaymentGatewayEvents } from '../externals/enums';
-import {
-  IEmailService,
-  EMAIL_SERVICE_TOKEN,
-} from '../../../shared/interfaces/email.interface';
-import {
-  EmailSubjects,
-  EmailTemplates,
-  AwsConfigKeys,
-} from '../../../shared/enums';
-import { ConfigService } from '@nestjs/config';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -59,8 +53,6 @@ export class SubscriptionController {
     private readonly paymentHistoryService: PaymentHistoryService, // ✅ Payment history handling
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly userService: UserService,
-    private readonly configService: ConfigService,
-    @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService, // Inject email service via token
   ) {}
 
   @Post('checkout')
@@ -209,8 +201,8 @@ export class SubscriptionController {
       variantId: subscriptionPlan.payment_gateway_variant_id,
       email: createSubscriptionDto.metadata?.email,
       customData: {
-        userId,
-        planId: subscriptionPlan.id,
+        user_id: userId,
+        plan_id: subscriptionPlan.id,
         email: createSubscriptionDto.metadata?.email,
       },
     };
@@ -512,6 +504,58 @@ export class SubscriptionController {
     }
   }
 
+  @Delete(':id/cancel')
+  @ApiOperation({ summary: 'Cancel a user subscription' })
+  @ApiResponse({
+    status: 200,
+    description: 'Subscription cancelled successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Subscription not active or not owned by user',
+  })
+  @ApiResponse({ status: 404, description: 'Subscription not found' })
+  async cancelSubscription(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: RequestWithUserContext,
+  ) {
+    try {
+      const userId = request?.userContext?.userId;
+      this.logger.log(
+        `User ${userId} requesting cancellation of subscription ${id}`,
+      );
+
+      const cancelled = await this.subscriptionService.cancelUserSubscription(
+        id,
+        userId,
+      );
+
+      this.logger.log(`Subscription ${id} cancelled successfully`);
+      return {
+        message: MESSAGES.SUBSCRIPTION_CANCELLED_SUCCESSFULLY,
+        subscription: cancelled,
+      };
+    } catch (error) {
+      this.logger.error('cancelSubscription -> error:', {
+        error: error.message,
+        subscriptionId: id,
+        userId: request?.userContext?.userId,
+      });
+
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      throw new BadRequestException(
+        MESSAGES.FAILED_TO_CANCEL_SUBSCRIPTION,
+        ERROR_CODES.FAILED_TO_CANCEL_SUBSCRIPTION,
+      );
+    }
+  }
+
   //#region Webhook Controllers
 
   @Public()
@@ -524,34 +568,40 @@ export class SubscriptionController {
   @ApiResponse({ status: 400, description: 'Invalid Payment request' })
   async paymentConfirmation(
     @Headers('x-signature') signature: string,
-    @Body() payload: any,
+    @Body() payload: PaymentConfirmationDto,
+    @Req() req: RawBodyRequest<Request>,
   ) {
     try {
-      this.logger.log(
-        '🔔 Payment gateway "payment-confirmation" notification endpoint reached successfully!',
-      );
-      this.logger.log(
-        `🔥 DEBUG: Received "payment-confirmation" notification payload:`,
-        payload,
-      );
+      this.logger.log('🔔 Webhook "payment-confirmation" received');
 
-      // Step 1: Get user by email from payload
+      // Step 1: Verify signature FIRST — reject before any state mutation
+      // Use raw body bytes to match exactly what LemonSqueezy signed
+      const rawBody = req.rawBody?.toString('utf8') ?? JSON.stringify(payload);
+      const signatureValid = await this.subscriptionService.verifySignature(
+        signature,
+        rawBody,
+      );
+      if (!signatureValid) {
+        this.logger.warn('Webhook rejected: invalid signature');
+        throw new BadRequestException(
+          'Invalid signature',
+          ERROR_CODES.BAD_REQUEST,
+        );
+      }
+
+      // Step 2: Extract and validate custom data
       const customData = payload?.meta?.custom_data ?? {};
       const { email, plan_id } = customData as {
         email?: string;
-        plan_id?: number;
+        plan_id?: string;
       };
 
       if (!email) {
-        this.logger.warn(
-          `🔥 DEBUG: Email not found in payment-confirmation payload`,
-        );
         throw new BadRequestException(
           'Email not found in payment payload',
           ERROR_CODES.BAD_REQUEST,
         );
       }
-
       if (plan_id == null) {
         throw new BadRequestException(
           'Plan ID not found in payment payload',
@@ -559,149 +609,86 @@ export class SubscriptionController {
         );
       }
 
-      this.logger.log(`🔥 DEBUG: Looking up user by email: ${email}`);
+      // Step 3: Resolve user and plan
       const user = await this.userService.getUserByEmail(email);
-
       if (!user) {
-        this.logger.warn(`🔥 DEBUG: User not found for email: ${email}`);
         throw new NotFoundException(
           'User not found',
           ERROR_CODES.USER_NOT_FOUND,
         );
       }
 
-      this.logger.log(
-        `🔥 DEBUG: User found - ID: ${user.id}, Name: ${user.full_name}`,
-      );
-
       const subscriptionPlan = await this.subscriptionPlanService.findById(
         String(plan_id),
       );
-
       if (!subscriptionPlan) {
-        this.logger.warn(
-          `🔥 DEBUG: Subscription plan not found for ID: ${plan_id}`,
-        );
         throw new NotFoundException(
           'Subscription plan not found',
           ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
         );
       }
 
-      this.logger.log(
-        `🔥 DEBUG: Subscription plan found - ID: ${subscriptionPlan.id}, Name: ${subscriptionPlan.plan_name}`,
-      );
+      // Step 4: Route event to the correct handler
+      const eventName = payload.meta
+        ?.event_name as ExternalPaymentGatewayEvents;
+      await this.routeWebhookEvent(eventName, payload, user, subscriptionPlan);
 
-      // Step 2: Process subscription logic (decoupled from payment history)
-      let subscriptionResult;
-      if (
-        payload.meta?.event_name ===
-        ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS
-      ) {
-        subscriptionResult = await this.subscriptionService.handleFailedPayment(
-          payload,
-          user,
-          subscriptionPlan,
-        );
-
-        // subscriptionResult = await this.subscriptionService.handleSuccessfulPayment(payload);
-      } else {
-        subscriptionResult = await this.subscriptionService.handleFailedPayment(
-          payload,
-          user,
-          subscriptionPlan,
-        );
-      }
-
-      this.logger.log(
-        `🔥 DEBUG: Subscription processing result:`,
-        subscriptionResult,
-      );
-
-      // Step 3: Create payment history record first (audit trail)
-      this.logger.log(`🔥 DEBUG: Creating payment history record...`);
+      // Step 5: Record payment history (idempotent — skips if transaction ID already exists)
       const paymentHistory =
         await this.paymentHistoryService.paymentConfirmation(payload);
-      this.logger.log(`🔥 DEBUG: Payment history created:`, {
-        id: paymentHistory.id,
-      });
-
-      // Step 4: Verify signature
-      if (
-        signature &&
-        !(await this.subscriptionService.verifySignature(
-          signature,
-          JSON.stringify(payload),
-        ))
-      ) {
-        await this.paymentHistoryService.markAsFailed(
-          paymentHistory.id,
-          'Invalid signature',
-        );
-        throw new BadRequestException(
-          'Invalid signature',
-          ERROR_CODES.BAD_REQUEST,
-        );
-      }
-
-      // Step 5: Mark payment as processed
       await this.paymentHistoryService.markAsProcessed(paymentHistory.id);
 
-      // Log processing results
-      this.logger.log(`🎯 NEW Subscription created in database:`, {
-        paymentHistory,
-        subscriptionResult,
-      });
+      this.logger.log(`✅ Webhook processed: ${eventName}`);
     } catch (error) {
-      this.logger.error(
-        'Webhook -> payment-confirmation -> Failed to process payment gateway notification',
-        error,
-      );
+      this.logger.error('Webhook processing failed', error);
       throw error;
     }
   }
-  //#endregion
 
-  @Public()
-  @Get('test-email')
-  async testEmail() {
-    try {
-      const awsConfig = {
-        region:
-          this.configService.get<string>(AwsConfigKeys.AWS_REGION) ||
-          'us-east-1',
-        accessKeyId: this.configService.get<string>(
-          AwsConfigKeys.AWS_SES_USER_ACCESS_KEY_ID,
-        ),
-        secretAccessKey: this.configService.get<string>(
-          AwsConfigKeys.AWS_SES_USER_SECRET_ACCESS_KEY,
-        ),
-      };
+  private async routeWebhookEvent(
+    eventName: ExternalPaymentGatewayEvents,
+    payload: PaymentConfirmationDto,
+    user: User,
+    subscriptionPlan: SubscriptionPlan,
+  ): Promise<void> {
+    switch (eventName) {
+      case ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED:
+      case ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS:
+      case ExternalPaymentGatewayEvents.SUBSCRIPTION_RESUMED:
+      case ExternalPaymentGatewayEvents.SUBSCRIPTION_UNPAUSED:
+        await this.subscriptionService.handleSuccessfulPayment(
+          payload,
+          user,
+          subscriptionPlan,
+        );
+        break;
 
-      const response = await this.emailService.sendEmail(
-        awsConfig,
-        { emailsTo: ['info@atsfitt.com'] },
-        {
-          fromAddress:
-            this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_EMAIL) ||
-            'info@atsfitt.com',
-          senderName:
-            this.configService.get<string>(AwsConfigKeys.AWS_SES_FROM_NAME) ||
-            'ATS Fit',
-        },
-        {
-          templateKey: EmailTemplates.PAYMENT_FAILED,
-          templateData: {
-            amount: 1000,
-            userName: 'Ahsan',
-          },
-          subject: EmailSubjects.PAYMENT_FAILED,
-        },
-      );
+      case ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_FAILED:
+        await this.subscriptionService.handleFailedPayment(
+          payload,
+          user,
+          subscriptionPlan,
+        );
+        break;
 
-      return response;
-    } catch (error) {
-      this.logger.error('Failed to send test email:', error);
+      case ExternalPaymentGatewayEvents.SUBSCRIPTION_CANCELLED:
+      case ExternalPaymentGatewayEvents.SUBSCRIPTION_EXPIRED:
+        await this.subscriptionService.handleSubscriptionDeactivated(
+          payload,
+          user,
+        );
+        break;
+
+      case ExternalPaymentGatewayEvents.SUBSCRIPTION_UPDATED:
+      case ExternalPaymentGatewayEvents.SUBSCRIPTION_PAUSED:
+        await this.subscriptionService.handleSubscriptionUpdated(payload);
+        break;
+
+      default:
+        this.logger.log(
+          `Unhandled webhook event type: ${eventName} — recorded in history only`,
+        );
     }
   }
+  //#endregion
 }

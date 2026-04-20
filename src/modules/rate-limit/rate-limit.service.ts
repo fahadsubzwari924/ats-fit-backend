@@ -446,7 +446,10 @@ export class RateLimitService {
 
     if (stats.resume_batch_generation) {
       entries.push(
-        toEntry(FeatureType.RESUME_BATCH_GENERATION, stats.resume_batch_generation),
+        toEntry(
+          FeatureType.RESUME_BATCH_GENERATION,
+          stats.resume_batch_generation,
+        ),
       );
     }
 

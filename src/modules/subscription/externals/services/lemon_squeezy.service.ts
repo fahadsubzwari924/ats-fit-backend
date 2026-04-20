@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   cancelSubscription,
   createCheckout,
@@ -19,7 +20,7 @@ export class LemonSqueezyService {
   private readonly logger = new Logger(LemonSqueezyService.name);
   private static isSetup = false;
 
-  constructor() {}
+  constructor(private readonly configService: ConfigService) {}
 
   async createCheckoutSession(request: CreateCheckoutRequest) {
     const storeId = process.env.LEMON_SQUEEZY_STORE_ID;
@@ -37,10 +38,12 @@ export class LemonSqueezyService {
         custom: request.customData, // For webhook linking
       },
       productOptions: {
-        redirectUrl: process.env.SUBSCRIPTION_SUCCESS_URL, // Adjust to your success page
+        redirectUrl: this.buildSuccessRedirectUrl(),
         receiptButtonText: 'Go to Dashboard',
       },
-      testMode: true,
+      testMode:
+        this.configService.get<string>('NODE_ENV', 'development') !==
+        'production',
       // Optional: checkout_options: { embed: true, media: false } for embedded if needed
     };
 
@@ -84,6 +87,15 @@ export class LemonSqueezyService {
     }
 
     return response.data?.data.attributes; // Updated subscription data
+  }
+
+  private buildSuccessRedirectUrl(): string {
+    const base =
+      this.configService.get<string>('SUBSCRIPTION_SUCCESS_URL') ||
+      'http://localhost:4200/billing';
+    const url = new URL(base);
+    url.searchParams.set('payment', 'success');
+    return url.toString();
   }
 
   // Bonus: Get Customer Portal URL (for users to manage billing themselves)

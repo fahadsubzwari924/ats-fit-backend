@@ -30,7 +30,7 @@ export class SubscriptionPlan {
   @Column({ length: 3 })
   currency: string;
 
-  @Column({ name: 'lemon_squeezy_variant_id', unique: true })
+  @Column({ name: 'payment_gateway_variant_id', unique: true })
   payment_gateway_variant_id: string;
 
   @Column({ name: 'is_active', default: true })

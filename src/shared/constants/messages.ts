@@ -2,6 +2,7 @@ export const MESSAGES = {
   USER_REQUESTED_CANCELLATION: 'User requested cancellation',
   SUBSCRIPTION_CANCELLED_SUCCESSFULLY: 'Subscription cancelled successfully',
   FAILED_TO_CANCEL_SUBSCRIPTION: 'Failed to cancel subscription',
+  SUBSCRIPTION_NOT_ACTIVE: 'Subscription is not active or already cancelled',
   SUBSCRIPTION_PLAN_IS_NOT_ACTIVE: 'Subscription plan is not active',
   SUBSCRIPTION_NOT_FOUND: 'Subscription not found',
   ACTIVE_SUBSCRIPTION_EXISTS:

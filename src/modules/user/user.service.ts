@@ -4,7 +4,10 @@ import { Repository } from 'typeorm';
 import { User, UserType, UserPlan } from '../../database/entities/user.entity';
 import { UserSubscription } from '../../database/entities/user-subscription.entity';
 import { UserContext } from '../auth/types/user-context.type';
-import { RateLimitService, SubscriptionPeriod } from '../rate-limit/rate-limit.service';
+import {
+  RateLimitService,
+  SubscriptionPeriod,
+} from '../rate-limit/rate-limit.service';
 import { IFeatureUsage } from '../../shared/interfaces';
 import { NotFoundException } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
@@ -194,14 +197,19 @@ export class UserService {
         ? await this.getActivePremiumPeriod(user.id)
         : null;
 
-    return this.rateLimitService.getFormattedFeatureUsage(userContext, subscriptionPeriod);
+    return this.rateLimitService.getFormattedFeatureUsage(
+      userContext,
+      subscriptionPeriod,
+    );
   }
 
   /**
    * Retrieve the billing period boundaries for the user's active premium subscription.
    * Returns `null` when no active subscription is found (graceful fallback to calendar month).
    */
-  private async getActivePremiumPeriod(userId: string): Promise<SubscriptionPeriod | null> {
+  private async getActivePremiumPeriod(
+    userId: string,
+  ): Promise<SubscriptionPeriod | null> {
     const subscription = await this.userSubscriptionRepository.findOne({
       where: { user_id: userId, is_active: true, is_cancelled: false },
       order: { created_at: 'DESC' },

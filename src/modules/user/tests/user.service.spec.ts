@@ -76,7 +76,9 @@ describe('UserService', () => {
 
       await service.upgradeToPremium('user-uuid-123');
 
-      expect(rateLimitService.resetUsageForUser).toHaveBeenCalledWith('user-uuid-123');
+      expect(rateLimitService.resetUsageForUser).toHaveBeenCalledWith(
+        'user-uuid-123',
+      );
       expect(rateLimitService.resetUsageForUser).toHaveBeenCalledTimes(1);
     });
   });
