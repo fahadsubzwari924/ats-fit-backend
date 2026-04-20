@@ -18,6 +18,12 @@ import {
 
 export type { RateLimitResult, FormattedFeatureUsage, UserUsageStats };
 
+/** Billing period boundaries surfaced from an active UserSubscription. */
+export interface SubscriptionPeriod {
+  starts_at: Date;
+  ends_at: Date;
+}
+
 @Injectable()
 export class RateLimitService {
   private readonly logger = new Logger(RateLimitService.name);
@@ -75,7 +81,8 @@ export class RateLimitService {
       (currentUsage / config.monthly_limit) * 100,
     );
 
-    // Calculate reset date (first day of next month)
+    // For guard-level enforcement, use calendar-month boundaries.
+    const cycleStart = new Date(currentYear, currentMonth - 1, 1);
     const resetDate = new Date(currentYear, currentMonth, 1);
 
     return {
@@ -84,6 +91,7 @@ export class RateLimitService {
       limit: config.monthly_limit,
       remaining,
       resetDate,
+      cycleStart,
       usagePercentage,
     };
   }
@@ -298,7 +306,7 @@ export class RateLimitService {
     featureType: FeatureType,
     configMap: Map<FeatureType, RateLimitConfig>,
     usageMap: Map<FeatureType, number>,
-    resetDate: Date,
+    period: { cycleStart: Date; cycleEnd: Date },
   ): RateLimitResult {
     const config = configMap.get(featureType);
     if (!config) {
@@ -319,7 +327,8 @@ export class RateLimitService {
       currentUsage,
       limit: config.monthly_limit,
       remaining,
-      resetDate,
+      resetDate: period.cycleEnd,
+      cycleStart: period.cycleStart,
       usagePercentage,
     };
   }
@@ -328,10 +337,18 @@ export class RateLimitService {
    * Get usage statistics for a user.
    * Issues exactly 2 parallel DB calls regardless of plan tier.
    *
-   * FREEMIUM: resume_generation + cover_letter
+   * FREEMIUM: resume_generation + cover_letter — period is the current calendar month.
    * PREMIUM:  resume_generation + cover_letter + resume_batch_generation
+   *           — period is derived from the active subscription when provided,
+   *             falling back to the current calendar month otherwise.
+   *
+   * @param subscriptionPeriod Active subscription boundaries for premium users.
+   *   Pass `null` / omit for freemium or when no subscription record exists yet.
    */
-  async getUserUsageStats(userContext: UserContext): Promise<UserUsageStats> {
+  async getUserUsageStats(
+    userContext: UserContext,
+    subscriptionPeriod?: SubscriptionPeriod | null,
+  ): Promise<UserUsageStats> {
     const isPremium = (userContext.plan as UserPlan) === UserPlan.PREMIUM;
 
     const featureTypes: FeatureType[] = isPremium
@@ -345,7 +362,13 @@ export class RateLimitService {
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
-    const resetDate = new Date(currentYear, currentMonth, 1);
+
+    const period = this.resolveBillingPeriod(
+      now,
+      currentMonth,
+      currentYear,
+      isPremium ? subscriptionPeriod : null,
+    );
 
     const [configMap, usageMap] = await Promise.all([
       this.getRateLimitConfigsBatch(
@@ -366,13 +389,13 @@ export class RateLimitService {
         FeatureType.RESUME_GENERATION,
         configMap,
         usageMap,
-        resetDate,
+        period,
       ),
       cover_letter: this.computeRateLimitResult(
         FeatureType.COVER_LETTER,
         configMap,
         usageMap,
-        resetDate,
+        period,
       ),
     };
 
@@ -381,7 +404,7 @@ export class RateLimitService {
         FeatureType.RESUME_BATCH_GENERATION,
         configMap,
         usageMap,
-        resetDate,
+        period,
       );
     }
 
@@ -392,43 +415,99 @@ export class RateLimitService {
    * Get formatted feature usage for API responses.
    * FREEMIUM: resume_generation + cover_letter
    * PREMIUM:  resume_generation + cover_letter + resume_batch_generation
+   *
+   * @param subscriptionPeriod Active subscription boundaries for premium users.
+   *   Pass `null` / omit for freemium or when no subscription record exists yet.
    */
   async getFormattedFeatureUsage(
     userContext: UserContext,
+    subscriptionPeriod?: SubscriptionPeriod | null,
   ): Promise<FormattedFeatureUsage[]> {
-    const stats = await this.getUserUsageStats(userContext);
+    const stats = await this.getUserUsageStats(userContext, subscriptionPeriod);
+
+    const toEntry = (
+      feature: FeatureType,
+      result: RateLimitResult,
+    ): FormattedFeatureUsage => ({
+      feature,
+      allowed: result.limit,
+      remaining: result.remaining,
+      used: result.currentUsage,
+      usagePercentage: `${result.usagePercentage}%`,
+      resetDate: result.resetDate,
+      cycleStart: result.cycleStart,
+      daysRemaining: this.computeDaysRemaining(result.resetDate),
+    });
 
     const entries: FormattedFeatureUsage[] = [
-      {
-        feature: FeatureType.RESUME_GENERATION,
-        allowed: stats.resume_generation.limit,
-        remaining: stats.resume_generation.remaining,
-        used: stats.resume_generation.currentUsage,
-        usagePercentage: `${stats.resume_generation.usagePercentage}%`,
-        resetDate: stats.resume_generation.resetDate,
-      },
-      {
-        feature: FeatureType.COVER_LETTER,
-        allowed: stats.cover_letter.limit,
-        remaining: stats.cover_letter.remaining,
-        used: stats.cover_letter.currentUsage,
-        usagePercentage: `${stats.cover_letter.usagePercentage}%`,
-        resetDate: stats.cover_letter.resetDate,
-      },
+      toEntry(FeatureType.RESUME_GENERATION, stats.resume_generation),
+      toEntry(FeatureType.COVER_LETTER, stats.cover_letter),
     ];
 
     if (stats.resume_batch_generation) {
-      entries.push({
-        feature: FeatureType.RESUME_BATCH_GENERATION,
-        allowed: stats.resume_batch_generation.limit,
-        remaining: stats.resume_batch_generation.remaining,
-        used: stats.resume_batch_generation.currentUsage,
-        usagePercentage: `${stats.resume_batch_generation.usagePercentage}%`,
-        resetDate: stats.resume_batch_generation.resetDate,
-      });
+      entries.push(
+        toEntry(FeatureType.RESUME_BATCH_GENERATION, stats.resume_batch_generation),
+      );
     }
 
     return entries;
+  }
+
+  /**
+   * Reset all usage-tracking records for a user in the current calendar month.
+   * Called when a user upgrades to a new plan so they begin the new cycle with
+   * zero usage rather than carrying over usage from their previous plan.
+   */
+  async resetUsageForUser(userId: string): Promise<void> {
+    const now = new Date();
+    await this.usageTrackingRepository.delete({
+      user_id: userId,
+      month: now.getMonth() + 1,
+      year: now.getFullYear(),
+    });
+
+    // Evict any in-memory cache entries for this user so stale counts are not served.
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(`${userId}:`)) {
+        this.cache.delete(key);
+      }
+    }
+
+    this.logger.log(`Usage reset for user ${userId} on plan upgrade`);
+  }
+
+  /**
+   * Derive the billing period boundaries to use for display and progress calculation.
+   *
+   * Priority (highest to lowest):
+   *  1. Active subscription period (premium only) — anchors to the real payment date.
+   *  2. Calendar-month fallback — first day of current month → first day of next month.
+   */
+  private resolveBillingPeriod(
+    now: Date,
+    currentMonth: number,
+    currentYear: number,
+    subscriptionPeriod?: SubscriptionPeriod | null,
+  ): { cycleStart: Date; cycleEnd: Date } {
+    if (subscriptionPeriod?.starts_at && subscriptionPeriod?.ends_at) {
+      return {
+        cycleStart: subscriptionPeriod.starts_at,
+        cycleEnd: subscriptionPeriod.ends_at,
+      };
+    }
+
+    return {
+      cycleStart: new Date(currentYear, currentMonth - 1, 1),
+      cycleEnd: new Date(currentYear, currentMonth, 1),
+    };
+  }
+
+  /**
+   * Compute whole days remaining from now until the cycle end date (≥ 0).
+   */
+  private computeDaysRemaining(cycleEnd: Date): number {
+    const msRemaining = cycleEnd.getTime() - Date.now();
+    return Math.max(0, Math.ceil(msRemaining / (24 * 60 * 60 * 1000)));
   }
 
   /**

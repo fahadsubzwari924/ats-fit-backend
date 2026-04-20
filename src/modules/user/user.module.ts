@@ -4,6 +4,7 @@ import { User } from '../../database/entities/user.entity';
 import { Resume } from '../../database/entities/resume.entity';
 import { QueueMessage } from '../../database/entities/queue-message.entity';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
+import { UserSubscription } from '../../database/entities/user-subscription.entity';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
@@ -19,6 +20,7 @@ import { QueueModule } from '../queue/queue.module';
       Resume,
       QueueMessage,
       ExtractedResumeContent,
+      UserSubscription,
     ]),
     forwardRef(() => ResumeTailoringModule),
     forwardRef(() => AuthModule),
