@@ -6,7 +6,10 @@ export interface RateLimitResult {
   currentUsage: number;
   limit: number;
   remaining: number;
+  /** End of the current billing period. */
   resetDate: Date;
+  /** Start of the current billing period. */
+  cycleStart: Date;
   usagePercentage: number;
 }
 
@@ -19,7 +22,12 @@ export interface FormattedFeatureUsage {
   remaining: number;
   used: number;
   usagePercentage: string;
+  /** End of the current billing period. */
   resetDate: Date;
+  /** Start of the current billing period. */
+  cycleStart: Date;
+  /** Whole days remaining until the period ends (≥ 0). */
+  daysRemaining: number;
 }
 
 /**

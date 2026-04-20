@@ -2,11 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserType, UserPlan } from '../../database/entities/user.entity';
+import { UserSubscription } from '../../database/entities/user-subscription.entity';
 import { UserContext } from '../auth/types/user-context.type';
-import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { RateLimitService, SubscriptionPeriod } from '../rate-limit/rate-limit.service';
 import { IFeatureUsage } from '../../shared/interfaces';
 import { NotFoundException } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
+import { UserMeResponseDto } from './dtos/user-me-response.dto';
 
 export interface IUserContext {
   userId?: string;
@@ -23,6 +25,8 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(UserSubscription)
+    private readonly userSubscriptionRepository: Repository<UserSubscription>,
     private readonly rateLimitService: RateLimitService,
   ) {}
 
@@ -99,8 +103,10 @@ export class UserService {
   }
 
   /**
-   * Get feature usage for a user by user ID - Reusable method
-   * This method can be used by login API and dedicated feature usage endpoint
+   * Get feature usage for a user by user ID.
+   * Delegates to `getFeatureUsageForUser` which resolves the correct billing
+   * period (subscription-based for premium, calendar-month for freemium).
+   *
    * @param userId User ID
    * @returns Formatted feature usage array
    */
@@ -114,8 +120,63 @@ export class UserService {
   }
 
   /**
-   * Get feature usage for a user entity - Internal reusable method
-   * This follows the DRY principle and Single Responsibility Principle
+   * Upgrade user to premium plan when subscription payment succeeds.
+   * Also resets all usage-tracking counters for the current period so the
+   * user starts their new billing cycle with zero usage.
+   */
+  async upgradeToPremium(userId: string): Promise<void> {
+    await this.userRepository.update(userId, { plan: UserPlan.PREMIUM });
+    await this.rateLimitService.resetUsageForUser(userId);
+    this.logger.log(`User ${userId} upgraded to PREMIUM plan, usage reset`);
+  }
+
+  /**
+   * Downgrade user to freemium when subscription is cancelled or expired.
+   */
+  async downgradeToFreemium(userId: string): Promise<void> {
+    await this.userRepository.update(userId, { plan: UserPlan.FREEMIUM });
+    this.logger.log(`User ${userId} downgraded to FREEMIUM plan`);
+  }
+
+  /**
+   * Get current authenticated user profile with feature usage and uploaded resumes.
+   */
+  async getCurrentUser(userId: string): Promise<UserMeResponseDto> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId, is_active: true },
+      relations: ['uploadedResumes'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
+    }
+
+    const featureUsage = await this.getFeatureUsageForUser(user);
+
+    return {
+      id: user.id,
+      full_name: user.full_name,
+      email: user.email,
+      plan: user.plan,
+      isPremium: user.plan === UserPlan.PREMIUM,
+      user_type: user.user_type,
+      is_active: user.is_active,
+      onboarding_completed: user.onboarding_completed,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+      featureUsage,
+      uploadedResumes: user.uploadedResumes ?? [],
+    };
+  }
+
+  /**
+   * Get feature usage for a user entity - Internal reusable method.
+   *
+   * For premium users, resolves the active subscription period so the
+   * rate-limit service can return the correct `resetDate`, `cycleStart`,
+   * and `daysRemaining` anchored to the real payment date rather than the
+   * calendar month.
+   *
    * @param user User entity
    * @returns Formatted feature usage array
    */
@@ -128,6 +189,29 @@ export class UserService {
       userAgent: user.user_agent || 'UserService',
     };
 
-    return this.rateLimitService.getFormattedFeatureUsage(userContext);
+    const subscriptionPeriod =
+      user.plan === UserPlan.PREMIUM
+        ? await this.getActivePremiumPeriod(user.id)
+        : null;
+
+    return this.rateLimitService.getFormattedFeatureUsage(userContext, subscriptionPeriod);
+  }
+
+  /**
+   * Retrieve the billing period boundaries for the user's active premium subscription.
+   * Returns `null` when no active subscription is found (graceful fallback to calendar month).
+   */
+  private async getActivePremiumPeriod(userId: string): Promise<SubscriptionPeriod | null> {
+    const subscription = await this.userSubscriptionRepository.findOne({
+      where: { user_id: userId, is_active: true, is_cancelled: false },
+      order: { created_at: 'DESC' },
+      select: ['starts_at', 'ends_at'],
+    });
+
+    if (!subscription?.starts_at || !subscription?.ends_at) {
+      return null;
+    }
+
+    return { starts_at: subscription.starts_at, ends_at: subscription.ends_at };
   }
 }
