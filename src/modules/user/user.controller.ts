@@ -54,6 +54,22 @@ export class UserController {
     private readonly resumeProfileEnrichmentService: ResumeProfileEnrichmentService,
   ) {}
 
+  @Get('me')
+  @ApiOperation({ summary: 'Get current authenticated user profile' })
+  @ApiResponse({ status: 200, description: 'Current user profile' })
+  async getMe(@Req() request: RequestWithUserContext) {
+    const userId = request?.userContext?.userId;
+
+    if (!userId) {
+      throw new BadRequestException(
+        'User authentication required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+
+    return this.userService.getCurrentUser(userId);
+  }
+
   @Get('resume-profile-status')
   @ApiOperation({
     summary: 'Get resume profile enrichment status',

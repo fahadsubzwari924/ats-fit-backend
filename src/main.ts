@@ -18,7 +18,7 @@ import { lemonSqueezySetup } from '@lemonsqueezy/lemonsqueezy.js';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Lemon Squeezy SDK setup
   lemonSqueezySetup({
@@ -170,9 +170,10 @@ async function setupNgrokTunnel(port: number | string, logger: Logger) {
     await authtoken(process.env.NGROK_AUTH_TOKEN);
     const tunnel = await forward({ addr: port });
 
-    logger.log(`✅ Ngrok tunnel established: ${tunnel.url()}`);
+    const tunnelUrl = tunnel.url();
+    logger.log(`✅ Ngrok tunnel established: ${tunnelUrl}`);
     logger.log(
-      `📱 Use this URL for webhooks and external access: ${tunnel.url()}`,
+      `📱 Webhook URL for LemonSqueezy dashboard: ${tunnelUrl}/api/v1/subscriptions/payment-confirmation`,
     );
   } catch (error) {
     logger.error('Failed to setup ngrok tunnel:', error);

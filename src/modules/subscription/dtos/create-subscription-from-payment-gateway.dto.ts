@@ -19,7 +19,9 @@ export class CreateSubscriptionFromPaymentGatewayDto implements ICreateSubscript
   metadata: Record<string, any>;
 
   constructor(payload: PaymentConfirmationDto) {
-    this.payment_gateway_subscription_id = payload?.data?.id;
+    this.payment_gateway_subscription_id =
+      payload?.data?.attributes?.subscription_id?.toString() ||
+      payload?.data?.id;
     this.subscription_plan_id = payload?.meta?.custom_data?.plan_id;
     this.user_id = payload?.meta?.custom_data?.user_id;
     this.status = this.mapStatus(payload?.data?.attributes?.status);

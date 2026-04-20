@@ -167,6 +167,16 @@ export class PaymentionConfirmationAttributesDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  subscription_id?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  total_formatted?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
   subtotal?: number;
 
   @ApiPropertyOptional()

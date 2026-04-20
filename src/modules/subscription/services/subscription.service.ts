@@ -10,6 +10,7 @@ import {
 } from '../interfaces/subscription.interface';
 import {
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
@@ -28,6 +29,10 @@ import {
   AwsConfigKeys,
 } from '../../../shared/enums';
 import { IAwsEmailConfig, IRecipients } from '../../../shared/interfaces';
+import { UserService } from '../../user/user.service';
+import { ExternalPaymentGatewayEvents } from '../externals/enums/external-payment-gateway-events.enum';
+import { PaymentService } from '../../../shared/services/payment.service';
+import { MESSAGES } from '../../../shared/constants/messages';
 
 @Injectable()
 export class SubscriptionService {
@@ -38,6 +43,8 @@ export class SubscriptionService {
     private readonly userSubscriptionRepository: Repository<UserSubscription>,
     private readonly configService: ConfigService,
     @Inject(EMAIL_SERVICE_TOKEN) private readonly emailService: IEmailService,
+    private readonly userService: UserService,
+    private readonly paymentService: PaymentService,
   ) {}
 
   async create(data: ICreateSubscriptionData): Promise<UserSubscription> {
@@ -270,8 +277,19 @@ export class SubscriptionService {
     return !!activeSubscription;
   }
 
-  async handleSuccessfulPayment(payload: any) {
-    return this.processPaymentGatewayEvent(payload);
+  async handleSuccessfulPayment(
+    payload: PaymentConfirmationDto,
+    user: User,
+    plan: SubscriptionPlan,
+  ): Promise<any> {
+    const result = await this.processPaymentGatewayEvent(payload, user, plan);
+    if (result?.subscriptionCreated) {
+      await this.userService.upgradeToPremium(user.id);
+      this.logger.log(
+        `User ${user.id} upgraded to premium after successful payment`,
+      );
+    }
+    return result;
   }
 
   async handleFailedPayment(payload: any, user: User, plan: SubscriptionPlan) {
@@ -310,6 +328,137 @@ export class SubscriptionService {
         timestamp: Date.now(),
       });
     }
+  }
+
+  async handleSubscriptionDeactivated(
+    payload: PaymentConfirmationDto,
+    user: User,
+  ): Promise<void> {
+    try {
+      const externalSubId =
+        payload?.data?.attributes?.subscription_id?.toString() ||
+        payload?.data?.id;
+
+      if (!externalSubId) {
+        this.logger.warn(
+          `Cannot process ${payload?.meta?.event_name}: no subscription external ID found in payload`,
+        );
+        return;
+      }
+
+      const eventName = payload?.meta?.event_name;
+      const isCancelled =
+        eventName === ExternalPaymentGatewayEvents.SUBSCRIPTION_CANCELLED;
+
+      const updateData: IUpdateSubscriptionData = {
+        status: isCancelled
+          ? SubscriptionStatus.CANCELLED
+          : SubscriptionStatus.EXPIRED,
+        is_active: false,
+        is_cancelled: isCancelled,
+        ...(isCancelled ? { cancelled_at: new Date() } : {}),
+      };
+
+      await this.updateByExternalId(externalSubId, updateData);
+      await this.userService.downgradeToFreemium(user.id);
+
+      this.logger.log(
+        `Subscription ${externalSubId} deactivated (${eventName}) for user ${user.id}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to handle subscription deactivation', error);
+      throw error;
+    }
+  }
+
+  async handleSubscriptionUpdated(
+    payload: PaymentConfirmationDto,
+  ): Promise<void> {
+    try {
+      const externalSubId =
+        payload?.data?.attributes?.subscription_id?.toString() ||
+        payload?.data?.id;
+
+      if (!externalSubId) {
+        this.logger.warn(
+          `Cannot process ${payload?.meta?.event_name}: no subscription external ID found in payload`,
+        );
+        return;
+      }
+
+      const newStatus = new CreateSubscriptionFromPaymentGatewayDto(payload)
+        .status;
+
+      await this.updateByExternalId(externalSubId, {
+        status: newStatus,
+        is_active: newStatus === SubscriptionStatus.ACTIVE,
+        metadata: payload?.data?.attributes as Record<string, any>,
+      });
+
+      this.logger.log(
+        `Subscription ${externalSubId} updated to status ${newStatus}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to handle subscription update', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel subscription: calls payment gateway then updates local DB.
+   * Called by user-initiated cancel (DELETE /subscriptions/:id/cancel).
+   */
+  async cancelUserSubscription(
+    subscriptionId: string,
+    userId: string,
+  ): Promise<UserSubscription> {
+    const subscription = await this.findById(subscriptionId);
+
+    if (subscription.user_id !== userId) {
+      throw new ForbiddenException(
+        'You do not own this subscription',
+        ERROR_CODES.FORBIDDEN,
+      );
+    }
+
+    if (!subscription.isActiveSubscription()) {
+      throw new BadRequestException(
+        MESSAGES.SUBSCRIPTION_NOT_ACTIVE,
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+
+    // Cancel at LemonSqueezy
+    // 4xx = subscription doesn't exist at gateway (record locally but log ERROR)
+    // Network/5xx = transient — still record locally, ops can reconcile via webhook
+    try {
+      await this.paymentService.cancelSubscription({
+        subscriptionId: subscription.payment_gateway_subscription_id,
+      });
+      this.logger.log(
+        `LemonSqueezy cancellation confirmed for ${subscription.payment_gateway_subscription_id}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `LemonSqueezy cancellation call failed for ${subscription.payment_gateway_subscription_id} — proceeding with local cancellation. Manual reconciliation may be needed.`,
+        {
+          error: error?.message,
+          gatewaySubId: subscription.payment_gateway_subscription_id,
+        },
+      );
+      // Intentionally not re-throwing: local DB update captures user intent.
+    }
+
+    const cancelled = await this.update(subscriptionId, {
+      status: SubscriptionStatus.CANCELLED,
+      is_active: false,
+      is_cancelled: true,
+      cancelled_at: new Date(),
+    });
+
+    await this.userService.downgradeToFreemium(userId);
+
+    return cancelled;
   }
 
   //#region Payment Gateway Event Processing (Decoupled)
@@ -377,42 +526,64 @@ export class SubscriptionService {
   /**
    * Process payment gateway events (subscription-focused)
    */
-  async processPaymentGatewayEvent(payload: any): Promise<any> {
+  async processPaymentGatewayEvent(
+    payload: PaymentConfirmationDto,
+    user?: User,
+    plan?: SubscriptionPlan,
+  ): Promise<any> {
     try {
-      this.logger.log(
-        `Processing payment gateway event: ${payload?.meta?.event_name}`,
-      );
-
-      // Verify subscription was created
-
       const eventType = payload?.meta?.event_name;
-      let subscriptionInfo = null;
+      this.logger.log(`Processing payment gateway event: ${eventType}`);
 
-      const subscription =
-        await this.createSubscriptionFromPaymentGatewayEvent(payload);
+      // LemonSqueezy sends both subscription_created and subscription_payment_success for new subs.
+      // For subscription_created: data.id IS the subscription external ID.
+      // For subscription_payment_success: subscription ID is in data.attributes.subscription_id.
+      const subscriptionExternalId =
+        payload?.data?.attributes?.subscription_id?.toString() ||
+        payload?.data?.id;
 
-      if (!subscription) {
-        this.logger.warn(
-          `Subscription creation failed or returned null for event: ${eventType}`,
+      // Idempotency: if subscription already exists, update status instead of creating duplicate
+      const existing = await this.findByExternalId(subscriptionExternalId);
+      if (existing) {
+        this.logger.log(
+          `Subscription ${subscriptionExternalId} already exists (${existing.id}), updating status`,
         );
-        return null;
+        const updatedStatus = new CreateSubscriptionFromPaymentGatewayDto(
+          payload,
+        ).status;
+        const updated = await this.update(existing.id, {
+          status: updatedStatus,
+          is_active: updatedStatus === SubscriptionStatus.ACTIVE,
+        });
+        return {
+          eventType,
+          subscriptionCreated: false,
+          subscription: {
+            subscriptionId: updated.id,
+            status: updated.status,
+            isActive: updated.is_active,
+            userId: updated.user_id,
+            subscriptionPlanId: updated.subscription_plan_id,
+          },
+        };
       }
 
-      subscriptionInfo = {
-        subscriptionId: subscription?.id,
-        status: subscription?.status,
-        isActive: subscription?.is_active,
-        userId: subscription?.user_id,
-        subscriptionPlanId: subscription?.subscription_plan_id,
-      };
-      this.logger.log(
-        `✅ Subscription entry confirmed in database: ${subscription?.id}`,
+      const subscription = await this.createSubscriptionFromPaymentGatewayEvent(
+        payload,
+        user,
+        plan,
       );
 
       return {
-        eventType: eventType,
-        subscriptionCreated: !!subscriptionInfo,
-        subscription: subscriptionInfo,
+        eventType,
+        subscriptionCreated: true,
+        subscription: {
+          subscriptionId: subscription?.id,
+          status: subscription?.status,
+          isActive: subscription?.is_active,
+          userId: subscription?.user_id,
+          subscriptionPlanId: subscription?.subscription_plan_id,
+        },
       };
     } catch (error) {
       this.logger.error('Failed to process payment gateway event', error);
@@ -425,45 +596,33 @@ export class SubscriptionService {
    */
   private async createSubscriptionFromPaymentGatewayEvent(
     payload: PaymentConfirmationDto,
+    user?: User,
+    plan?: SubscriptionPlan,
   ): Promise<UserSubscription> {
     try {
-      this.logger.log(`🔥 DEBUG: Starting subscription creation process...`);
-
-      // Transform payment gateway payload to subscription data using DTO
       const subscriptionData = new CreateSubscriptionFromPaymentGatewayDto(
         payload,
       );
 
-      this.logger.log(
-        `🔥 DEBUG: Subscription data to create:`,
+      // Override user_id and plan from resolved entities if available
+      if (user?.id) subscriptionData.user_id = user.id;
+      if (plan?.id) subscriptionData.subscription_plan_id = plan.id;
+
+      // Fix subscription external ID disambiguation
+      const externalSubId =
+        payload?.data?.attributes?.subscription_id?.toString() ||
+        payload?.data?.id;
+      subscriptionData.payment_gateway_subscription_id = externalSubId;
+
+      this.logger.log('Creating subscription from payment gateway event', {
         subscriptionData,
-      );
-      this.logger.log(`🔥 DEBUG: Calling subscriptionService.create()...`);
-
-      const subscription = await this.create(subscriptionData);
-
-      this.logger.log(`✅ SUCCESS: Created subscription in database!`);
-      this.logger.log(`✅ SUCCESS: Subscription ID: ${subscription?.id}`);
-      this.logger.log(
-        `✅ SUCCESS: Subscription status: ${subscription?.status}`,
-      );
-      this.logger.log(
-        `✅ SUCCESS: Subscription isActive: ${subscription?.is_active}`,
-      );
-
-      return subscription;
+      });
+      return await this.create(subscriptionData);
     } catch (error) {
       this.logger.error(
-        `❌ CRITICAL ERROR: Failed to create subscription from payment gateway event:`,
+        'Failed to create subscription from payment gateway event',
         error,
       );
-      this.logger.error(`❌ Error message: ${error.message}`);
-      this.logger.error(`❌ Error stack: ${error.stack}`);
-
-      if (error.code) {
-        this.logger.error(`❌ Database error code: ${error.code}`);
-      }
-
       throw error;
     }
   }
