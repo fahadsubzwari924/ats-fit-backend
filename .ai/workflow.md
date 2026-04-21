@@ -17,18 +17,9 @@ For **any** work type—feature, bugfix, idea/spike, refactor, documentation, or
 | **Plan** | Ordered tasks: path, verify, **specialist per task** | writing-plans | One Agency specialist per task (`subagent_type` or `@agency-*.mdc`) |
 | **Implement** | Smallest vertical slice; reviewable diffs | subagent-driven-development; test-driven-development when harness exists | **Required** on every implementation worker — `/implement` or equivalent |
 | **Review** | Lint/test evidence | requesting-code-review; verification-before-completion | Reviewer/security roles where appropriate; not for Superpowers **gate** reviewers inside subagent-driven-development |
-| **Ship** | Merge/release readiness, PR creation | verification-before-completion; **`.claude/commands/ship.md`** (mandatory test → build → lint order; stash → `master`+pull → `feature|bugfix/<task>` → push → PR when user ships or asks for a PR) | — |
+| **Ship** | Merge/release readiness | verification-before-completion | — |
 
 Repo commands: `npm run lint`, `npm run test`, `npm run build`.
-
-### Ship and GitHub PR (must match `ship` command)
-
-When the user runs `/ship` or asks to **create/open a PR** or **ship the feature**, follow **`.claude/commands/ship.md`** exactly:
-
-1. `npm run test` → `npm run build` → `npm run lint` (fix and re-run until all pass).
-2. Stash if dirty → `checkout master` → pull latest → `checkout -b feature/<TASK>` or `bugfix/<TASK>` → `stash pop` if applicable → re-verify if needed → commit → push → `gh pr create` (or compare URL).
-
-If the task id or feature vs bugfix is missing, ask before naming the branch.
 
 ## Plan execution modes
 
@@ -67,10 +58,8 @@ Skip TDD only when user explicitly opts out or project has no harness yet—then
 
 ## Commands (local)
 
-Ship/PR verification order: **test → build → lint** (see `.claude/commands/ship.md`).
-
 | Step | Command |
 |------|---------|
+| Lint | `npm run lint` |
 | Test | `npm run test` |
 | Build | `npm run build` |
-| Lint | `npm run lint` |

@@ -136,3 +136,5 @@ config/secrets.json
 /vendor
 .claude/agents/ 
 .claude/skills/
+
+docs/superpowers

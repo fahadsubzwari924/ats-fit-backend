@@ -22,9 +22,9 @@ Do not treat Superpowers or Agency as optional add-ons. If `vendor/` is missing,
 Same contract as Cursor’s always-on `routing.mdc`: **Superpowers** for phase discipline, **Agency** for execution. Applies whether the user typed a slash command or started a random conversation.
 
 - **Default:** Use Superpowers skills for the current phase (brainstorming, writing-plans, systematic-debugging, subagent-driven-development, verification-before-completion, requesting-code-review, test-driven-development, etc.). Use Agency specialists for every implementation Task (`subagent_type` from `.claude/agents/_index.json`). Override only when the user opts out explicitly.
-- **Bug, error, or failing test:** systematic-debugging → then plan/implement with the right Agency role (e.g. `testing-api-tester` for tests, `engineering-backend-architect` for server logic).
+- **Bug, error, or failing test:** systematic-debugging → then plan/implement with the right Agency role (e.g. `API Tester` for tests, `Backend Architect` for server logic).
 - **New feature or unclear scope:** brainstorming when creativity/requirements are unclear → writing-plans → implement with Agency per task.
-- **Review or ship (including “create PR”, “open PR”, “ship this feature”):** requesting-code-review / review skills plus verification-before-completion; for ship/PR work follow **`.claude/commands/ship.md`** in order (test → build → lint → fix → stash if dirty → `master` + pull → `feature|bugfix/<task>` → push → PR). Keep Agency on implementation work, not on Superpowers reviewer **gates** (see Rule 4).
+- **Review or ship:** requesting-code-review / review skills plus verification-before-completion; keep Agency on implementation work, not on Superpowers reviewer **gates** (see Rule 4).
 - **PLANNING:** Every plan task must have an Agency `subagent_type` before the plan is final (same as `/kickoff`). If a skill omits roles, add them from `.ai/agents.md` / `_index.json`.
 - **DISPATCH:** Never `general-purpose` for implementers — Rules 1–5 below.
 
@@ -40,31 +40,31 @@ Claude Code auto-loads the full Agency persona (all constraints, anti-patterns, 
 
 ```
 Task({
-  subagent_type: "engineering-backend-architect",   // exact filename, no .md
+  subagent_type: "Backend Architect",   // frontmatter name field, not the filename
   description: "Implement Task N: <short name>",
   prompt: "<task spec + context from the plan>"
 })
 ```
 
-### Rule 2 — Agency filenames use division prefixes
+### Rule 2 — `subagent_type` is the frontmatter `name`, not the filename
 
-The agent files in `.claude/agents/` come from upstream and are named with a **division prefix** (`engineering-`, `testing-`, `product-`). Bare names like `backend-architect` do **not** resolve. Authoritative mapping lives in **`.claude/agents/_index.json`** (written by `ai-dev-setup`). The common roles are:
+The agent files in `.claude/agents/` are named with a **division prefix** (`engineering-`, `testing-`, `product-`), but Claude Code matches on the **`name` field** in each file's YAML frontmatter — not on the filename stem. Authoritative mapping lives in **`.claude/agents/_index.json`** (`subagentType` field, written by `ai-dev-setup`). The common roles are:
 
 | Task focus | `subagent_type` |
 |------------|-----------------|
-| API / backend / server logic | `engineering-backend-architect` |
-| UI / frontend / components | `engineering-frontend-developer` |
-| Tests / API testing | `testing-api-tester` |
-| Performance / benchmarking | `testing-performance-benchmarker` |
-| Infra / CI / scripts | `engineering-devops-automator` |
-| System architecture | `engineering-software-architect` |
-| Code review | `engineering-code-reviewer` |
-| Security review | `engineering-security-engineer` |
-| Documentation | `engineering-technical-writer` |
-| Product / scope / requirements | `product-manager` |
-| Senior generalist dev | `engineering-senior-developer` |
+| API / backend / server logic | `Backend Architect` |
+| UI / frontend / components | `Frontend Developer` |
+| Tests / API testing | `API Tester` |
+| Performance / benchmarking | `Performance Benchmarker` |
+| Infra / CI / scripts | `DevOps Automator` |
+| System architecture | `Software Architect` |
+| Code review | `Code Reviewer` |
+| Security review | `Security Engineer` |
+| Documentation | `Technical Writer` |
+| Product / scope / requirements | `Product Manager` |
+| Senior generalist dev | `Senior Developer` |
 
-When the plan is silent on roles, map tasks using this table before dispatching. If a role you want is not present, open `.claude/agents/_index.json` and pick the closest match.
+When the plan is silent on roles, map tasks using this table before dispatching. If a role you want is not present, open `.claude/agents/_index.json` and use the `subagentType` value from the matching entry.
 
 ### Rule 3 — Override Superpowers' `subagent-driven-development` template
 
@@ -105,7 +105,7 @@ Load `docs/API-PATTERNS.md` on every task that touches HTTP routes or request ha
 | `/kickoff` | New feature: scope, risks, plan with Agency role per task |
 | `/implement` | Execute a plan: wires Agency specialists + quality checks |
 | `/review` | Pre-merge review checklist |
-| `/ship` | Release/merge readiness and **PR workflow** (see command file: verify → stash → latest `master` → task branch → PR) |
+| `/ship` | Release/merge readiness |
 
 ## Docs index
 
