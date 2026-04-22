@@ -9,3 +9,4 @@ export * from './email-sender-config.interface';
 export * from './recipient.interface';
 export * from './template-renderer.interface';
 export * from './template-provider.interface';
+export * from './contact-line-fields.interface';

@@ -12,7 +12,7 @@
             color: #333;
             max-width: 800px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 0 20px;
         }
 
         h1 {
@@ -38,7 +38,7 @@
         h2 {
             font-size: 16px;
             text-transform: uppercase;
-            margin: 20px 0 10px 0;
+            margin: 14px 0 6px 0;
             color: #000;
             border-bottom: 1px solid #ddd;
             padding-bottom: 3px;
@@ -51,9 +51,18 @@
         }
 
         .job-header {
-            display: flex;
-            justify-content: space-between;
+            display: table;
+            width: 100%;
             margin-bottom: 5px;
+        }
+        .job-header-left {
+            display: table-cell;
+            text-align: left;
+        }
+        .job-header-right {
+            display: table-cell;
+            text-align: right;
+            white-space: nowrap;
         }
 
         .job-title {
@@ -70,8 +79,8 @@
         }
 
         .experience-item {
-            margin-bottom: 20px;
-            padding-bottom: 15px;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
             border-bottom: 1px solid #eee;
         }
 
@@ -89,12 +98,12 @@
         }
 
         ul {
-            margin: 5px 0 15px 0;
+            margin: 4px 0 8px 0;
             padding-left: 20px;
         }
 
         li {
-            margin-bottom: 5px;
+            margin-bottom: 3px;
         }
 
         .skills-category {
@@ -119,6 +128,8 @@
             body {
                 padding: 0;
                 font-size: 12px;
+                orphans: 3;
+                widows: 3;
             }
 
             h1 {
@@ -127,6 +138,23 @@
 
             h2 {
                 font-size: 14px;
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+
+            h3, .job-title, .job-header {
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+
+            .experience-item, .education-item, .certification-item, .skills-category {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            ul, li {
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
         }
     </style>
@@ -135,33 +163,28 @@
 <body>
     <h1>{{contactInfo.name}}</h1>
     <div class="contact-info">
-        <span>{{contactInfo.email}}</span> |
-        <span>{{contactInfo.phone}}</span> |
-        {{#if contactInfo.linkedin}}<span><a href="{{contactInfo.linkedin}}" target="_blank">Linkedin</a></span> | {{/if}}
-        {{#if contactInfo.github}}<span><a href="{{contactInfo.github}}" target="_blank">Github</a></span> | {{/if}}
-        <span>{{contactInfo.location}}</span>
+        {{{contactLine contactInfo}}}
     </div>
 
     {{#if summary}}
-    {{#if title}}
-    <h2>{{title}}</h2>
-    {{/if}}
+    <h2>PROFESSIONAL SUMMARY</h2>
+    {{#if title}}<div class="job-location">{{title}}</div>{{/if}}
     <div>{{summary}}</div>
     {{/if}}
 
     <h2>TECHNICAL PROFICIENCIES</h2>
-    <div class="skills-category"><strong>Programming Languages:</strong> {{skills.languages}}</div>
-    <div class="skills-category"><strong>Frameworks & Libraries:</strong> {{skills.frameworks}}</div>
-    <div class="skills-category"><strong>Databases:</strong> {{skills.databases}}</div>
-    <div class="skills-category"><strong>Cloud & Tools:</strong> {{skills.tools}}</div>
-    <div class="skills-category"><strong>Concepts:</strong> {{skills.concepts}}</div>
+    {{#if skills.languages}}<div class="skills-category"><strong>Programming Languages:</strong> {{join skills.languages ", "}}</div>{{/if}}
+    {{#if skills.frameworks}}<div class="skills-category"><strong>Frameworks & Libraries:</strong> {{join skills.frameworks ", "}}</div>{{/if}}
+    {{#if skills.databases}}<div class="skills-category"><strong>Databases:</strong> {{join skills.databases ", "}}</div>{{/if}}
+    {{#if skills.tools}}<div class="skills-category"><strong>Cloud & Tools:</strong> {{join skills.tools ", "}}</div>{{/if}}
+    {{#if skills.concepts}}<div class="skills-category"><strong>Concepts:</strong> {{join skills.concepts ", "}}</div>{{/if}}
 
     <h2>PROFESSIONAL EXPERIENCE</h2>
     {{#each experience}}
     <div class="experience-item{{#if @last}} last-experience-item{{/if}}">
         <div class="job-header">
-            <div class="job-title">{{company}}</div>
-            <div class="job-date">{{startDate}} – {{#if endDate}}{{endDate}}{{else}}PRESENT{{/if}}</div>
+            <div class="job-header-left job-title">{{company}}</div>
+            <div class="job-header-right job-date">{{startDate}} – {{#if endDate}}{{endDate}}{{else}}PRESENT{{/if}}</div>
         </div>
         <div class="job-location">{{location}}</div>
         <div class="job-position">{{position}}</div>
@@ -171,7 +194,7 @@
             <li>{{this}}</li>
             {{/each}}
         </ul>
-        {{#if achievements.length}}
+        {{#if achievements}}
         <ul>
             {{#each achievements}}
             <li>{{this}}</li>
@@ -181,15 +204,17 @@
     </div>
     {{/each}}
 
+    {{#if education}}
     <h2>EDUCATION</h2>
     {{#each education}}
     <div class="education-item">
         <div><strong>{{degree}}</strong></div>
-        <div>{{institution}}, {{startDate}} - {{endDate}}</div>
+        <div>{{institution}}{{#if major}}, {{major}}{{/if}} | {{startDate}} – {{#if endDate}}{{endDate}}{{else}}Present{{/if}}</div>
     </div>
     {{/each}}
+    {{/if}}
 
-    {{#if certifications.length}}
+    {{#if certifications}}
     <h2>CERTIFICATIONS</h2>
     {{#each certifications}}
     <div class="certification-item">
@@ -198,7 +223,7 @@
     {{/each}}
     {{/if}}
 
-    {{#if additionalSections.length}}
+    {{#if additionalSections}}
     {{#each additionalSections}}
     <h2>{{title}}</h2>
     <ul>

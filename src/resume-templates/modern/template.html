@@ -3,13 +3,13 @@
 
 <head>
     <meta charset="UTF-8" />
-    <title>{{name}} - Resume</title>
+    <title>{{contactInfo.name}} - Resume</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             font-size: 13px;
             color: #000;
-            margin: 40px auto;
+            margin: 0 auto;
             max-width: 800px;
             padding: 0 40px;
             line-height: 1.6;
@@ -23,7 +23,7 @@
 
         h2 {
             font-size: 16px;
-            margin-top: 32px;
+            margin-top: 18px;
             border-bottom: 1px solid #ccc;
             padding-bottom: 6px;
             text-transform: uppercase;
@@ -65,11 +65,11 @@
         }
 
         li {
-            margin-bottom: 6px;
+            margin-bottom: 3px;
         }
 
         .experience {
-            margin-top: 16px;
+            margin-top: 10px;
         }
 
         .job-title {
@@ -87,30 +87,58 @@
             font-style: italic;
             margin-top: 6px;
         }
+
+        @media print {
+            body {
+                orphans: 3;
+                widows: 3;
+            }
+
+            h2 {
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+
+            .subtitle,
+            .job-title {
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+
+            .experience,
+            .skills {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            ul,
+            li {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+        }
     </style>
 </head>
 
 <body>
     <h1>{{contactInfo.name}}</h1>
     <div class="contact">
-        {{contactInfo.email}} | {{contactInfo.phone}} | {{contactInfo.location}}
-        {{#if contactInfo.github}} | <a href="{{contactInfo.github}}" target="_blank">GitHub</a>{{/if}}
-        {{#if contactInfo.linkedin}} | <a href="{{contactInfo.linkedin}}" target="_blank">LinkedIn</a>{{/if}}
+        {{{contactLine contactInfo}}}
     </div>
 
     {{#if summary}}
-    {{#if title}}<div class="subtitle">{{title}}</div>{{/if}}
     <h2>Professional Summary</h2>
     <div class="section">{{summary}}</div>
     {{/if}}
 
     <h2>Technical Skills</h2>
     <div class="section skills">
-        {{#if skills.languages}}<div><strong>Programming Languages:</strong> {{skills.languages}}</div>{{/if}}
-        {{#if skills.frameworks}}<div><strong>Frameworks & Libraries:</strong> {{skills.frameworks}}</div>{{/if}}
-        {{#if skills.databases}}<div><strong>Databases:</strong> {{skills.databases}}</div>{{/if}}
-        {{#if skills.tools}}<div><strong>Cloud & Tools:</strong> {{skills.tools}}</div>{{/if}}
-        {{#if skills.concepts}}<div><strong>Concepts:</strong> {{skills.concepts}}</div>{{/if}}
+        {{#if skills.languages}}<div><strong>Programming Languages:</strong> {{join skills.languages ", "}}</div>{{/if}}
+        {{#if skills.frameworks}}<div><strong>Frameworks & Libraries:</strong> {{join skills.frameworks ", "}}</div>
+        {{/if}}
+        {{#if skills.databases}}<div><strong>Databases:</strong> {{join skills.databases ", "}}</div>{{/if}}
+        {{#if skills.tools}}<div><strong>Cloud & Tools:</strong> {{join skills.tools ", "}}</div>{{/if}}
+        {{#if skills.concepts}}<div><strong>Concepts:</strong> {{join skills.concepts ", "}}</div>{{/if}}
     </div>
 
     <h2>Professional Experience</h2>
@@ -125,7 +153,7 @@
             <li>{{this}}</li>
             {{/each}}
         </ul>
-        {{#if achievements.length}}
+        {{#if achievements}}
         <ul>
             {{#each achievements}}
             <li>{{this}}</li>
@@ -136,7 +164,7 @@
     </div>
     {{/each}}
 
-    {{#if education.length}}
+    {{#if education}}
     <h2>Education</h2>
     {{#each education}}
     <div class="experience">
@@ -148,7 +176,7 @@
     {{/each}}
     {{/if}}
 
-    {{#if certifications.length}}
+    {{#if certifications}}
     <h2>Certifications</h2>
     {{#each certifications}}
     <div class="experience">
@@ -158,7 +186,7 @@
     {{/each}}
     {{/if}}
 
-    {{#if additionalSections.length}}
+    {{#if additionalSections}}
     {{#each additionalSections}}
     <h2>{{title}}</h2>
     <div class="section">
