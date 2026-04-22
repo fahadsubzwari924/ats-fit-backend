@@ -257,6 +257,7 @@ ${JSON.stringify(candidateContent)}
    - Never use "N/A" or invalid dates; infer dates only from explicit resume content
 
 4. **Skills and summary:**
+   - Summary MUST be written as a single flowing paragraph of 2-3 sentences maximum. Do NOT use bullet points, dashes, asterisks, numbered lists, or line breaks inside the summary. Pack job title, years of experience, domain expertise, and core value proposition into one cohesive paragraph.
    - Summary must reflect real experience from the resume; no invented metrics
    - Include only skills present in the resume; prioritize ordering and grouping to match the job when truthful
 
@@ -408,6 +409,7 @@ ${JSON.stringify(candidateContent)}
    - Never use "N/A" or invalid dates; infer only from explicit resume content
 
 4. **Skills and summary:**
+   - Summary MUST be written as a single flowing paragraph of 2-3 sentences maximum. Do NOT use bullet points, dashes, asterisks, numbered lists, or line breaks inside the summary. Pack job title, years of experience, domain expertise, and core value proposition into one cohesive paragraph.
    - Summary should reflect real experience from the resume; no invented metrics
    - Align skill categories with the job when those skills appear in the resume
 

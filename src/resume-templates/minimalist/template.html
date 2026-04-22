@@ -4,12 +4,12 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{name}} - Resume</title>
+    <title>{{contactInfo.name}} - Resume</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 30px;
+            padding: 0 30px;
             background: #fff;
             color: #000;
             font-size: 14px;
@@ -30,7 +30,7 @@
             font-size: 18px;
             color: #007bff;
             text-transform: uppercase;
-            margin-top: 30px;
+            margin-top: 16px;
             border-bottom: 2px solid #eee;
             padding-bottom: 5px;
         }
@@ -45,7 +45,7 @@
         }
 
         .section {
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         .job-title,
@@ -62,8 +62,8 @@
         }
 
         ul {
-            margin-top: 5px;
-            margin-bottom: 15px;
+            margin-top: 4px;
+            margin-bottom: 8px;
             padding-left: 20px;
         }
 
@@ -90,6 +90,33 @@
                 font-size: 16px;
             }
         }
+
+        @media print {
+            body {
+                orphans: 3;
+                widows: 3;
+            }
+
+            h2 {
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+
+            .job-title, .project-title {
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+
+            .section {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            ul, li {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+        }
     </style>
 </head>
 
@@ -97,22 +124,14 @@
     <div class="header">
         <h1>{{contactInfo.name}}</h1>
         <div class="contact">
-            <span>{{contactInfo.email}}</span> |
-            <span>{{contactInfo.phone}}</span> |
-            <span>{{contactInfo.location}}</span>
-            {{#if contactInfo.linkedin}} | <a href="{{contactInfo.linkedin}}" target="_blank">LinkedIn</a>{{/if}}
-            {{#if contactInfo.github}} | <a href="{{contactInfo.github}}" target="_blank">GitHub</a>{{/if}}
+            {{{contactLine contactInfo}}}
         </div>
     </div>
 
     {{#if summary}}
-    {{#if title}}
-    <div class="section">
-        <h2>{{title}}</h2>
-    </div>
-    {{/if}}
     <div class="section">
         <h2>Professional Summary</h2>
+        {{#if title}}<div class="job-meta">{{title}}</div>{{/if}}
         <div>{{summary}}</div>
     </div>
     {{/if}}
@@ -127,7 +146,7 @@
             <li>{{this}}</li>
             {{/each}}
         </ul>
-        {{#if achievements.length}}
+        {{#if achievements}}
         <ul>
             {{#each achievements}}
             <li>{{this}}</li>
@@ -138,7 +157,7 @@
         {{/each}}
     </div>
 
-    {{#if education.length}}
+    {{#if education}}
     <div class="section">
         <h2>Education</h2>
         {{#each education}}
@@ -194,7 +213,7 @@
     </div>
     {{/if}}
 
-    {{#if certifications.length}}
+    {{#if certifications}}
     <div class="section">
         <h2>Certifications</h2>
         {{#each certifications}}
@@ -204,7 +223,7 @@
     </div>
     {{/if}}
 
-    {{#if additionalSections.length}}
+    {{#if additionalSections}}
     {{#each additionalSections}}
     <div class="section">
         <h2>{{title}}</h2>

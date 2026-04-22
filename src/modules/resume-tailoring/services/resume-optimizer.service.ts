@@ -169,6 +169,11 @@ export class ResumeOptimizerService {
           throw error;
         }
       }
+
+      result.optimizedContent.summary = this.sanitizeSummary(
+        result.optimizedContent.summary,
+      );
+
       const processingTime = Date.now() - startTime;
 
       this.logger.log(
@@ -342,6 +347,28 @@ export class ResumeOptimizerService {
         ERROR_CODES.INVALID_CONFIDENCE_SCORE,
       );
     }
+  }
+
+  private sanitizeSummary(summary: string): string {
+    if (!summary) return summary;
+
+    const lines = summary
+      .split('\n')
+      .map((line) =>
+        line
+          .replace(/^[\s]*[-•*–][\s]+/, '')
+          .replace(/^[\s]*\d+[.)]\s+/, '')
+          .trim(),
+      )
+      .filter((line) => line.length > 0);
+
+    const paragraph = lines
+      .join(' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    const sentences = paragraph.match(/[^.!?]+[.!?]+/g) ?? [paragraph];
+    return sentences.slice(0, 3).join(' ').trim();
   }
 
   private shouldUsePrecisionOptimizationPrompt(

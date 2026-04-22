@@ -141,20 +141,13 @@ export class ResumeTemplateService {
     }
   }
 
-  async applyTemplate(
+  applyTemplate(
     template: ResumeTemplate & { content: string },
     data: AnalysisResult,
   ): Promise<string> {
     try {
       this.logger.debug(
         `Applying template ${template.id} with data keys: ${Object.keys(data || {}).join(', ')}`,
-      );
-
-      // Register custom helpers - wrapped in Promise to make it awaitable
-      await Promise.resolve(
-        this.handlebarsService.registerHelper('json', (context: unknown) => {
-          return JSON.stringify(context);
-        }),
       );
 
       // Compile template
@@ -184,7 +177,7 @@ export class ResumeTemplateService {
         this.logger.error('Failed to log template usage', error);
       });
 
-      return result;
+      return Promise.resolve(result);
     } catch (error: unknown) {
       const formatted = formatUnknownError(error);
       this.logger.error(
