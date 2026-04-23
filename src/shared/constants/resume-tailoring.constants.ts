@@ -58,3 +58,42 @@ export const HISTORY_DEFAULT_LIMIT = 10;
 
 /** Prefix used when no original filename is available for a processed resume. */
 export const RESUME_FALLBACK_FILE_PREFIX = 'resume-';
+
+// ---------------------------------------------------------------------------
+// Bullet relevance scoring
+// ---------------------------------------------------------------------------
+
+/** Per-experience bullet budget by experience rank (index 0 = most recent job). */
+export const BULLET_BUDGET_PER_RANK = [7, 6, 5, 4, 3] as const;
+
+/** Visibility weight per experience rank for scoring. Index 0 = most recent. */
+export const BULLET_VISIBILITY_BY_RANK = [1.0, 0.85, 0.7, 0.5, 0.35] as const;
+
+/** Minimum questionValue score for a bullet to be eligible for a profile question. */
+export const MIN_QUESTION_VALUE = 0.35;
+
+// ---------------------------------------------------------------------------
+// Profile question generation
+// ---------------------------------------------------------------------------
+
+/** Maximum questions generated across all experiences. */
+export const MAX_QUESTIONS_TOTAL = 9;
+
+/** Per-job question budget by experience rank (index 0 = most recent). */
+export const QUESTION_BUDGET_PER_RANK = [3, 2, 2, 1, 1] as const;
+
+/** Maximum questions redistributable to top-2 jobs when lower jobs have unused slots. */
+export const FLEX_REDISTRIBUTE_CAP = 5;
+
+/** Estimated time in seconds per question answer (used for time gate). */
+export const ESTIMATED_SEC_PER_QUESTION = 45;
+
+/** Maximum total answer time in minutes before trimming lowest-value questions. */
+export const MAX_TOTAL_MINUTES = 7;
+
+// ---------------------------------------------------------------------------
+// Resume optimization
+// ---------------------------------------------------------------------------
+
+/** Max output tokens for resume optimization LLM calls. */
+export const MAX_TOKENS_OPTIMIZATION = 8000;

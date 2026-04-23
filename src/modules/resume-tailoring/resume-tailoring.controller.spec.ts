@@ -18,6 +18,7 @@ import { PremiumUserGuard } from '../auth/guards/premium-user.guard';
 import { RateLimitGuard } from '../rate-limit/rate-limit.guard';
 import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { Reflector } from '@nestjs/core';
+import { UsageTrackingInterceptor } from '../rate-limit/usage-tracking.interceptor';
 
 describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
   let controller: ResumeTailoringController;
@@ -69,9 +70,21 @@ describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
       generateStandalone: jest.fn(),
     };
 
+    const mockRateLimitService = {
+      recordUsage: jest.fn().mockResolvedValue(undefined),
+      checkRateLimit: jest.fn(),
+      getFormattedFeatureUsage: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ResumeTailoringController],
       providers: [
+        Reflector,
+        UsageTrackingInterceptor,
+        {
+          provide: RateLimitService,
+          useValue: mockRateLimitService,
+        },
         {
           provide: ResumeTemplateService,
           useValue: mockResumeTemplateService,

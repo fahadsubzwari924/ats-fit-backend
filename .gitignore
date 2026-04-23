@@ -137,4 +137,6 @@ config/secrets.json
 .claude/agents/ 
 .claude/skills/
 
-docs/superpowers
+docs/superpowers.worktrees/
+
+.worktrees/

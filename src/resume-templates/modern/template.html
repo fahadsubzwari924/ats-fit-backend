@@ -7,38 +7,38 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 13px;
+            font-size: 12px;
             color: #000;
-            margin: 0 auto;
-            max-width: 800px;
-            padding: 0 40px;
-            line-height: 1.6;
+            margin: 0;
+            padding: 0 8px;
+            line-height: 1.4;
         }
 
         h1 {
-            font-size: 24px;
+            font-size: 22px;
             text-transform: uppercase;
             margin: 0;
         }
 
         h2 {
-            font-size: 16px;
-            margin-top: 18px;
+            font-size: 13px;
+            margin-top: 10px;
+            margin-bottom: 4px;
             border-bottom: 1px solid #ccc;
-            padding-bottom: 6px;
+            padding-bottom: 3px;
             text-transform: uppercase;
         }
 
         .subtitle {
             font-weight: bold;
-            margin-top: 4px;
-            font-size: 14px;
+            margin-top: 2px;
+            font-size: 13px;
         }
 
         .contact {
-            font-size: 12px;
-            margin-top: 8px;
-            margin-bottom: 24px;
+            font-size: 11px;
+            margin-top: 4px;
+            margin-bottom: 10px;
         }
 
         .contact a {
@@ -47,29 +47,31 @@
         }
 
         .section {
-            margin-top: 16px;
+            margin-top: 6px;
         }
 
         .skills {
-            margin-top: 10px;
+            margin-top: 4px;
         }
 
         .skills strong {
             display: inline-block;
-            width: 200px;
+            width: 180px;
         }
 
         ul {
-            padding-left: 20px;
-            margin-top: 4px;
+            padding-left: 18px;
+            margin-top: 2px;
+            margin-bottom: 4px;
         }
 
         li {
-            margin-bottom: 3px;
+            margin-bottom: 2px;
         }
 
         .experience {
-            margin-top: 10px;
+            margin-top: 6px;
+            margin-bottom: 8px;
         }
 
         .job-title {
@@ -77,21 +79,21 @@
         }
 
         .job-info {
-            font-size: 12px;
+            font-size: 11px;
             color: #444;
-            margin-bottom: 8px;
+            margin-bottom: 3px;
         }
 
         .technologies {
-            font-size: 12px;
+            font-size: 11px;
             font-style: italic;
-            margin-top: 6px;
+            margin-top: 2px;
         }
 
         @media print {
             body {
-                orphans: 3;
-                widows: 3;
+                orphans: 2;
+                widows: 2;
             }
 
             h2 {
@@ -105,14 +107,7 @@
                 break-after: avoid;
             }
 
-            .experience,
-            .skills {
-                page-break-inside: avoid;
-                break-inside: avoid;
-            }
-
-            ul,
-            li {
+            .experience {
                 page-break-inside: avoid;
                 break-inside: avoid;
             }

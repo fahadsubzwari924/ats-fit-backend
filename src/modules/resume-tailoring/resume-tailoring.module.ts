@@ -53,6 +53,7 @@ import { ChangesDiffProcessor } from './processors/changes-diff.processor';
 import { ChangesDiffComputationService } from './services/changes-diff-computation.service';
 import { AtsChecksComputationService } from './services/ats-checks-computation.service';
 import { BulletsQuantifiedComputationService } from './services/bullets-quantified-computation.service';
+import { BulletRelevanceScoringService } from './services/bullet-relevance-scoring.service';
 
 @Module({
   imports: [
@@ -101,6 +102,8 @@ import { BulletsQuantifiedComputationService } from './services/bullets-quantifi
     TailoredResumePdfStorageService,
     ResumeGenerationOrchestratorService,
     ResumeQueueService,
+    // Bullet scoring (shared by optimizer + question selection)
+    BulletRelevanceScoringService,
     // Profile enrichment & profile questions
     ProfileQuestionSelectionService,
     ProfileQuestionGenerationService,

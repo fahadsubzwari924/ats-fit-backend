@@ -12,6 +12,9 @@ export * from './pdf-generation.interface';
 export * from './pdf-service.interface';
 export * from './resume-extraction.interface';
 export * from './resume-profile-enrichment.interface';
+export * from './scored-bullet.interface';
+export * from './bullet-context.interface';
+export * from './profile-question.interface';
 
 // Legacy interfaces
 export * from './resume-extracted-keywords.interface';
