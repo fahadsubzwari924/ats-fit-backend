@@ -99,10 +99,12 @@ export class PdfGenerationOrchestratorService {
 
       // Step 4: Prepare result with metadata
       const pdfContent = Buffer.from(pdfBuffer).toString('base64');
+      const candidateName =
+        optimizationResult.optimizedContent.contactInfo?.name ?? '';
       const filename = this.generateOptimizedFilename(
-        companyName,
+        candidateName,
         jobPosition,
-        optimizationResult.optimizationMetrics.confidenceScore,
+        companyName,
       );
 
       const totalProcessingTime = Date.now() - startTime;
@@ -264,47 +266,33 @@ export class PdfGenerationOrchestratorService {
   }
 
   /**
-   * Generate optimized filename based on job and optimization metrics
+   * Generate a recruiter-friendly filename.
+   * Format: FirstName-LastName-Position-Company-Resume.pdf
+   * Example: John-Smith-Software-Engineer-Google-Resume.pdf
    */
   private generateOptimizedFilename(
-    companyName: string,
+    candidateName: string,
     jobPosition: string,
-    confidenceScore: number,
+    companyName: string,
   ): string {
-    // Sanitize strings for filename safety
-    const sanitizedCompany = this.sanitizeForFilename(companyName);
+    const sanitizedName = this.sanitizeForFilename(candidateName);
     const sanitizedPosition = this.sanitizeForFilename(jobPosition);
+    const sanitizedCompany = this.sanitizeForFilename(companyName);
 
-    // Generate timestamp for uniqueness
-    const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-
-    // Include confidence score in filename for easy identification
-    const scoreCategory = this.getScoreCategory(confidenceScore);
-
-    return `Resume_${sanitizedCompany}_${sanitizedPosition}_${scoreCategory}_${timestamp}.pdf`;
+    const parts = [sanitizedName, sanitizedPosition, sanitizedCompany].filter(
+      Boolean,
+    );
+    return `${parts.join('-')}-Resume.pdf`;
   }
 
-  /**
-   * Sanitize string for safe filename usage
-   */
   private sanitizeForFilename(input: string): string {
     return input
-      .replace(/[^a-zA-Z0-9\s-]/g, '') // Remove special characters
-      .replace(/\s+/g, '_') // Replace spaces with underscores
-      .replace(/_+/g, '_') // Replace multiple underscores with single
-      .replace(/^_|_$/g, '') // Remove leading/trailing underscores
-      .slice(0, 30); // Limit length
-  }
-
-  /**
-   * Get score category for filename
-   */
-  private getScoreCategory(score: number): string {
-    if (score >= 90) return 'Excellent';
-    if (score >= 80) return 'VeryGood';
-    if (score >= 70) return 'Good';
-    if (score >= 60) return 'Fair';
-    return 'Basic';
+      .trim()
+      .replace(/[^a-zA-Z0-9\s]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40);
   }
 
   /**

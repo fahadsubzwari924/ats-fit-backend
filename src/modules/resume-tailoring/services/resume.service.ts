@@ -345,7 +345,7 @@ export class ResumeService {
   async downloadResumeGeneration(
     generationId: string,
     userId: string,
-  ): Promise<Buffer> {
+  ): Promise<{ buffer: Buffer; filename: string }> {
     const record = await this.resumeGenerationRepository.findOne({
       where: { id: generationId, user_id: userId },
       select: ['id', 'pdf_s3_key', 'company_name', 'job_position'],
@@ -374,10 +374,36 @@ export class ResumeService {
       );
     }
 
-    return this.s3Service.getObject({
+    const buffer = await this.s3Service.getObject({
       bucketName: bucket,
       key: record.pdf_s3_key,
     });
+
+    const filename = this.buildDownloadFilename(
+      record.job_position,
+      record.company_name,
+    );
+
+    return { buffer, filename };
+  }
+
+  private buildDownloadFilename(
+    jobPosition: string,
+    companyName: string,
+  ): string {
+    const sanitize = (s: string) =>
+      s
+        .trim()
+        .replace(/[^a-zA-Z0-9\s]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 40);
+
+    const parts = [sanitize(jobPosition), sanitize(companyName)].filter(
+      Boolean,
+    );
+    return parts.length ? `${parts.join('-')}-Resume.pdf` : 'Resume.pdf';
   }
 
   /**

@@ -147,14 +147,12 @@ export class ResumeTailoringController {
       );
     }
 
-    const pdfBuffer = await this.resumeService.downloadResumeGeneration(
-      generationId,
-      userId,
-    );
+    const { buffer: pdfBuffer, filename } =
+      await this.resumeService.downloadResumeGeneration(generationId, userId);
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=tailored-resume.pdf`,
+      'Content-Disposition': `attachment; filename="${filename}"`,
       'Content-Length': pdfBuffer.length.toString(),
     });
     res.end(pdfBuffer);
