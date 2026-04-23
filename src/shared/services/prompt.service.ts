@@ -223,11 +223,16 @@ You are an expert resume optimization specialist. Tailor the candidate's resume 
 - If a bullet has no numbers in the source material, write a strong qualitative achievement — do NOT fabricate metrics
 - Prefer a factual bullet without numbers over one with invented metrics
 
-**CRITICAL WORK EXPERIENCE INSTRUCTION:**
-- Extract and include ALL work experiences from the candidate's resume
-- For the most recent job, include ALL bullet points
-- For each older job, include UP TO 3 of the most relevant bullet points
-- **Do NOT copy bullet points verbatim.** Rewrite for clarity and job alignment while obeying the ZERO HALLUCINATION policy above
+**RELEVANCE-RANKED BULLET STRATEGY (CRITICAL):**
+The candidate resume below already contains pre-selected, relevance-ranked bullets per experience.
+The number of bullets per experience has been sized by our system based on recency and JD relevance.
+You MUST:
+- REWRITE every bullet you receive for clarity, CAR framing, and JD keyword alignment
+- For bullets that have a matching USER-VERIFIED FACT (matched by bullet text): inject the metric exactly as stated
+- For bullets WITHOUT a matching fact: rewrite honestly using ONLY existing resume content + JD keywords that truthfully reflect the original bullet — do NOT fabricate metrics
+- NEVER drop a bullet that appears in the input experience array
+- NEVER add extra bullet points not present in the input
+- Output MUST contain exactly the same number of experience entries as the input, and each entry MUST contain exactly the same number of bullets (responsibilities) as given
 - **MANDATORY DATE FIELDS:** Every experience entry MUST have valid startDate and endDate fields
 
 **TARGET JOB INFORMATION:**
@@ -238,7 +243,7 @@ You are an expert resume optimization specialist. Tailor the candidate's resume 
 - Frameworks: ${Array.isArray(technical.frameworks) ? technical.frameworks.join(', ') : 'None specified'}
 - Primary Keywords: ${Array.isArray(keywords.primary) ? keywords.primary.join(', ') : 'None specified'}
 
-**CURRENT CANDIDATE RESUME:**
+**CURRENT CANDIDATE RESUME (bullets already pre-ranked and sized):**
 ${JSON.stringify(candidateContent)}
 
 **OPTIMIZATION INSTRUCTIONS:**
@@ -248,8 +253,8 @@ ${JSON.stringify(candidateContent)}
    - Do NOT add "realistic" or placeholder metrics
 
 2. **Work experience:**
-   - Latest job: include all bullet points
-   - Older jobs: up to 3 most relevant bullets each
+   - Rewrite every bullet for JD alignment — no bullet should be left unchanged if improvement is possible
+   - Preserve bullet count per experience exactly as provided — do not merge, split, or drop bullets
    - Every experience entry must have valid startDate and endDate
 
 3. **Date format:**
@@ -375,11 +380,16 @@ Every number or metric listed under USER-VERIFIED FACTS was provided by the cand
 - Integrate them naturally into the relevant work experience bullets
 - Not add additional metrics beyond what appears in the candidate content or USER-VERIFIED FACTS
 
-**CRITICAL WORK EXPERIENCE INSTRUCTION:**
-- Extract and include ALL work experiences from the candidate's resume
-- For the most recent job, include ALL bullet points (all responsibilities/achievements)
-- For each older job, include UP TO 3 of the most relevant bullet points
-- **Do NOT copy bullet points verbatim.** Rewrite for clarity and job alignment while obeying the ZERO HALLUCINATION POLICY
+**RELEVANCE-RANKED BULLET STRATEGY (CRITICAL):**
+The candidate resume below already contains pre-selected, relevance-ranked bullets per experience.
+The number of bullets per experience has been sized by our system based on recency and JD relevance.
+You MUST:
+- REWRITE every bullet you receive for clarity, CAR framing, and JD keyword alignment
+- For bullets that have a matching USER-VERIFIED FACT (matched by bullet text): inject the metric exactly as stated
+- For bullets WITHOUT a matching fact: rewrite honestly using ONLY existing resume content + JD keywords that truthfully reflect the original bullet — do NOT fabricate metrics
+- NEVER drop a bullet that appears in the input experience array
+- NEVER add extra bullet points not present in the input
+- Output MUST contain exactly the same number of experience entries as the input, and each entry MUST contain exactly the same number of bullets (responsibilities) as given
 - **MANDATORY DATE FIELDS:** Every experience entry MUST have valid startDate and endDate fields
 
 **TARGET JOB INFORMATION:**
@@ -390,7 +400,7 @@ Every number or metric listed under USER-VERIFIED FACTS was provided by the cand
 - Frameworks: ${Array.isArray(technical.frameworks) ? (technical.frameworks as string[]).join(', ') : 'None specified'}
 - Primary Keywords: ${Array.isArray(keywords.primary) ? (keywords.primary as string[]).join(', ') : 'None specified'}
 
-**CURRENT CANDIDATE RESUME (may already include merged user facts):**
+**CURRENT CANDIDATE RESUME (bullets already pre-ranked and sized; may already include merged user facts):**
 ${JSON.stringify(candidateContent)}
 
 **OPTIMIZATION INSTRUCTIONS:**
@@ -400,8 +410,8 @@ ${JSON.stringify(candidateContent)}
    - Do NOT add "realistic mid-range" or placeholder metrics
 
 2. **Work experience:**
-   - Latest job: include all bullet points
-   - Older jobs: up to 3 most relevant bullets each
+   - Rewrite every bullet for JD alignment — no bullet should be left unchanged if improvement is possible
+   - Preserve bullet count per experience exactly as provided — do not merge, split, or drop bullets
    - **CRITICAL:** Every experience entry must have valid startDate and endDate
 
 3. **Date format:**

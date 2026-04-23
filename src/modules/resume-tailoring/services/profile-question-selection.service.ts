@@ -1,129 +1,224 @@
 import { Injectable } from '@nestjs/common';
 import { Experience } from '../interfaces/resume-extracted-keywords.interface';
+import { BulletContext } from '../interfaces/bullet-context.interface';
+import { ScoredBullet } from '../interfaces/scored-bullet.interface';
+import {
+  MAX_QUESTIONS_TOTAL,
+  QUESTION_BUDGET_PER_RANK,
+  FLEX_REDISTRIBUTE_CAP,
+  MIN_QUESTION_VALUE,
+  ESTIMATED_SEC_PER_QUESTION,
+  MAX_TOTAL_MINUTES,
+} from '../../../shared/constants/resume-tailoring.constants';
+import { BulletRelevanceScoringService } from './bullet-relevance-scoring.service';
 
 /**
- * Context for a bullet point selected for profile question generation.
- */
-export interface BulletContext {
-  workExperienceIndex: number;
-  bulletPointIndex: number;
-  originalBulletPoint: string;
-  positionTitle?: string;
-}
-
-/**
- * Profile Question Selection Service
+ * ProfileQuestionSelectionService
  *
- * Single responsibility: select which work experiences and bullet points
- * should receive profile questions. Pure business logic, no I/O.
- * Follows SRP and is easily unit-testable.
+ * Decides WHICH bullets receive profile questions using relevance-weighted scoring
+ * (Option B pipeline). Budget is distributed across experiences by rank with
+ * redistribution and a time gate to respect user attention.
+ *
+ * Algorithm:
+ *  1. Rank top-5 experiences by tenure + recency
+ *  2. Score all bullets via BulletRelevanceScoringService using JD keywords
+ *  3. Per experience: filter bullets by MIN_QUESTION_VALUE, take top QUESTION_BUDGET_PER_RANK[i]
+ *  4. Redistribute unused slots to top-2 jobs (cap FLEX_REDISTRIBUTE_CAP each)
+ *  5. Apply time gate: trim lowest-value questions until ≤ MAX_TOTAL_MINUTES
+ *  6. Return flat list sorted by questionValue desc (single unified list shown to user)
  */
 @Injectable()
 export class ProfileQuestionSelectionService {
-  private static readonly QUANTIFIED_PATTERN =
-    /\d+[%xX]?|\$[\d,]+|[\d,]+(k|M)?\s+(users|engineers|teams|clients|requests)/i;
+  private static readonly MAX_RANKED_EXPERIENCES = 5;
 
-  private static readonly MAX_EXPERIENCES = 3;
-  private static readonly MAX_BULLETS_PER_EXPERIENCE = 3;
-  private static readonly MAX_QUESTIONS_TOTAL = 12;
+  constructor(
+    private readonly bulletRelevanceScoringService: BulletRelevanceScoringService,
+  ) {}
 
   /**
-   * Select up to three work experiences most relevant for question generation.
-   * Uses tenure, recency, and bullet count; applies swap rule for substance over recency.
+   * Build ordered flat list of bullet contexts eligible for question generation.
+   *
+   * @param experiences Full experience array from structured resume content
+   * @param jdKeywords  Union of JD primary keywords + mandatory skills + frameworks.
+   *                    When empty (called before job analysis), scoring falls back
+   *                    to visibility-only with neutral relevance.
    */
-  selectExperiencesForQuestions(experiences: Experience[]): Experience[] {
+  selectBulletContextsForQuestions(
+    experiences: Experience[],
+    jdKeywords: string[] = [],
+  ): BulletContext[] {
     if (experiences.length === 0) return [];
 
-    const scored = experiences.map((exp) => {
-      const tenureMonths = this.calcTenureMonths(exp.startDate, exp.endDate);
-      const monthsSinceEnd = this.calcMonthsSinceEnd(exp.endDate);
-      const recencyScore = Math.max(0, 100 - monthsSinceEnd);
-      const relevanceScore =
-        tenureMonths * 0.4 +
-        recencyScore * 0.4 +
-        this.getExperienceBullets(exp).length * 0.2;
-      return { exp, tenureMonths, relevanceScore };
-    });
-
-    scored.sort((a, b) => b.relevanceScore - a.relevanceScore);
-    let selected = scored.slice(
+    // Step 1: rank top-5 by tenure + recency
+    const rankedExperiences = this.rankExperiences(experiences).slice(
       0,
-      ProfileQuestionSelectionService.MAX_EXPERIENCES,
+      ProfileQuestionSelectionService.MAX_RANKED_EXPERIENCES,
     );
 
-    if (
-      scored.length >= 4 &&
-      selected[2].tenureMonths < 6 &&
-      scored[3].tenureMonths > 24
-    ) {
-      selected = [selected[0], selected[1], scored[3]];
+    // Step 2: score all bullets against JD keywords
+    const allScored = this.bulletRelevanceScoringService.scoreBullets(
+      experiences,
+      jdKeywords,
+    );
+
+    // Step 3: apply per-experience budget
+    const perExpSelected: BulletContext[][] = rankedExperiences.map(
+      (exp, rankIdx) => {
+        const originalIndex = experiences.indexOf(exp);
+        const budget =
+          QUESTION_BUDGET_PER_RANK[rankIdx] ??
+          QUESTION_BUDGET_PER_RANK[QUESTION_BUDGET_PER_RANK.length - 1];
+
+        return allScored
+          .filter(
+            (s) =>
+              s.experienceIndex === originalIndex &&
+              s.questionValue >= MIN_QUESTION_VALUE,
+          )
+          .sort((a, b) => b.questionValue - a.questionValue)
+          .slice(0, budget)
+          .map((s) => this.toBulletContext(s, exp.position, originalIndex));
+      },
+    );
+
+    // Step 4: redistribute unused slots to top-2 jobs
+    const totalSelected = perExpSelected.reduce((n, arr) => n + arr.length, 0);
+    if (totalSelected < MAX_QUESTIONS_TOTAL) {
+      this.redistributeUnusedSlots(
+        perExpSelected,
+        allScored,
+        rankedExperiences,
+        experiences,
+        MAX_QUESTIONS_TOTAL - totalSelected,
+      );
     }
 
-    return selected.map((s) => s.exp);
+    const selected: BulletContext[] = [];
+    perExpSelected.forEach((arr) => selected.push(...arr));
+
+    // Step 5: time gate
+    const timeGated = this.applyTimeGate(selected);
+
+    // Step 6: flat list sorted by questionValue desc
+    return timeGated.sort((a, b) => b.questionValue - a.questionValue);
   }
 
   /**
-   * Select bullet point indices that need questions (skip already quantified).
-   * Returns up to MAX_BULLETS_PER_EXPERIENCE indices per experience.
+   * Legacy compatibility: select experiences for question generation.
+   * Kept for callers that still use the two-step API.
    */
-  selectBulletPointsForQuestions(bulletPoints: string[]): number[] {
-    return bulletPoints
-      .map((bp, idx) => ({ bp, idx }))
-      .filter(
-        ({ bp }) =>
-          !ProfileQuestionSelectionService.QUANTIFIED_PATTERN.test(bp),
-      )
-      .slice(0, ProfileQuestionSelectionService.MAX_BULLETS_PER_EXPERIENCE)
-      .map(({ idx }) => idx);
+  selectExperiencesForQuestions(experiences: Experience[]): Experience[] {
+    return this.rankExperiences(experiences).slice(
+      0,
+      ProfileQuestionSelectionService.MAX_RANKED_EXPERIENCES,
+    );
   }
 
   /**
-   * Build bullet contexts for selected experiences and bullets.
-   * Used as input to the profile question generation prompt.
+   * Legacy compatibility: build bullet contexts from pre-selected experiences.
+   * Falls back to neutral relevance (no JD keywords).
    */
   buildBulletContexts(
     experiences: Experience[],
     selectedExperiences: Experience[],
   ): BulletContext[] {
-    const contexts: BulletContext[] = [];
-
-    for (const exp of selectedExperiences) {
-      const originalIndex = experiences.indexOf(exp);
-      const bullets = this.getExperienceBullets(exp);
-      const indices = this.selectBulletPointsForQuestions(bullets);
-
-      for (const bulletIdx of indices) {
-        contexts.push({
-          workExperienceIndex: originalIndex,
-          bulletPointIndex: bulletIdx,
-          originalBulletPoint: bullets[bulletIdx],
-          positionTitle: exp.position,
-        });
-      }
-    }
-
-    return contexts.slice(
-      0,
-      ProfileQuestionSelectionService.MAX_QUESTIONS_TOTAL,
+    return this.selectBulletContextsForQuestions(experiences).filter((ctx) =>
+      selectedExperiences.some(
+        (exp) => experiences.indexOf(exp) === ctx.workExperienceIndex,
+      ),
     );
   }
 
-  /**
-   * Returns the combined, deduplicated bullet points for an experience entry.
-   *
-   * AI extraction models may populate `responsibilities`, `achievements`, or both.
-   * Merging both fields ensures question generation works regardless of which
-   * field the model chose to use.
-   */
   getExperienceBullets(exp: Experience): string[] {
-    const responsibilities = exp.responsibilities ?? [];
-    const achievements = exp.achievements ?? [];
-    const seen = new Set<string>();
-    return [...responsibilities, ...achievements].filter((bp) => {
-      if (seen.has(bp)) return false;
-      seen.add(bp);
-      return true;
-    });
+    return this.bulletRelevanceScoringService.getExperienceBullets(exp);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  private rankExperiences(experiences: Experience[]): Experience[] {
+    return [...experiences]
+      .map((exp) => {
+        const tenureMonths = this.calcTenureMonths(exp.startDate, exp.endDate);
+        const monthsSinceEnd = this.calcMonthsSinceEnd(exp.endDate);
+        const recencyScore = Math.max(0, 100 - monthsSinceEnd);
+        const score =
+          tenureMonths * 0.4 +
+          recencyScore * 0.4 +
+          this.getExperienceBullets(exp).length * 0.2;
+        return { exp, score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .map((e) => e.exp);
+  }
+
+  private redistributeUnusedSlots(
+    perExpSelected: BulletContext[][],
+    allScored: ScoredBullet[],
+    rankedExperiences: Experience[],
+    experiences: Experience[],
+    unusedSlots: number,
+  ): void {
+    for (
+      let rankIdx = 0;
+      rankIdx < Math.min(2, rankedExperiences.length);
+      rankIdx++
+    ) {
+      if (unusedSlots <= 0) break;
+      const exp = rankedExperiences[rankIdx];
+      const originalIndex = experiences.indexOf(exp);
+      const alreadySelected = new Set(
+        perExpSelected[rankIdx].map((ctx) => ctx.bulletPointIndex),
+      );
+      const canAdd = Math.min(
+        unusedSlots,
+        FLEX_REDISTRIBUTE_CAP - perExpSelected[rankIdx].length,
+      );
+      if (canAdd <= 0) continue;
+
+      const extras = allScored
+        .filter(
+          (s) =>
+            s.experienceIndex === originalIndex &&
+            !alreadySelected.has(s.bulletIndex) &&
+            s.questionValue >= MIN_QUESTION_VALUE,
+        )
+        .sort((a, b) => b.questionValue - a.questionValue)
+        .slice(0, canAdd);
+
+      extras.forEach((s) => {
+        perExpSelected[rankIdx].push(
+          this.toBulletContext(s, exp.position, originalIndex),
+        );
+      });
+      unusedSlots -= extras.length;
+    }
+  }
+
+  private applyTimeGate(contexts: BulletContext[]): BulletContext[] {
+    const maxSeconds = MAX_TOTAL_MINUTES * 60;
+    if (contexts.length * ESTIMATED_SEC_PER_QUESTION <= maxSeconds) {
+      return contexts;
+    }
+    const maxCount = Math.floor(maxSeconds / ESTIMATED_SEC_PER_QUESTION);
+    return [...contexts]
+      .sort((a, b) => b.questionValue - a.questionValue)
+      .slice(0, Math.min(maxCount, MAX_QUESTIONS_TOTAL));
+  }
+
+  private toBulletContext(
+    scored: ScoredBullet,
+    positionTitle: string | undefined,
+    originalExpIndex: number,
+  ): BulletContext {
+    return {
+      workExperienceIndex: originalExpIndex,
+      bulletPointIndex: scored.bulletIndex,
+      originalBulletPoint: scored.bulletText,
+      positionTitle,
+      questionValue: scored.questionValue,
+    };
   }
 
   calcTenureMonths(startDate: string, endDate: string): number {

@@ -37,6 +37,7 @@ import {
 } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { RateLimitFeature } from '../rate-limit/rate-limit.guard';
+import { UsageTrackingInterceptor } from '../rate-limit/usage-tracking.interceptor';
 import { FeatureType } from '../../database/entities/usage-tracking.entity';
 import { PremiumUserGuard } from '../auth/guards/premium-user.guard';
 import { UserPlan } from '../../database/entities/user.entity';
@@ -146,14 +147,12 @@ export class ResumeTailoringController {
       );
     }
 
-    const pdfBuffer = await this.resumeService.downloadResumeGeneration(
-      generationId,
-      userId,
-    );
+    const { buffer: pdfBuffer, filename } =
+      await this.resumeService.downloadResumeGeneration(generationId, userId);
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=tailored-resume.pdf`,
+      'Content-Disposition': `attachment; filename="${filename}"`,
       'Content-Length': pdfBuffer.length.toString(),
     });
     res.end(pdfBuffer);
@@ -181,7 +180,11 @@ export class ResumeTailoringController {
   @Post('generate')
   @TransformUserContext()
   @RateLimitFeature(FeatureType.RESUME_GENERATION)
-  @UseInterceptors(FileInterceptor('resumeFile'), ValidationLoggingInterceptor)
+  @UseInterceptors(
+    FileInterceptor('resumeFile'),
+    ValidationLoggingInterceptor,
+    UsageTrackingInterceptor,
+  )
   async generateTailoredResume(
     @Body() generateResumeDto: GenerateTailoredResumeDto,
     @UploadedFile(FileValidationPipe)
@@ -271,6 +274,7 @@ export class ResumeTailoringController {
   @HttpCode(HttpStatus.OK)
   @TransformUserContext()
   @RateLimitFeature(FeatureType.COVER_LETTER)
+  @UseInterceptors(UsageTrackingInterceptor)
   async generateCoverLetter(
     @Body() dto: GenerateCoverLetterDto,
     @Req() req: RequestWithUserContext,
@@ -315,6 +319,7 @@ export class ResumeTailoringController {
   @TransformUserContext()
   @UseGuards(PremiumUserGuard)
   @RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)
+  @UseInterceptors(UsageTrackingInterceptor)
   async batchGenerateTailoredResumes(
     @Body() dto: BatchGenerateDto,
     @Req() request: RequestWithUserContext,

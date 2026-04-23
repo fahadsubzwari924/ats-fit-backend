@@ -8,12 +8,13 @@ import {
 import { PromptService } from '../../../shared/services/prompt.service';
 import { OpenAIService } from '../../../shared/modules/external/services/open_ai.service';
 import { Experience } from '../interfaces/resume-extracted-keywords.interface';
+import { BulletContext } from '../interfaces/bullet-context.interface';
 import {
-  ProfileQuestionSelectionService,
-  BulletContext,
-} from './profile-question-selection.service';
-
-const PROFILE_QUESTION_CAP = 12;
+  AIQuestionFromLLM,
+  ResolvedProfileQuestion,
+} from '../interfaces/profile-question.interface';
+import { ProfileQuestionSelectionService } from './profile-question-selection.service';
+import { MAX_QUESTIONS_TOTAL } from '../../../shared/constants/resume-tailoring.constants';
 
 /**
  * Profile Question Generation Service
@@ -58,16 +59,11 @@ export class ProfileQuestionGenerationService {
     const experiences = structuredContent.experience ?? [];
     if (experiences.length === 0) return 0;
 
-    const selectedExperiences =
-      this.profileQuestionSelectionService.selectExperiencesForQuestions(
-        experiences,
-      );
-    if (selectedExperiences.length === 0) return 0;
-
+    // Relevance-weighted selection — returns flat list sorted by questionValue desc.
+    // JD keywords are unavailable at extraction time, so scoring uses visibility-only.
     const bulletContexts =
-      this.profileQuestionSelectionService.buildBulletContexts(
+      this.profileQuestionSelectionService.selectBulletContextsForQuestions(
         experiences,
-        selectedExperiences,
       );
     if (bulletContexts.length === 0) return 0;
 
@@ -78,7 +74,7 @@ export class ProfileQuestionGenerationService {
       aiQuestions,
       bulletContexts,
     );
-    const toSave = merged.slice(0, PROFILE_QUESTION_CAP);
+    const toSave = merged.slice(0, MAX_QUESTIONS_TOTAL);
     await this.persistProfileQuestions(
       userId,
       extractedResumeContentId,
@@ -192,19 +188,4 @@ export class ProfileQuestionGenerationService {
       await this.tailoringQuestionRepository.save(entities);
     }
   }
-}
-
-/** Only the creative output from the LLM — indices are intentionally excluded. */
-interface AIQuestionFromLLM {
-  questionText: string;
-  questionCategory: string;
-}
-
-/** Final question with authoritative indices from BulletContext + LLM-generated text. */
-interface ResolvedProfileQuestion {
-  workExperienceIndex: number;
-  bulletPointIndex: number;
-  originalBulletPoint: string;
-  questionText: string;
-  questionCategory: string;
 }

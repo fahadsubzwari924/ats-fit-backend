@@ -19,6 +19,11 @@ import {
   TailoringModeResult,
   VerifiedFact,
 } from '../interfaces/user-context.interface';
+import { BulletRelevanceScoringService } from './bullet-relevance-scoring.service';
+import {
+  BULLET_BUDGET_PER_RANK,
+  MAX_TOKENS_OPTIMIZATION,
+} from '../../../shared/constants/resume-tailoring.constants';
 
 // changesDiff has been removed from the AI response — it is computed
 // programmatically in a background Bull job (ChangesDiffProcessor).
@@ -52,6 +57,7 @@ export class ResumeOptimizerService {
     private readonly openAIService: OpenAIService,
     private readonly promptService: PromptService,
     private readonly cacheService: CacheService,
+    private readonly bulletRelevanceScoringService: BulletRelevanceScoringService,
   ) {}
 
   /**
@@ -122,6 +128,28 @@ export class ResumeOptimizerService {
         `Starting AI resume optimization for ${jobPosition} at ${companyName}`,
       );
 
+      // Pre-rank bullets by JD relevance before sending to LLM.
+      // This ensures every job is included with its most relevant bullets sized by rank.
+      const jdKeywords = [
+        ...(jobAnalysis.keywords?.primary ?? []),
+        ...(jobAnalysis.technical?.mandatorySkills ?? []),
+        ...(jobAnalysis.technical?.frameworks ?? []),
+      ];
+      const rankedBullets =
+        this.bulletRelevanceScoringService.getTopBulletsPerExperience(
+          candidateContent.experience,
+          jdKeywords,
+          BULLET_BUDGET_PER_RANK,
+        );
+      const rankedCandidateContent: TailoredContent = {
+        ...candidateContent,
+        experience: candidateContent.experience.map((exp, idx) => ({
+          ...exp,
+          responsibilities: rankedBullets[idx]?.bullets ?? exp.responsibilities,
+          achievements: [],
+        })),
+      };
+
       // Try Claude first, fallback to OpenAI on overload
       let result: Omit<ResumeOptimizationResult, 'processingMetadata'>;
       let aiModel: string;
@@ -129,7 +157,7 @@ export class ResumeOptimizerService {
       try {
         result = await this.optimizeWithClaude(
           jobAnalysis,
-          candidateContent,
+          rankedCandidateContent,
           companyName,
           jobPosition,
           usePrecisionPrompt,
@@ -154,7 +182,7 @@ export class ResumeOptimizerService {
           );
           result = await this.optimizeWithOpenAI(
             jobAnalysis,
-            candidateContent,
+            rankedCandidateContent,
             companyName,
             jobPosition,
             usePrecisionPrompt,
@@ -172,6 +200,12 @@ export class ResumeOptimizerService {
 
       result.optimizedContent.summary = this.sanitizeSummary(
         result.optimizedContent.summary,
+      );
+
+      // Post-LLM validation: ensure no experience or bullet was silently dropped
+      this.validateNoExperienceDropped(
+        rankedCandidateContent,
+        result.optimizedContent,
       );
 
       const processingTime = Date.now() - startTime;
@@ -371,6 +405,52 @@ export class ResumeOptimizerService {
     return sentences.slice(0, 3).join(' ').trim();
   }
 
+  /**
+   * Verify the LLM output contains all experience entries and no bullet count regression.
+   * Throws InternalServerErrorException with a diff log if validation fails.
+   */
+  private validateNoExperienceDropped(
+    input: TailoredContent,
+    output: TailoredContent,
+  ): void {
+    const inputCount = input.experience.length;
+    const outputCount = output.experience?.length ?? 0;
+
+    if (outputCount < inputCount) {
+      const missing = inputCount - outputCount;
+      this.logger.error(
+        `Post-LLM validation FAILED: ${missing} experience(s) dropped. ` +
+          `Input had ${inputCount} jobs, output has ${outputCount}.`,
+        {
+          inputCompanies: input.experience.map((e) => e.company),
+          outputCompanies: output.experience?.map((e) => e.company) ?? [],
+        },
+      );
+      throw new InternalServerErrorException(
+        'Resume optimization produced incomplete output — some work experiences were dropped. Please try again.',
+        ERROR_CODES.AI_RESPONSE_PARSING_FAILED,
+      );
+    }
+
+    // Warn (not throw) when individual experience has fewer bullets than provided
+    input.experience.forEach((inputExp, idx) => {
+      const outputExp = output.experience?.[idx];
+      if (!outputExp) return;
+      const inputBullets =
+        (inputExp.responsibilities?.length ?? 0) +
+        (inputExp.achievements?.length ?? 0);
+      const outputBullets =
+        (outputExp.responsibilities?.length ?? 0) +
+        (outputExp.achievements?.length ?? 0);
+      if (outputBullets < inputBullets) {
+        this.logger.warn(
+          `Bullet count regression for "${inputExp.company}" (experience #${idx}): ` +
+            `input=${inputBullets}, output=${outputBullets}`,
+        );
+      }
+    });
+  }
+
   private shouldUsePrecisionOptimizationPrompt(
     tailoringMode?: TailoringModeResult,
     verifiedFacts?: VerifiedFact[],
@@ -438,7 +518,7 @@ export class ResumeOptimizerService {
           content: optimizationPrompt,
         },
       ],
-      max_tokens: 3500,
+      max_tokens: MAX_TOKENS_OPTIMIZATION,
       temperature: 0.2,
     });
 
@@ -470,7 +550,7 @@ export class ResumeOptimizerService {
       messages: [{ role: 'user', content: optimizationPrompt }],
       response_format: { type: 'json_object' },
       temperature: 0.2,
-      max_tokens: 3500,
+      max_tokens: MAX_TOKENS_OPTIMIZATION,
     });
 
     // Parse OpenAI response (similar structure to Claude)

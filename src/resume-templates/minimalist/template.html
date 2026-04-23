@@ -9,30 +9,30 @@
         body {
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0 30px;
+            padding: 0 8px;
             background: #fff;
             color: #000;
-            font-size: 14px;
-            line-height: 1.6;
+            font-size: 12px;
+            line-height: 1.4;
         }
 
         h1,
         h2,
         h3 {
-            margin: 0 0 10px;
+            margin: 0 0 6px;
         }
 
         h1 {
-            font-size: 24px;
+            font-size: 22px;
         }
 
         h2 {
-            font-size: 18px;
+            font-size: 14px;
             color: #007bff;
             text-transform: uppercase;
-            margin-top: 16px;
-            border-bottom: 2px solid #eee;
-            padding-bottom: 5px;
+            margin-top: 10px;
+            border-bottom: 1.5px solid #eee;
+            padding-bottom: 3px;
         }
 
         .header {
@@ -40,61 +40,69 @@
         }
 
         .contact {
-            font-size: 14px;
-            margin-bottom: 20px;
+            font-size: 12px;
+            margin-bottom: 10px;
         }
 
         .section {
-            margin-bottom: 12px;
+            margin-bottom: 6px;
+        }
+
+        .job-entry {
+            margin-bottom: 10px;
         }
 
         .job-title,
         .project-title {
             font-weight: bold;
-            font-size: 15px;
+            font-size: 13px;
         }
 
         .job-meta,
         .project-meta {
             font-style: italic;
-            font-size: 13px;
+            font-size: 11px;
             color: #555;
         }
 
         ul {
-            margin-top: 4px;
-            margin-bottom: 8px;
-            padding-left: 20px;
+            margin-top: 2px;
+            margin-bottom: 4px;
+            padding-left: 18px;
+        }
+
+        li {
+            margin-bottom: 2px;
         }
 
         .skills span {
             display: inline-block;
             background: #f2f2f2;
-            margin: 2px;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 13px;
+            margin: 1px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
         }
 
         @media (max-width: 600px) {
             body {
-                padding: 15px;
-                font-size: 13px;
+                padding: 10px;
+                font-size: 11px;
             }
 
             h1 {
-                font-size: 20px;
+                font-size: 18px;
             }
 
             h2 {
-                font-size: 16px;
+                font-size: 13px;
             }
         }
 
         @media print {
             body {
-                orphans: 3;
-                widows: 3;
+                orphans: 2;
+                widows: 2;
             }
 
             h2 {
@@ -107,12 +115,7 @@
                 break-after: avoid;
             }
 
-            .section {
-                page-break-inside: avoid;
-                break-inside: avoid;
-            }
-
-            ul, li {
+            .job-entry {
                 page-break-inside: avoid;
                 break-inside: avoid;
             }
@@ -139,21 +142,23 @@
     <div class="section">
         <h2>Work Experience</h2>
         {{#each experience}}
-        <div class="job-title">{{company}} - {{position}}</div>
-        <div class="job-meta">{{startDate}} - {{#if endDate}}{{endDate}}{{else}}current{{/if}} | {{location}}</div>
-        <ul>
-            {{#each responsibilities}}
-            <li>{{this}}</li>
-            {{/each}}
-        </ul>
-        {{#if achievements}}
-        <ul>
-            {{#each achievements}}
-            <li>{{this}}</li>
-            {{/each}}
-        </ul>
-        {{/if}}
-        {{#if technologies}}<div class="technologies">Technologies: {{technologies}}</div>{{/if}}
+        <div class="job-entry">
+            <div class="job-title">{{company}} - {{position}}</div>
+            <div class="job-meta">{{startDate}} - {{#if endDate}}{{endDate}}{{else}}current{{/if}} | {{location}}</div>
+            <ul>
+                {{#each responsibilities}}
+                <li>{{this}}</li>
+                {{/each}}
+            </ul>
+            {{#if achievements}}
+            <ul>
+                {{#each achievements}}
+                <li>{{this}}</li>
+                {{/each}}
+            </ul>
+            {{/if}}
+            {{#if technologies}}<div class="technologies">Technologies: {{technologies}}</div>{{/if}}
+        </div>
         {{/each}}
     </div>
 
@@ -161,8 +166,10 @@
     <div class="section">
         <h2>Education</h2>
         {{#each education}}
-        <div class="job-title">{{institution}} - {{degree}}</div>
-        <div class="job-meta">{{startDate}} - {{endDate}} | {{major}}</div>
+        <div class="job-entry">
+            <div class="job-title">{{institution}} - {{degree}}</div>
+            <div class="job-meta">{{startDate}} - {{endDate}} | {{major}}</div>
+        </div>
         {{/each}}
     </div>
     {{/if}}
@@ -217,8 +224,10 @@
     <div class="section">
         <h2>Certifications</h2>
         {{#each certifications}}
-        <div class="job-title">{{name}}</div>
-        <div class="job-meta">{{issuer}} - {{date}}</div>
+        <div class="job-entry">
+            <div class="job-title">{{name}}</div>
+            <div class="job-meta">{{issuer}} - {{date}}</div>
+        </div>
         {{/each}}
     </div>
     {{/if}}
