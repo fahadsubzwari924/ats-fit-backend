@@ -116,7 +116,10 @@ export class BulletRelevanceScoringService {
     bullet: string,
     normalizedKeywords: Set<string>,
   ): number {
-    if (normalizedKeywords.size === 0) return 0;
+    // Extraction-time profile questions have no JD keywords. Relevance must not be
+    // zero or questionValue becomes 0 for every bullet and MIN_QUESTION_VALUE filters
+    // them all out (no rows in tailoring_questions). Use neutral full relevance.
+    if (normalizedKeywords.size === 0) return 1;
     const bulletTokens = this.normalizeTokens([bullet]);
     let matches = 0;
     for (const token of bulletTokens) {
