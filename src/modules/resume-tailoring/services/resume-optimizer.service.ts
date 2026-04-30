@@ -109,6 +109,7 @@ export class ResumeOptimizerService {
         tailoringMode: tailoringMode ?? 'standard',
         precisionPrompt: usePrecisionPrompt,
         verifiedFactsDigest,
+        promptVersion: PromptService.RESUME_OPTIMIZATION_PROMPT_VERSION,
       };
 
       // Check cache first

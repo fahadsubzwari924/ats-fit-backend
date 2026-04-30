@@ -2,6 +2,14 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class PromptService {
+  static readonly RESUME_EXTRACTION_PROMPT_VERSION = 'v1.0';
+  static readonly JD_ANALYSIS_PROMPT_VERSION = 'v1.0';
+  static readonly RESUME_OPTIMIZATION_PROMPT_VERSION = 'v1.0';
+  static readonly PRECISION_OPTIMIZATION_PROMPT_VERSION = 'v1.0';
+  static readonly PROFILE_QUESTION_GEN_PROMPT_VERSION = 'v1.0';
+  static readonly PROFILE_ENRICHMENT_PROMPT_VERSION = 'v1.0';
+  static readonly COVER_LETTER_PROMPT_VERSION = 'v1.0';
+
   constructor() {}
 
   /**

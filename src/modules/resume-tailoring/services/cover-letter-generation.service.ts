@@ -128,6 +128,7 @@ export class CoverLetterGenerationService {
       )?.name,
       primaryKeywords: (input.jobAnalysis?.keywords as Record<string, unknown>)
         ?.primary,
+      promptVersion: PromptService.COVER_LETTER_PROMPT_VERSION,
     });
 
     const cached = this.cacheService.get<CoverLetterResult>(
