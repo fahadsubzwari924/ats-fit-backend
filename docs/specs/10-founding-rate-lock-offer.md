@@ -102,6 +102,10 @@ Founding users use the **same Pro entitlements** as standard Pro users (see [08-
 - **Atomicity:** Slot assignment (1-100) must be transactional — no two rows may claim the same `founding_slot_number`. Enforce via unique DB constraint + retry loop on collision.
 - **Observability:** Emit metrics for `founding_slots_assigned`, `founding_codes_sent`, `founding_codes_redeemed`, `founding_codes_expired_unredeemed`.
 
+## Beta cohort and founding_rate_locked
+
+Beta testers (see [12-beta-access.md](./12-beta-access.md)) have `founding_rate_locked = true` set on code redemption. They do **not** consume a `founding_slot_number` from the 1–100 cap. The checkout pricing override (Pro Monthly → $7.20/mo) applies to beta-cohort users identically to Founding slot holders. `founding_slot_number` remains `null` for beta cohort accounts.
+
 ## Out of scope
 
 - Refunds or retroactive Founding grants to post-launch signups.

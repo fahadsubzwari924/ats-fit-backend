@@ -18,6 +18,8 @@ import {
   PaymentHistory,
   TailoringQuestion,
   EnrichedResumeProfile,
+  PasswordResetToken,
+  BetaInvite,
 } from './entities';
 
 @Module({
@@ -48,6 +50,8 @@ import {
           PaymentHistory,
           TailoringQuestion,
           EnrichedResumeProfile,
+          PasswordResetToken,
+          BetaInvite,
         ],
         synchronize: false, // Disabled to use migrations instead
         logging: process.env.NODE_ENV !== 'production',

@@ -11,9 +11,13 @@ import { BaseMapperService } from '../../shared/services/base-mapper.service';
 import { JwtAuthGuard } from './jwt.guard';
 import { PremiumUserGuard } from './guards/premium-user.guard';
 import { User } from '../../database/entities';
+import { BetaInvite } from '../../database/entities/beta-invite.entity';
+import { PasswordResetToken } from '../../database/entities/password-reset-token.entity';
+import { PasswordResetService } from './services/password-reset.service';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { UserModule } from '../user/user.module';
 import { GoogleService } from '../../shared/modules/external/services/google.service';
+import { BrevoService } from '../../shared/modules/external/services/brevo.service';
 
 @Module({
   imports: [
@@ -28,7 +32,7 @@ import { GoogleService } from '../../shared/modules/external/services/google.ser
       }),
       inject: [ConfigService],
     }),
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, BetaInvite, PasswordResetToken]),
     ConfigModule,
     forwardRef(() => RateLimitModule),
     forwardRef(() => UserModule),
@@ -40,6 +44,8 @@ import { GoogleService } from '../../shared/modules/external/services/google.ser
     JwtAuthGuard,
     PremiumUserGuard,
     GoogleService,
+    BrevoService,
+    PasswordResetService,
   ],
   controllers: [AuthController],
   exports: [

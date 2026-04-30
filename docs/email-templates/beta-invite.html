@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Tailry Beta Invite</title>
+  <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f1f5f9;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <!-- Card -->
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.07);overflow:hidden;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 50%,#3b82f6 100%);padding:36px 40px 32px;text-align:center;">
+              <img src="https://tairly.com/logos/transparent_white_logo.svg" alt="Tailry" width="120" style="display:block;margin:0 auto 20px;height:auto;" />
+              <span style="display:inline-block;background:rgba(255,255,255,0.18);color:#ffffff;font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:5px 14px;border-radius:20px;">Beta Access</span>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 40px 32px;">
+              <h1 style="margin:0 0 12px;font-size:26px;font-weight:700;color:#0f172a;line-height:1.3;">You're in. 🎉</h1>
+              <p style="margin:0 0 24px;font-size:16px;color:#475569;line-height:1.7;">
+                Hi {{ params.name }},<br /><br />
+                You've been selected for early access to <strong style="color:#0f172a;">Tailry</strong> — the AI resume tailoring tool that helps you land more interviews. Your 30-day Pro access is waiting.
+              </p>
+
+              <!-- Code block -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td style="background:#f8fafc;border:2px dashed #bfdbfe;border-radius:12px;padding:24px;text-align:center;">
+                    <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#64748b;letter-spacing:1px;text-transform:uppercase;">Your Beta Code</p>
+                    <p style="margin:0 0 12px;font-size:32px;font-weight:800;color:#1d4ed8;letter-spacing:4px;font-family:'Courier New',Courier,monospace;">{{ params.code }}</p>
+                    <p style="margin:0;font-size:13px;color:#94a3b8;">Expires <strong style="color:#475569;">{{ params.expires_at }}</strong></p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Steps -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:28px;">
+                <tr>
+                  <td style="padding:0 0 16px;">
+                    <p style="margin:0 0 16px;font-size:14px;font-weight:600;color:#0f172a;letter-spacing:0.3px;text-transform:uppercase;">How to redeem</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td width="32" valign="top" style="padding-bottom:14px;">
+                          <span style="display:inline-block;width:26px;height:26px;background:#eff6ff;border-radius:50%;text-align:center;line-height:26px;font-size:13px;font-weight:700;color:#2563eb;">1</span>
+                        </td>
+                        <td style="padding-left:12px;padding-bottom:14px;font-size:15px;color:#475569;line-height:1.5;">
+                          Sign up or log in at <a href="{{ params.redeem_url }}" style="color:#2563eb;text-decoration:none;font-weight:500;">tairly.com</a> with this email address.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="32" valign="top" style="padding-bottom:14px;">
+                          <span style="display:inline-block;width:26px;height:26px;background:#eff6ff;border-radius:50%;text-align:center;line-height:26px;font-size:13px;font-weight:700;color:#2563eb;">2</span>
+                        </td>
+                        <td style="padding-left:12px;padding-bottom:14px;font-size:15px;color:#475569;line-height:1.5;">
+                          Enter your beta code when prompted.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="32" valign="top">
+                          <span style="display:inline-block;width:26px;height:26px;background:#eff6ff;border-radius:50%;text-align:center;line-height:26px;font-size:13px;font-weight:700;color:#2563eb;">3</span>
+                        </td>
+                        <td style="padding-left:12px;font-size:15px;color:#475569;line-height:1.5;">
+                          Enjoy 30 days of Pro access — on us.
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:32px auto 0;text-align:center;">
+                <tr>
+                  <td style="border-radius:10px;background:linear-gradient(135deg,#1d4ed8,#2563eb);">
+                    <a href="{{ params.redeem_url }}" style="display:inline-block;padding:16px 40px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;letter-spacing:0.3px;">Redeem My Beta Access →</a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Note -->
+              <p style="margin:28px 0 0;font-size:13px;color:#94a3b8;text-align:center;line-height:1.6;">
+                ⚠️ This code is tied to this email address and expires on <strong>{{ params.expires_at }}</strong>.<br />Make sure to sign up with this exact email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f8fafc;padding:24px 40px;border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;">You're receiving this because you joined the Tailry waitlist.</p>
+              <p style="margin:0;font-size:13px;color:#cbd5e1;">© 2026 Tailry. All rights reserved.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

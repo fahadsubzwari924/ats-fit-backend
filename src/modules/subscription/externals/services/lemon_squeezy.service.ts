@@ -36,6 +36,7 @@ export class LemonSqueezyService {
         email: request.email,
         name: request.name, // Optional: add real name if available
         custom: request.customData, // For webhook linking
+        ...(request.discountCode ? { discountCode: request.discountCode } : {}),
       },
       productOptions: {
         redirectUrl: this.buildSuccessRedirectUrl(),

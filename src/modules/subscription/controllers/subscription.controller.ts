@@ -197,7 +197,12 @@ export class SubscriptionController {
     createSubscriptionDto: CreateSubscriptionDto,
     userId: string,
   ) {
-    const checkoutRequest = {
+    const checkoutRequest: {
+      variantId: string;
+      email?: string;
+      customData: Record<string, any>;
+      discountCode?: string;
+    } = {
       variantId: subscriptionPlan.payment_gateway_variant_id,
       email: createSubscriptionDto.metadata?.email,
       customData: {
@@ -206,6 +211,34 @@ export class SubscriptionController {
         email: createSubscriptionDto.metadata?.email,
       },
     };
+
+    // Founding rate lock: apply discount code for Pro Monthly plans when user has founding_rate_locked = true
+    const isMonthlyPlan =
+      subscriptionPlan.billing_cycle?.toLowerCase() === 'monthly';
+
+    if (isMonthlyPlan) {
+      try {
+        const user = await this.userService.getUserById(userId);
+        if (user?.founding_rate_locked === true) {
+          const couponCode = process.env.LS_FOUNDING_COUPON_CODE;
+          if (couponCode) {
+            checkoutRequest.discountCode = couponCode;
+            this.logger.log(
+              `[BetaAccess] Applying founding rate discount for user ${userId}`,
+            );
+          } else {
+            this.logger.warn(
+              `[BetaAccess] WARN: LS_FOUNDING_COUPON_CODE not configured — founding rate not applied`,
+            );
+          }
+        }
+      } catch (err) {
+        // Non-fatal: log and continue without discount rather than blocking checkout
+        this.logger.warn(
+          `[BetaAccess] Could not load user for founding rate check: ${err?.message}`,
+        );
+      }
+    }
 
     this.logger.log(
       `Creating checkout session for user ${userId} with plan ${subscriptionPlan.id}`,

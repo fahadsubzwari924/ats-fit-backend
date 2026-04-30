@@ -22,6 +22,7 @@ last_reviewed: 2026-04-06
 | **REQ-007** | P1 | User can list plans, start checkout, and—via **intended** webhook flow—activate subscription; payment history auditable. | [07-subscriptions-billing.md](./07-subscriptions-billing.md) | `subscription/` |
 | **REQ-008** | P1 | System enforces per-feature usage / rate limits by plan; user can query usage for UI. | [08-rate-limits-and-usage.md](./08-rate-limits-and-usage.md) | `rate-limit/`, `FeatureType` |
 | **REQ-009** | P0 | API errors are consistent; health checks exist; sensitive config is not embedded in specs. | [09-api-conventions.md](./09-api-conventions.md), [01-architecture.md](./01-architecture.md) | `health/`, exception layer |
+| **REQ-013** | P0 | Admin can issue beta invites to selected emails; invited users redeem codes post-signup for 30-day Pro access; access auto-expires with downgrade + founder-rate offer email sequence. | [12-beta-access.md](./12-beta-access.md) | `modules/beta-access/` |
 
 ## User stories (cross-cutting)
 
@@ -31,6 +32,7 @@ Stories are intentionally **epic-level**; acceptance checks are in each domain s
 - **US-2:** As a job seeker, I want to **generate a tailored PDF** for a specific posting so I can apply faster with a relevant resume.
 - **US-3:** As a job seeker, I want to **track applications** in one place so I do not lose follow-ups.
 - **US-4:** As a job seeker, I want to **upgrade via subscription** so I get higher limits and premium features.
+- **US-5:** As an invited beta tester, I want to redeem my beta code and get Pro access so I can evaluate the product before it publicly launches.
 
 ## Related documents
 

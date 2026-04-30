@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Beta Access is Expiring</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f1f5f9;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.07);overflow:hidden;">
+
+          <!-- Header (amber urgency) -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#b45309 0%,#d97706 50%,#f59e0b 100%);padding:36px 40px 32px;text-align:center;">
+              <img src="https://tairly.com/logos/transparent_white_logo.svg" alt="Tailry" width="120" style="display:block;margin:0 auto 20px;height:auto;" />
+              <span style="display:inline-block;background:rgba(255,255,255,0.2);color:#ffffff;font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:5px 14px;border-radius:20px;">⏰ Access Expiring Soon</span>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 40px 32px;">
+              <h1 style="margin:0 0 12px;font-size:26px;font-weight:700;color:#0f172a;line-height:1.3;">{{ params.days_remaining }} days left on your beta access</h1>
+              <p style="margin:0 0 28px;font-size:16px;color:#475569;line-height:1.7;">
+                Hi {{ params.name }},<br /><br />
+                Your 30-day Pro beta access expires in <strong style="color:#b45309;">{{ params.days_remaining }} days</strong>. Don't let your momentum stop — lock in your founding rate before it's gone.
+              </p>
+
+              <!-- Offer highlight -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1px solid #fde68a;border-radius:12px;padding:24px;text-align:center;">
+                    <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:1px;">Your Founding Rate</p>
+                    <p style="margin:0 0 4px;font-size:42px;font-weight:900;color:#b45309;line-height:1;">$7.20<span style="font-size:20px;font-weight:500;color:#92400e;">/mo</span></p>
+                    <p style="margin:0;font-size:14px;color:#92400e;text-decoration:line-through;">Normally $12/mo — 40% off, forever</p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Why lock in -->
+              <p style="margin:28px 0 16px;font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;">Why lock in now?</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td style="padding-bottom:12px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td width="24" valign="top"><span style="font-size:16px;">🔒</span></td>
+                        <td style="padding-left:10px;font-size:15px;color:#475569;line-height:1.6;"><strong style="color:#0f172a;">$7.20/mo forever</strong> — even when we raise prices. Beta testers keep their founding rate for life.</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-bottom:12px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td width="24" valign="top"><span style="font-size:16px;">⚡</span></td>
+                        <td style="padding-left:10px;font-size:15px;color:#475569;line-height:1.6;"><strong style="color:#0f172a;">No re-entry</strong> — once your beta ends, the $7.20 offer disappears.</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td width="24" valign="top"><span style="font-size:16px;">📄</span></td>
+                        <td style="padding-left:10px;font-size:15px;color:#475569;line-height:1.6;"><strong style="color:#0f172a;">Cancel anytime</strong> — resubscribe months later at the same locked rate.</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:32px auto 0;text-align:center;">
+                <tr>
+                  <td style="border-radius:10px;background:linear-gradient(135deg,#b45309,#d97706);">
+                    <a href="{{ params.checkout_url }}" style="display:inline-block;padding:16px 40px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">Lock $7.20/mo — Upgrade Now →</a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:20px 0 0;font-size:13px;color:#94a3b8;text-align:center;">
+                Access expires on <strong>{{ params.beta_access_until }}</strong>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f8fafc;padding:24px 40px;border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="margin:0;font-size:13px;color:#cbd5e1;">© 2026 Tailry. All rights reserved.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -37,12 +37,31 @@ export const validationSchema = Joi.object({
   LEMON_SQUEEZY_API_KEY: Joi.string().optional().allow(''),
   LEMON_SQUEEZY_STORE_ID: Joi.string().optional().allow(''),
   LEMON_SQUEEZY_WEBHOOK_SECRET: Joi.string().optional().allow(''),
+  // Optional: discount/coupon code applied to Pro Monthly checkouts for founding-rate-locked users
+  LS_FOUNDING_COUPON_CODE: Joi.string().optional().allow(''),
 
   // App configuration
   APP_URL: Joi.string().optional().default('http://localhost:3000'),
   APP_ENV: Joi.string()
     .valid('development', 'production')
     .default('development'),
+
+  // Brevo transactional email
+  BREVO_API_KEY: Joi.string().optional().allow(''),
+  BREVO_FROM_EMAIL: Joi.string().email().optional().default('hello@tairly.com'),
+  BREVO_FROM_NAME: Joi.string().optional().default('Tailry'),
+  BREVO_TEMPLATE_ID_PASSWORD_RESET: Joi.number().optional(),
+  BREVO_TEMPLATE_ID_PASSWORD_CHANGED: Joi.number().optional(),
+  // Beta access email templates (set after creating templates in Brevo dashboard)
+  BREVO_TEMPLATE_ID_BETA_INVITE: Joi.number().optional(),
+  BREVO_TEMPLATE_ID_BETA_REDEEMED_WELCOME: Joi.number().optional(),
+  BREVO_TEMPLATE_ID_BETA_EXPIRING_SOON: Joi.number().optional(),
+  BREVO_TEMPLATE_ID_BETA_ENDED_OFFER: Joi.number().optional(),
+  BREVO_TEMPLATE_ID_BETA_POST_EXPIRY_FOLLOWUP: Joi.number().optional(),
+  BREVO_TEMPLATE_ID_BETA_DAY3_CHECKIN: Joi.number().optional(),
+
+  // Frontend URL (used to build reset links in emails)
+  FRONTEND_URL: Joi.string().default('http://localhost:4200'),
 
   // Performance configuration
   TEMPLATE_CACHE_TTL: Joi.number().default(600000), // 10 minutes in milliseconds
