@@ -8,6 +8,7 @@ import {
   BadRequestException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
+import { JD_ANALYSIS_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
 import { get, head, isEmpty } from 'lodash';
 import {
   ChatCompletionChoice,
@@ -57,6 +58,7 @@ export class JobAnalysisService {
       jobDescription: jobDescription.trim(),
       jobPosition: jobPosition.trim(),
       companyName: companyName.trim(),
+      promptVersion: JD_ANALYSIS_PROMPT_VERSION,
     };
 
     // Try to get from cache first

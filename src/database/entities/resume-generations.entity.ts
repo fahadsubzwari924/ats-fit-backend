@@ -83,7 +83,7 @@ export class ResumeGeneration {
   changes_diff: any;
 
   @Column({ name: 'prompt_version', nullable: true, length: 16 })
-  prompt_version: string;
+  prompt_version: string | null;
 
   @CreateDateColumn()
   created_at: Date;
