@@ -9,8 +9,6 @@ import { JwtPayload } from '../../shared/interfaces/jwt-payload.interface';
 import { UnauthorizedException } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 
-/** Cache TTL (ms): DB is queried at most once per 30 s per user. */
-const USER_CACHE_TTL_MS = 30_000;
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -29,7 +27,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   /**
    * Called by Passport after the JWT signature is verified.
    * Confirms the user still exists and is active in the database.
-   * A lightweight, cached query is used so this adds negligible overhead.
+   * Uses a direct indexed primary-key lookup so deletion/deactivation takes
+   * effect on the very next request with no cache lag.
    */
   async validate(
     payload: JwtPayload,
@@ -37,7 +36,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const user = await this.userRepository.findOne({
       where: { id: payload.sub, is_active: true },
       select: ['id', 'email', 'is_active'],
-      cache: { id: `jwt_user_${payload.sub}`, milliseconds: USER_CACHE_TTL_MS },
     });
 
     if (!user) {

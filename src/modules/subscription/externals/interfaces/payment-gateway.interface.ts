@@ -15,6 +15,8 @@ export interface CreateCheckoutRequest {
   email?: string;
   redirectUrl?: string;
   customData?: Record<string, any>;
+  /** Optional pre-filled discount/coupon code to apply at checkout (e.g. founding rate lock) */
+  discountCode?: string;
 }
 
 export interface CheckoutResponse {

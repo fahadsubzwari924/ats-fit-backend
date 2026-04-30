@@ -12,6 +12,7 @@ import { ResumeTailoringModule } from '../resume-tailoring/resume-tailoring.modu
 import { AuthModule } from '../auth/auth.module';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { QueueModule } from '../queue/queue.module';
+import { BetaAccessModule } from '../beta-access/beta-access.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { QueueModule } from '../queue/queue.module';
     forwardRef(() => AuthModule),
     forwardRef(() => RateLimitModule),
     QueueModule,
+    BetaAccessModule,
   ],
   controllers: [UserController],
   providers: [UserService, ResumeContentService],

@@ -9,6 +9,7 @@ import {
 import { ResumeGeneration } from './resume-generations.entity';
 import { Resume } from './resume.entity';
 import { UserSubscription } from './user-subscription.entity';
+import { PasswordResetToken } from './password-reset-token.entity';
 
 export enum UserPlan {
   FREEMIUM = 'freemium',
@@ -74,6 +75,15 @@ export class User {
   @Column({ default: false })
   onboarding_completed: boolean;
 
+  @Column({ default: false })
+  is_beta_user: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  beta_access_until: Date | null;
+
+  @Column({ default: false })
+  founding_rate_locked: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 
@@ -88,4 +98,7 @@ export class User {
 
   @OneToMany(() => UserSubscription, (subscription) => subscription.user)
   subscriptions: UserSubscription[];
+
+  @OneToMany(() => PasswordResetToken, (token) => token.user)
+  passwordResetTokens: PasswordResetToken[];
 }

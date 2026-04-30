@@ -4,7 +4,7 @@ status: active
 owner: Fahad Subzwari
 last_reviewed: 2026-04-24
 brand: Tailry
-domain: tailry.com
+domain: tairly.com
 coming_soon_launch: 2026-04-27
 product_launch: 2026-05-26
 ---
@@ -16,7 +16,7 @@ product_launch: 2026-05-26
 ## Executive summary
 
 - **Brand:** Tailry (pivot from ATS Fit — `atsfit.app` is retired)
-- **Domain:** `tailry.com` (registered Namecheap, ~$12/yr)
+- **Domain:** `tairly.com` (registered Namecheap, ~$12/yr)
 - **Coming-soon landing relaunch:** **Mon Apr 27, 2026** (soft launch, warm-network only)
 - **Product launch:** **Tue May 26, 2026, 12:01 AM PST** (Product Hunt)
 - **Beta:** friends/family starts Apr 26; stranger beta (from waitlist) starts May 12
@@ -31,7 +31,7 @@ product_launch: 2026-05-26
 | Date | Day | Milestone |
 |------|-----|-----------|
 | Fri Apr 24 | D-32 | Plan finalized. Brand + domain locked. Weekend sprint starts. |
-| Sat Apr 25 | D-31 | DNS + Brevo + landing redeploy to `tailry.com`. End-to-end email test. |
+| Sat Apr 25 | D-31 | DNS + Brevo + landing redeploy to `tairly.com`. End-to-end email test. |
 | Sun Apr 26 | D-30 | Friends/family beta invites go out. Mon announcement prepped. |
 | **Mon Apr 27** | **D-29** | **COMING-SOON LANDING LIVE (soft launch).** LinkedIn announcement + 20 warm DMs. |
 | Tue May 5 | D-21 | Backend NestJS waitlist module deployed, cutover from Apps Script. |
@@ -51,18 +51,18 @@ product_launch: 2026-05-26
 
 ### Goal
 
-Land the brand change, wire DNS + Brevo for deliverability, make the landing page live on `tailry.com` with basic email capture working, prep Monday's announcement.
+Land the brand change, wire DNS + Brevo for deliverability, make the landing page live on `tairly.com` with basic email capture working, prep Monday's announcement.
 
 ### Fri Apr 24 evening (3 hr)
 
 **Task 0.1 — Update landing page content to new brand (90 min)**
-- Global find/replace in `ats-fit-coming-soon-landing/` repo: `ATS Fit` → `Tailry`, `atsfit.app` → `tailry.com`, `hello@atsfit.app` → `hello@tailry.com`
+- Global find/replace in `ats-fit-coming-soon-landing/` repo: `ATS Fit` → `Tailry`, `atsfit.app` → `tairly.com`, `hello@atsfit.app` → `hello@tairly.com`
 - Update all OG tags, canonical URLs, meta titles, structured data (JSON-LD), favicon reference
 - Update README.md in the repo
 - Commit: `chore: rebrand ATS Fit → Tailry for Apr 27 launch`
 
 **Task 0.2 — Set up Cloudflare Registrar / Namecheap DNS (30 min)**
-- Move `tailry.com` nameservers to Cloudflare (free + fastest DNS globally). Alternative: keep at Namecheap DNS if allergic to Cloudflare.
+- Move `tairly.com` nameservers to Cloudflare (free + fastest DNS globally). Alternative: keep at Namecheap DNS if allergic to Cloudflare.
 - Add records:
   - `A` apex → Cloudflare Pages IP (once deployed)
   - `CNAME www` → apex
@@ -71,7 +71,7 @@ Land the brand change, wire DNS + Brevo for deliverability, make the landing pag
 
 **Task 0.3 — Create Brevo account (30 min)**
 - Sign up at brevo.com, free tier
-- Add sender: `hello@tailry.com` + `Tailry` display name
+- Add sender: `hello@tairly.com` + `Tailry` display name
 - Create single contact list: `Waitlist`
 - Do NOT upload contacts yet — will happen via API from Apps Script
 
@@ -82,21 +82,21 @@ Land the brand change, wire DNS + Brevo for deliverability, make the landing pag
 ### Sat Apr 25 (4 hr)
 
 **Task 0.5 — Email deliverability auth (90 min) — CRITICAL BLOCKER**
-- In Brevo → Senders & IP → Domains → Add `tailry.com`
+- In Brevo → Senders & IP → Domains → Add `tairly.com`
 - Brevo generates SPF + DKIM records → paste into Cloudflare/Namecheap DNS:
   - SPF `TXT @` → `v=spf1 include:spf.brevo.com ~all`
   - DKIM `TXT mail._domainkey` → (Brevo-provided string)
-  - DMARC `TXT _dmarc` → `v=DMARC1; p=none; rua=mailto:hello@tailry.com`
+  - DMARC `TXT _dmarc` → `v=DMARC1; p=none; rua=mailto:hello@tairly.com`
 - Wait for propagation (~10 min to 2 hr)
 - Verify each record in Brevo → all three must show ✓
 - Test at **mail-tester.com**: send test email from Brevo to the score address → must score **9+/10** before proceeding. Below 9 → fix before Mon launch (usually DMARC alignment issue).
 
-**Task 0.6 — Deploy landing page to `tailry.com` (60 min)**
+**Task 0.6 — Deploy landing page to `tairly.com` (60 min)**
 - Cloudflare Pages: connect repo → deploy
-- Add custom domain `tailry.com` + `www.tailry.com`
+- Add custom domain `tairly.com` + `www.tairly.com`
 - Redirect `www` → apex (or vice versa; pick apex to match `canonical`)
 - Force HTTPS (Cloudflare auto-provisions SSL)
-- Hit `https://tailry.com` → verify landing renders correctly
+- Hit `https://tairly.com` → verify landing renders correctly
 - Test waitlist form submit → should still land in existing Google Sheet (Apps Script unchanged yet)
 
 **Task 0.7 — Brevo confirmation email template (60 min)**
@@ -138,14 +138,14 @@ Land the brand change, wire DNS + Brevo for deliverability, make the landing pag
 - Set up feedback collection: shared Notion doc OR a Brevo form. Keep it simple — 3 questions: "What works?", "What frustrated you?", "Would you pay $12/mo for this?"
 
 **Task 0.10 — End-to-end deliverability test (30 min)**
-- Sign up 3 fresh Gmail accounts at `tailry.com`
+- Sign up 3 fresh Gmail accounts at `tairly.com`
 - Confirm: email lands in **Inbox** (not Promotions, not Spam)
 - Confirm: `/thanks` page loads correctly
 - If any email hits Spam → stop. Fix DMARC/DKIM before Mon.
 
 **Task 0.11 — LinkedIn profile refresh (30 min)**
 - Change headline: `Founder, Tailry · AI resume tailoring launching May 26`
-- Update About section: 2-3 sentence version of the Tailry pitch + `tailry.com` link
+- Update About section: 2-3 sentence version of the Tailry pitch + `tairly.com` link
 - Change banner image: simple Canva banner with Tailry logo + tagline "Tailor your resume in 60 seconds"
 - Do **not** announce the brand change yet — save for Mon
 
@@ -245,7 +245,7 @@ Cutover waitlist backend from Apps Script to NestJS. Submit to BetaList + Produc
 **Task 2.4 — BetaList submission (30 min)**
 - Go to betalist.com/submit. Free or paid ($129 for priority) — paid gets you featured in 3–7 days vs 30+ for free. Recommend **paid** given the tight window.
 - Title: `Tailry — Tailor your resume to any job in 60 seconds`
-- Submit with tailry.com URL, 3 screenshots, 60-sec demo GIF
+- Submit with tairly.com URL, 3 screenshots, 60-sec demo GIF
 
 **Task 2.5 — Product Hunt Coming Soon page (30 min)**
 - producthunt.com/products/new
@@ -301,7 +301,7 @@ Referral system shipped. First Reddit posts. Stranger beta recruits. First Brevo
 - Subreddit: **r/jobs** or **r/cscareerquestions** (pick based on your fit; r/jobs is more general, r/cscareerquestions is high-traffic tech-specific)
 - Post format: **value-first, not promo** (see Appendix D.1 for template)
 - Title: "I spent a year rewriting my resume for every job. Here's what I learned about what actually gets past ATS filters."
-- Body: 400–600 words of genuine value (tips on keyword matching, single-column formatting, bullet action-verbs, skill ordering). Mention Tailry **only once** at the end, casually: "I ended up building a tool that does this in 60 seconds — tailry.com if curious. But the principles above work without any tool."
+- Body: 400–600 words of genuine value (tips on keyword matching, single-column formatting, bullet action-verbs, skill ordering). Mention Tailry **only once** at the end, casually: "I ended up building a tool that does this in 60 seconds — tairly.com if curious. But the principles above work without any tool."
 - Post Mon morning 9–10 AM ET (peak Reddit traffic for jobs-related subs)
 - Monitor for 4 hours, reply to every top-level comment
 
@@ -513,7 +513,7 @@ Launch goes live at **12:01 AM PST** (Tue, which is **12:31 PM Pakistan Standard
 ### Hour 0 (12:01 AM PST / afternoon–evening your time)
 
 - PH Coming Soon page auto-flips to LIVE
-- Verify live on producthunt.com/posts/tailry
+- Verify live on producthunt.com/posts/tairly
 - Post your Maker Comment (Appendix E.1) within 5 minutes
 - First tweet/LinkedIn post: "We're live on Product Hunt: [link]"
 
@@ -666,8 +666,8 @@ Track these in a single `growth.md` file, updated daily at 10 PM local time:
 
 ### Must produce in Phase 0 (weekend)
 - Brevo confirmation email template
-- DNS + email auth for tailry.com
-- Landing page re-deployed to tailry.com
+- DNS + email auth for tairly.com
+- Landing page re-deployed to tairly.com
 
 ### Must produce in Phases 1–4
 - NestJS waitlist module (spec 11)
@@ -704,7 +704,7 @@ resume cycles for every future job search.
 
 Cap is real. 100 only. No marketing number.
 
-tailry.com
+tairly.com
 
 If you're job-hunting or know someone who is, this might
 be useful. Either way, I'd love to hear what you think.
@@ -735,14 +735,14 @@ Giving the first 100 waitlist signups $7.20/mo for life
 
 Not asking you to sign up — genuinely want your eyes
 on the landing page. Is the pitch clear? Would love 30
-seconds of your reaction: tailry.com
+seconds of your reaction: tairly.com
 ```
 
 **Version 2 (casual, for close friends):**
 ```
 [name] — shipping the thing I've been building for a
 while. Launching May 26. Would mean a lot if you took
-a look at tailry.com and told me if the pitch lands or
+a look at tairly.com and told me if the pitch lands or
 feels off. No signup pressure.
 ```
 
@@ -754,7 +754,7 @@ resumes + track applications + generate cover letters
 in one place. Launching May 26.
 
 Would love your read on whether this solves a real pain
-you see with candidates. tailry.com
+you see with candidates. tairly.com
 ```
 
 ### A.4 Short post templates (mix and match through the window)
@@ -790,7 +790,7 @@ or $12/mo Pro (30/month + batch + cover letters). First
 
 Upvotes welcome. Brutal feedback more welcome.
 
-tailry.com
+tairly.com
 [PH link]
 ```
 
@@ -805,7 +805,7 @@ tailry.com
 5. **"Why ATS parsers reject 70% of resumes — and how to fix yours"** (pure value, SEO-adjacent, any phase)
 6. **"Tailry launch recap — what worked, what didn't"** (post-launch, Phase 7)
 
-Each post: 400–800 words, 1 specific anecdote, 1 takeaway, link to `tailry.com` at the end only.
+Each post: 400–800 words, 1 specific anecdote, 1 takeaway, link to `tairly.com` at the end only.
 
 ---
 
@@ -852,11 +852,11 @@ Some things in the last two weeks:
 
 Speaking of beta — we just added 4 testimonials to the
 landing page from real people who used Tailry in beta.
-Have a look if you're curious: tailry.com
+Have a look if you're curious: tairly.com
 
 There are still [100-X] Founding Rate slots left. If you
 haven't shared your unique link yet, it's on your thanks
-page: tailry.com/thanks?code=[CODE]
+page: tairly.com/thanks?code=[CODE]
 
 Thanks for being early.
 
@@ -932,7 +932,7 @@ use it on the Pro Monthly checkout to lock $7.20/mo
 for life.
 
 Code: [CODE]
-Redeem at: tailry.com/pricing
+Redeem at: tairly.com/pricing
 
 [Button: Start Pro at $7.20/mo]
 
@@ -963,7 +963,7 @@ launch list and can start at standard Pro pricing ($12/mo)
 or stay on the free tier (3 tailorings/month, no credit
 card).
 
-Start: tailry.com
+Start: tairly.com
 
 [Button: Create your account]
 
@@ -1003,7 +1003,7 @@ lines for every role before anything else.
 4. [...3–4 more concrete, specific tips...]
 
 After about 30 iterations I eventually built a tool to
-do this in 60 seconds (tailry.com if curious). But even
+do this in 60 seconds (tairly.com if curious). But even
 without a tool, following the above consistently doubled
 my callback rate.
 
@@ -1056,7 +1056,7 @@ as of this morning.
 I'll be in this thread all day. Ask me anything — and
 if it helps, an upvote would mean a ton.
 
-tailry.com
+tairly.com
 ```
 
 ### E.2 Hour-by-hour launch day log
@@ -1085,7 +1085,7 @@ tailry.com
 |---------|---------------|
 | Product Hunt comments | <15 min |
 | LinkedIn DMs | <30 min |
-| Email (hello@tailry.com) | <2 hr |
+| Email (hello@tairly.com) | <2 hr |
 | Twitter mentions | <1 hr |
 | Reddit (if surfaces) | <30 min |
 

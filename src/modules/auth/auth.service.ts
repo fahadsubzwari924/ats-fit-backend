@@ -16,18 +16,25 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { SignInResponse } from './types/sign-in-response.types';
 import { TokenPayload } from 'google-auth-library';
+import {
+  BetaInvite,
+  BetaInviteStatus,
+} from '../../database/entities/beta-invite.entity';
+import { normalizeEmail } from '../beta-access/utils/email-normalize.util';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(BetaInvite)
+    private readonly betaInviteRepository: Repository<BetaInvite>,
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly mapper: BaseMapperService,
   ) {}
 
-  async signUp(signUpDto: SignUpDto): Promise<User> {
+  async signUp(signUpDto: SignUpDto): Promise<SignInResponse> {
     const { email, password } = signUpDto;
 
     // Check if email already exists
@@ -50,7 +57,25 @@ export class AuthService {
     });
     await this.userRepository.save(user);
 
-    return user;
+    // Auto-grant beta access if a pending invite exists for this email
+    await this.applyBetaFlagIfInvited(user);
+
+    // Load full user with relationships for the response
+    const fullUser = await this.findActiveUserByEmail(user.email);
+
+    // Generate token and feature usage in parallel
+    const [featureUsage, access_token] = await Promise.all([
+      this.getFeatureUsage(fullUser),
+      this.generateAccessToken(fullUser),
+    ]);
+
+    return {
+      user: {
+        ...this.sanitizeUserForResponse(fullUser),
+        featureUsage,
+      },
+      access_token,
+    };
   }
 
   async signIn(signInDto: SignInDto): Promise<SignInResponse> {
@@ -121,7 +146,6 @@ export class AuthService {
         email,
         active: true,
       })
-      .cache(30000) // Cache user data for 30 seconds
       .getOne();
 
     if (!user) {
@@ -306,7 +330,12 @@ export class AuthService {
     });
 
     // Save user to database
-    return await this.userRepository.save(user);
+    const savedUser = await this.userRepository.save(user);
+
+    // Auto-grant beta access if a pending invite exists for this email
+    await this.applyBetaFlagIfInvited(savedUser);
+
+    return savedUser;
   }
 
   /**
@@ -318,6 +347,28 @@ export class AuthService {
   private async generateDummyPassword(): Promise<string> {
     const randomPassword = `google_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     return await bcrypt.hash(randomPassword, 10);
+  }
+
+  /**
+   * Check whether a pending beta invite exists for the user's email.
+   * If so, set is_beta_user = true on the user record in-place.
+   * Runs synchronously within the registration request so the flag is
+   * immediately visible on the next /me call.
+   *
+   * @param user Newly created user entity (mutated in place when invited)
+   */
+  private async applyBetaFlagIfInvited(user: User): Promise<void> {
+    const invite = await this.betaInviteRepository.findOne({
+      where: {
+        email: normalizeEmail(user.email),
+        status: BetaInviteStatus.PENDING,
+      },
+    });
+
+    if (invite) {
+      user.is_beta_user = true;
+      await this.userRepository.save(user);
+    }
   }
 
   /**

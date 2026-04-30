@@ -4,6 +4,7 @@ import { S3Service } from './services/s3.service';
 import { EmbeddingService } from './services/embedding.service';
 import { ClaudeService } from './services/claude.service';
 import { CircuitBreakerService } from '../../services/circuit-breaker.service';
+import { BrevoService } from './services/brevo.service';
 
 @Module({
   providers: [
@@ -12,6 +13,7 @@ import { CircuitBreakerService } from '../../services/circuit-breaker.service';
     EmbeddingService,
     ClaudeService,
     CircuitBreakerService,
+    BrevoService,
   ],
   exports: [
     OpenAIService,
@@ -19,6 +21,7 @@ import { CircuitBreakerService } from '../../services/circuit-breaker.service';
     EmbeddingService,
     ClaudeService,
     CircuitBreakerService,
+    BrevoService,
   ],
 })
 export class ExternalModule {}

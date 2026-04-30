@@ -1,4 +1,5 @@
 export * from './ats-match-history.entity';
+export * from './beta-invite.entity';
 export * from './extracted-resume-content.entity';
 export * from './job-application.entity';
 export * from './queue-message.entity';
@@ -14,3 +15,4 @@ export * from './subscription-plan.entity';
 export * from './payment-history.entity';
 export * from './tailoring-session.entity';
 export * from './enriched-resume-profile.entity';
+export * from './password-reset-token.entity';

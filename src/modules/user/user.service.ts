@@ -12,6 +12,7 @@ import { IFeatureUsage } from '../../shared/interfaces';
 import { NotFoundException } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { UserMeResponseDto } from './dtos/user-me-response.dto';
+import { BetaEntitlementService } from '../beta-access/services/beta-entitlement.service';
 
 export interface IUserContext {
   userId?: string;
@@ -31,10 +32,14 @@ export class UserService {
     @InjectRepository(UserSubscription)
     private readonly userSubscriptionRepository: Repository<UserSubscription>,
     private readonly rateLimitService: RateLimitService,
+    private readonly betaEntitlementService: BetaEntitlementService,
   ) {}
 
   /**
-   * Get user context for authenticated users
+   * Get user context for authenticated users.
+   * Beta users with an active `beta_access_until` are treated as PREMIUM:
+   * both `isPremium` and `plan` reflect premium status for guard and
+   * rate-limit checks, while the stored `user.plan` column is unchanged.
    */
   async getAuthenticatedUserContext(userId: string): Promise<UserContext> {
     const user = await this.userRepository.findOne({
@@ -45,11 +50,15 @@ export class UserService {
       throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
     }
 
+    const isPremium =
+      user.plan === UserPlan.PREMIUM ||
+      (await this.betaEntitlementService.hasActiveBetaAccess(user.id));
+
     return {
       userId: user.id,
       userType: UserType.REGISTERED,
-      plan: user.plan,
-      isPremium: user.plan === UserPlan.PREMIUM,
+      plan: isPremium ? UserPlan.PREMIUM : user.plan,
+      isPremium,
       ipAddress: user.ip_address || '',
       userAgent: user.user_agent || '',
     };
