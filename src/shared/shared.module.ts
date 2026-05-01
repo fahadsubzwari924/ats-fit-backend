@@ -9,7 +9,6 @@ import { GenericUserContextTransformer } from './transformers/generic-user-conte
 import { CacheService } from './services/cache.service';
 import { ValidationModule } from './modules/validation/validation.module';
 import { AIContentService } from './services/ai-content.service';
-import { LlmTelemetryService } from './services/llm-telemetry.service';
 import { FileValidationPipe } from './pipes/file-validation.pipe';
 import { LemonSqueezyService } from '../modules/subscription/externals/services/lemon_squeezy.service';
 import { LemonSqueezyPaymentGateway } from '../modules/subscription/externals/gateways/lemonsqueezy-payment.gateway';
@@ -31,7 +30,6 @@ import { TEMPLATE_RENDERER_TOKEN } from './interfaces/template-renderer.interfac
     CacheService,
     AIContentService,
     FileValidationPipe,
-    LlmTelemetryService,
 
     // Email services with dependency injection
     S3TemplateProviderService,
@@ -70,7 +68,6 @@ import { TEMPLATE_RENDERER_TOKEN } from './interfaces/template-renderer.interfac
     CacheService,
     AIContentService,
     FileValidationPipe,
-    LlmTelemetryService,
 
     // Export email service token for dependency injection
     EMAIL_SERVICE_TOKEN,

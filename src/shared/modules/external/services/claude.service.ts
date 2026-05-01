@@ -96,6 +96,19 @@ export class ClaudeService {
           this.logger.warn(
             'Claude API overloaded (529), skipping retries and failing fast for immediate fallback',
           );
+          this.telemetryService.record({
+            prompt_id: params.promptId ?? 'unknown',
+            prompt_version: params.promptVersion ?? 'unknown',
+            model: params.model ?? this.defaultModel,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+            latency_ms: Date.now() - callStart,
+            retry_count: retryCount,
+            parse_outcome: 'failure',
+            fallback_triggered: false,
+          });
           throw new InternalServerErrorException(
             'Claude API overloaded - immediate fallback required',
           );
@@ -108,6 +121,19 @@ export class ClaudeService {
             `Claude API failed after ${maxRetries} attempts`,
             error,
           );
+          this.telemetryService.record({
+            prompt_id: params.promptId ?? 'unknown',
+            prompt_version: params.promptVersion ?? 'unknown',
+            model: params.model ?? this.defaultModel,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+            latency_ms: Date.now() - callStart,
+            retry_count: retryCount,
+            parse_outcome: 'failure',
+            fallback_triggered: false,
+          });
           throw new InternalServerErrorException(
             'Claude API failed after maximum retries',
           );
@@ -250,6 +276,7 @@ export class ClaudeService {
             message: {
               content,
             },
+            finish_reason: (data as { stop_reason?: string }).stop_reason,
           },
         ],
         usage,

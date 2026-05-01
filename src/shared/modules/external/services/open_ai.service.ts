@@ -47,8 +47,11 @@ export class OpenAIService {
   }
 
   async chatCompletion(params: OpenApiRequestParams) {
-    const maxRetries = this.configService.get<number>('OPENAI_MAX_RETRIES');
-    const initialDelay = this.configService.get<number>('OPENAI_RETRY_DELAY');
+    const maxRetries = this.configService.get<number>('OPENAI_MAX_RETRIES', 3);
+    const initialDelay = this.configService.get<number>(
+      'OPENAI_RETRY_DELAY',
+      1000,
+    );
 
     const callStart = Date.now();
     let attempt = 0;
