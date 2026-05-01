@@ -22,6 +22,7 @@ import {
   TEMP_PROFILE_ENRICHMENT,
   MAX_TOKENS_PROFILE_ENRICHMENT,
 } from '../../../shared/constants/resume-tailoring.constants';
+import { PROFILE_ENRICHMENT_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
 import { get } from 'lodash';
 import { ClaudeResponse } from '../../../shared/modules/external/interfaces';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
@@ -150,6 +151,8 @@ export class ResumeProfileEnrichmentService {
           max_tokens: MAX_TOKENS_PROFILE_ENRICHMENT,
           temperature: TEMP_PROFILE_ENRICHMENT,
           messages: [{ role: 'user', content: prompt }],
+          promptId: 'profile-enrichment',
+          promptVersion: PROFILE_ENRICHMENT_PROMPT_VERSION,
         });
         const rewrittenBullets = this.parseDeltaEnrichmentResponse(response);
         enrichedContent = this.mergeEnrichedBullets(

@@ -8,6 +8,8 @@ export interface ClaudeRequestParams {
   response_format?: { type: 'json_object' };
   temperature?: number;
   max_tokens?: number;
+  promptId?: string;
+  promptVersion?: string;
 }
 
 export interface ClaudeResponse {
@@ -17,6 +19,12 @@ export interface ClaudeResponse {
     };
     finish_reason?: string;
   }>;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+  };
 }
 
 export interface ClaudeConfig {

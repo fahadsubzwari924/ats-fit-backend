@@ -11,6 +11,7 @@ import {
   TEMP_RESUME_EXTRACTION,
   MAX_TOKENS_RESUME_EXTRACTION,
 } from '../constants/resume-tailoring.constants';
+import { RESUME_EXTRACTION_PROMPT_VERSION } from '../constants/prompt-versions.constants';
 
 @Injectable()
 export class AIContentService {
@@ -47,6 +48,8 @@ export class AIContentService {
       },
       temperature: TEMP_RESUME_EXTRACTION,
       max_tokens: MAX_TOKENS_RESUME_EXTRACTION,
+      promptId: 'resume-extraction',
+      promptVersion: RESUME_EXTRACTION_PROMPT_VERSION,
     });
 
     const content = result.choices?.[0]?.message?.content;

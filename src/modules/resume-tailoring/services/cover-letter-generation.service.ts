@@ -15,6 +15,7 @@ import {
   TEMP_COVER_LETTER,
   MAX_TOKENS_COVER_LETTER,
 } from '../../../shared/constants/resume-tailoring.constants';
+import { COVER_LETTER_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
 import { CoverLetterResult } from '../interfaces/cover-letter.interface';
 import { JobAnalysisService } from './job-analysis.service';
 import { ResumeContentProcessorService } from './resume-content-processor.service';
@@ -156,6 +157,8 @@ export class CoverLetterGenerationService {
       messages: [{ role: 'user', content: prompt }],
       max_tokens: MAX_TOKENS_COVER_LETTER,
       temperature: TEMP_COVER_LETTER,
+      promptId: 'cover-letter',
+      promptVersion: COVER_LETTER_PROMPT_VERSION,
     });
 
     const content = response.choices?.[0]?.message?.content;

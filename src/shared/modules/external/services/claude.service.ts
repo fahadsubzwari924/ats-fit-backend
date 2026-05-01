@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InternalServerErrorException } from '../../../exceptions/custom-http-exceptions';
 import { ClaudeRequestParams, ClaudeResponse } from '../interfaces';
 import { AIErrorUtil } from '../../../utils/ai-error.util';
+import { LlmTelemetryService } from '../../../services/llm-telemetry.service';
 
 @Injectable()
 export class ClaudeService {
@@ -21,7 +22,10 @@ export class ClaudeService {
   /** Default model resolved once at startup from env; callers may override per-request. */
   readonly defaultModel: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private readonly telemetryService: LlmTelemetryService,
+  ) {
     this.apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
     this.baseUrl = this.configService.get<string>('CLAUDE_CHAT_API_ENDPOINT');
     this.defaultModel = this.configService.get<string>(
@@ -57,13 +61,31 @@ export class ClaudeService {
       });
     }
 
+    const callStart = Date.now();
     let attempt = 0;
+    let retryCount = 0;
     while (attempt < maxRetries) {
       try {
         this.activeRequests++;
         const response = await this.makeClaudeRequest(params);
         this.activeRequests--;
         this.processQueue();
+
+        this.telemetryService.record({
+          prompt_id: params.promptId ?? 'unknown',
+          prompt_version: params.promptVersion ?? 'unknown',
+          model: params.model ?? this.defaultModel,
+          input_tokens: response.usage?.input_tokens ?? 0,
+          output_tokens: response.usage?.output_tokens ?? 0,
+          cache_read_input_tokens: response.usage?.cache_read_input_tokens ?? 0,
+          cache_creation_input_tokens:
+            response.usage?.cache_creation_input_tokens ?? 0,
+          latency_ms: Date.now() - callStart,
+          retry_count: retryCount,
+          parse_outcome: 'success',
+          fallback_triggered: false,
+        });
+
         return response;
       } catch (error) {
         this.activeRequests--;
@@ -80,6 +102,7 @@ export class ClaudeService {
         }
 
         attempt++;
+        retryCount++;
         if (attempt === maxRetries) {
           this.logger.error(
             `Claude API failed after ${maxRetries} attempts`,
@@ -180,9 +203,15 @@ export class ClaudeService {
 
       // Transform Claude response to match OpenAI format for compatibility
       let content = '';
-      function isClaudeApiResponse(
-        data: unknown,
-      ): data is { content: Array<{ text: string }> } {
+      function isClaudeApiResponse(data: unknown): data is {
+        content: Array<{ text: string }>;
+        usage?: {
+          input_tokens?: number;
+          output_tokens?: number;
+          cache_read_input_tokens?: number;
+          cache_creation_input_tokens?: number;
+        };
+      } {
         if (
           typeof data === 'object' &&
           data !== null &&
@@ -200,8 +229,19 @@ export class ClaudeService {
         }
         return false;
       }
+
+      let usage: ClaudeResponse['usage'];
       if (isClaudeApiResponse(data)) {
         content = data.content[0].text;
+        if (data.usage) {
+          usage = {
+            input_tokens: data.usage.input_tokens ?? 0,
+            output_tokens: data.usage.output_tokens ?? 0,
+            cache_read_input_tokens: data.usage.cache_read_input_tokens ?? 0,
+            cache_creation_input_tokens:
+              data.usage.cache_creation_input_tokens ?? 0,
+          };
+        }
       }
 
       return {
@@ -212,6 +252,7 @@ export class ClaudeService {
             },
           },
         ],
+        usage,
       };
     } catch (error) {
       const processingTime = Date.now() - startTime;

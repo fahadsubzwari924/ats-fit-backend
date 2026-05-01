@@ -20,6 +20,7 @@ import {
   TEMP_PROFILE_QUESTIONS,
   MAX_TOKENS_PROFILE_QUESTIONS,
 } from '../../../shared/constants/resume-tailoring.constants';
+import { PROFILE_QUESTION_GEN_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
 
 /**
  * Profile Question Generation Service
@@ -139,6 +140,8 @@ export class ProfileQuestionGenerationService {
       response_format: { type: 'json_object' },
       temperature: TEMP_PROFILE_QUESTIONS,
       max_tokens: MAX_TOKENS_PROFILE_QUESTIONS,
+      promptId: 'profile-questions',
+      promptVersion: PROFILE_QUESTION_GEN_PROMPT_VERSION,
     });
 
     const content = response.choices?.[0]?.message?.content;

@@ -98,6 +98,8 @@ export class JobAnalysisService {
         response_format: { type: 'json_object' },
         temperature: TEMP_JD_ANALYSIS,
         max_tokens: MAX_TOKENS_JD_ANALYSIS, // Sufficient for structured keyword/skills extraction
+        promptId: 'jd-analysis',
+        promptVersion: JD_ANALYSIS_PROMPT_VERSION,
       });
 
       const result = this.parseAnalysisResponse(response);

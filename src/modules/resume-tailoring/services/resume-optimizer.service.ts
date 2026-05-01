@@ -26,6 +26,10 @@ import {
   MODEL_OPTIMIZER_FALLBACK,
   TEMP_OPTIMIZER,
 } from '../../../shared/constants/resume-tailoring.constants';
+import {
+  RESUME_OPTIMIZATION_PROMPT_VERSION,
+  PRECISION_OPTIMIZATION_PROMPT_VERSION,
+} from '../../../shared/constants/prompt-versions.constants';
 
 // changesDiff has been removed from the AI response — it is computed
 // programmatically in a background Bull job (ChangesDiffProcessor).
@@ -523,6 +527,10 @@ export class ResumeOptimizerService {
       ],
       max_tokens: MAX_TOKENS_OPTIMIZATION,
       temperature: TEMP_OPTIMIZER,
+      promptId: 'resume-optimization',
+      promptVersion: usePrecisionPrompt
+        ? PRECISION_OPTIMIZATION_PROMPT_VERSION
+        : RESUME_OPTIMIZATION_PROMPT_VERSION,
     });
 
     return this.parseOptimizationResponse(response);
@@ -554,6 +562,9 @@ export class ResumeOptimizerService {
       response_format: { type: 'json_object' },
       temperature: TEMP_OPTIMIZER,
       max_tokens: MAX_TOKENS_OPTIMIZATION,
+      promptId: 'resume-optimization-fallback',
+      promptVersion: RESUME_OPTIMIZATION_PROMPT_VERSION,
+      fallback_triggered: true,
     });
 
     // Parse OpenAI response (similar structure to Claude)
