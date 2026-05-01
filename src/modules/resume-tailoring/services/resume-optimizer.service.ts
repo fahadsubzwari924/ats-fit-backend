@@ -191,7 +191,7 @@ export class ResumeOptimizerService {
             usePrecisionPrompt,
             verifiedFacts,
           );
-          aiModel = 'gpt-4-turbo';
+          aiModel = MODEL_OPTIMIZER_FALLBACK;
           this.logger.log(
             'Successfully used OpenAI fallback for resume optimization',
           );
