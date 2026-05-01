@@ -25,6 +25,8 @@ import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { FieldSelectionService } from '../../shared/services/field-selection.service';
 import { JOB_APPLICATION_FIELD_CONFIG } from './config/field-selection.config';
 import { resolveAppliedAtOnCreate } from './utils/resolve-applied-at-on-create';
+import { appendStatusHistoryIfChanged } from './services/job-application-status-history.helper';
+import type { IJobApplicationStatusHistoryEntry } from './interfaces/job-application-status-history.interface';
 
 const JOB_APPLICATION_LIST_SORT_COLUMNS = new Set([
   'created_at',
@@ -35,6 +37,11 @@ const JOB_APPLICATION_LIST_SORT_COLUMNS = new Set([
   'applied_at',
   'application_deadline',
   'follow_up_date',
+  'decision_deadline',
+  'priority',
+  'work_mode',
+  'employment_type',
+  'job_board_source',
 ]);
 
 function appendNullableDateRange(
@@ -93,28 +100,61 @@ export class JobApplicationService {
       await this.validateCreateJobApplicationRequest(data);
 
       // Create job application entity
+      const initialStatus = data.status ?? ApplicationStatus.APPLIED;
+      const initialHistory: IJobApplicationStatusHistoryEntry[] = [
+        {
+          from: null,
+          to: initialStatus,
+          changed_at: new Date().toISOString(),
+          changed_by_user_id: data.user_id,
+        },
+      ];
+
       const jobApplication = this.jobApplicationRepository.create({
         user_id: data.user_id,
         company_name: data.company_name,
         job_position: data.job_position,
         job_description: data.job_description,
         application_source: data.application_source,
+        status: initialStatus,
         applied_at: resolveAppliedAtOnCreate(data),
         resume_generation_id: data.resume_generation_id,
         resume_content: data.resume_content,
         job_url: data.job_url,
         job_location: data.job_location,
-        current_salary: data.current_salary,
-        expected_salary: data.expected_salary,
-        application_deadline: data.application_deadline,
+        employment_type: data.employment_type,
+        work_mode: data.work_mode,
+        salary_min: data.salary_min,
+        salary_max: data.salary_max,
+        salary_currency: data.salary_currency,
+        pay_period: data.pay_period,
+        salary_negotiable: data.salary_negotiable,
+        job_board_source: data.job_board_source,
+        applied_via: data.applied_via,
+        priority: data.priority,
+        tags: data.tags,
+        application_deadline: data.application_deadline
+          ? new Date(data.application_deadline as string)
+          : undefined,
+        decision_deadline: data.decision_deadline
+          ? new Date(data.decision_deadline as string)
+          : undefined,
+        next_action: data.next_action,
+        recruiter_name: data.recruiter_name,
+        recruiter_email: data.recruiter_email,
+        recruiter_phone: data.recruiter_phone,
+        hiring_manager_name: data.hiring_manager_name,
+        hiring_manager_email: data.hiring_manager_email,
+        contact_phone: data.contact_phone,
+        contacts: data.contacts,
         cover_letter: data.cover_letter,
         notes: data.notes,
-        contact_phone: data.contact_phone,
+        attachments: data.attachments,
+        status_history: initialHistory,
         metadata: this.buildJobApplicationMetadata(
           data.metadata,
           data.resume_content,
         ),
-        status: ApplicationStatus.APPLIED,
       });
 
       const savedJobApplication =
@@ -279,25 +319,45 @@ export class JobApplicationService {
   ): Promise<JobApplication> {
     try {
       this.logger.log(`Updating job application with ID: ${id}`);
-
-      // Find and validate ownership
       const application = await this.getJobApplicationById(id, userContext);
 
-      // Update fields
+      const nextStatusHistory = appendStatusHistoryIfChanged(
+        application,
+        data.status,
+        userContext.userId,
+      );
+
+      const mergedMetadata = data.metadata
+        ? { ...(application.metadata ?? {}), ...data.metadata }
+        : application.metadata;
+
+      const dateFields: Partial<JobApplication> = {};
+      if (data.applied_at)
+        dateFields.applied_at = new Date(data.applied_at as string);
+      if (data.application_deadline)
+        dateFields.application_deadline = new Date(
+          data.application_deadline as string,
+        );
+      if (data.decision_deadline)
+        dateFields.decision_deadline = new Date(
+          data.decision_deadline as string,
+        );
+      if (data.interview_scheduled_at)
+        dateFields.interview_scheduled_at = new Date(
+          data.interview_scheduled_at as string,
+        );
+      if (data.follow_up_date)
+        dateFields.follow_up_date = new Date(data.follow_up_date as string);
+
       Object.assign(application, {
         ...data,
-        ...(data.applied_at && { applied_at: new Date(data.applied_at) }),
-        ...(data.interview_scheduled_at && {
-          interview_scheduled_at: new Date(data.interview_scheduled_at),
-        }),
-        ...(data.follow_up_date && {
-          follow_up_date: new Date(data.follow_up_date),
-        }),
+        ...dateFields,
+        metadata: mergedMetadata,
+        status_history: nextStatusHistory,
       });
 
       const updatedApplication =
         await this.jobApplicationRepository.save(application);
-
       this.logger.log(`Job application updated successfully: ${id}`);
       return updatedApplication;
     } catch (error) {
@@ -463,6 +523,32 @@ export class JobApplicationService {
       });
     }
 
+    if (query.job_board_source) {
+      queryBuilder.andWhere('jobApplication.job_board_source = :jbs', {
+        jbs: query.job_board_source,
+      });
+    }
+    if (query.work_mode) {
+      queryBuilder.andWhere('jobApplication.work_mode = :wm', {
+        wm: query.work_mode,
+      });
+    }
+    if (query.employment_type) {
+      queryBuilder.andWhere('jobApplication.employment_type = :et', {
+        et: query.employment_type,
+      });
+    }
+    if (query.priority) {
+      queryBuilder.andWhere('jobApplication.priority = :pri', {
+        pri: query.priority,
+      });
+    }
+    if (query.tag) {
+      queryBuilder.andWhere(':tag = ANY(jobApplication.tags)', {
+        tag: query.tag,
+      });
+    }
+
     appendNullableDateRange(
       queryBuilder,
       'jobApplication.applied_at',
@@ -483,6 +569,13 @@ export class JobApplicationService {
       query.follow_up_from,
       query.follow_up_to,
       { from: 'followUpFrom', to: 'followUpTo' },
+    );
+    appendNullableDateRange(
+      queryBuilder,
+      'jobApplication.decision_deadline',
+      query.decision_deadline_from,
+      query.decision_deadline_to,
+      { from: 'decisionDeadlineFrom', to: 'decisionDeadlineTo' },
     );
 
     const sortColumn =

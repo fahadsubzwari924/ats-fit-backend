@@ -56,22 +56,8 @@ export class JobApplicationController {
     const jobApplication =
       await this.jobApplicationService.createJobApplication({
         user_id: userContext?.userId,
-        company_name: dto.company_name,
-        job_position: dto.job_position,
-        job_description: dto.job_description,
-        applied_at: dto.applied_at,
-        application_source: dto.application_source,
-        resume_generation_id: dto.resume_generation_id,
-        resume_content: dto.resume_content,
-        job_url: dto.job_url,
-        job_location: dto.job_location,
-        current_salary: dto.current_salary,
-        expected_salary: dto.expected_salary,
-        cover_letter: dto.cover_letter,
-        notes: dto.notes,
-        metadata: dto.metadata,
+        ...dto,
       });
-
     return this.mapToResponseDto(jobApplication);
   }
 
@@ -210,27 +196,9 @@ export class JobApplicationController {
     const userContext = request?.userContext;
     const application = await this.jobApplicationService.updateJobApplication(
       id,
-      {
-        status: dto.status,
-        applied_at: dto.applied_at ? new Date(dto.applied_at) : undefined,
-        cover_letter: dto.cover_letter,
-        notes: dto.notes,
-        interview_scheduled_at: dto.interview_scheduled_at
-          ? new Date(dto.interview_scheduled_at)
-          : undefined,
-        follow_up_date: dto.follow_up_date
-          ? new Date(dto.follow_up_date)
-          : undefined,
-        contact_phone: dto.contact_phone,
-        interview_notes: dto.interview_notes,
-        rejection_reason: dto.rejection_reason,
-        metadata: dto.metadata,
-      },
-      {
-        userId: userContext?.userId,
-      },
+      { ...dto },
+      { userId: userContext?.userId },
     );
-
     return this.mapToResponseDto(application);
   }
 
@@ -265,9 +233,6 @@ export class JobApplicationController {
     });
   }
 
-  /**
-   * Helper method to map entity to response DTO
-   */
   private mapToResponseDto(application: any): JobApplicationResponseDto {
     return {
       id: application.id,
@@ -276,19 +241,41 @@ export class JobApplicationController {
       job_description: application.job_description,
       job_url: application.job_url,
       job_location: application.job_location,
-      current_salary: application.current_salary,
-      expected_salary: application.expected_salary,
+      employment_type: application.employment_type,
+      work_mode: application.work_mode,
+      salary_min: application.salary_min,
+      salary_max: application.salary_max,
+      salary_currency: application.salary_currency,
+      pay_period: application.pay_period,
+      salary_negotiable: application.salary_negotiable,
       status: application.status,
       application_source: application.application_source,
+      job_board_source: application.job_board_source,
+      applied_via: application.applied_via,
+      priority: application.priority,
+      tags: application.tags,
       application_deadline: application.application_deadline,
       applied_at: application.applied_at,
+      decision_deadline: application.decision_deadline,
+      next_action: application.next_action,
       cover_letter: application.cover_letter,
       notes: application.notes,
+      recruiter_name: application.recruiter_name,
+      recruiter_email: application.recruiter_email,
+      recruiter_phone: application.recruiter_phone,
+      hiring_manager_name: application.hiring_manager_name,
+      hiring_manager_email: application.hiring_manager_email,
       contact_phone: application.contact_phone,
+      contacts: application.contacts,
       interview_scheduled_at: application.interview_scheduled_at,
       interview_notes: application.interview_notes,
       follow_up_date: application.follow_up_date,
+      rejection_stage: application.rejection_stage,
       rejection_reason: application.rejection_reason,
+      rejection_feedback_received: application.rejection_feedback_received,
+      compensation_offer: application.compensation_offer,
+      attachments: application.attachments,
+      status_history: application.status_history,
       metadata: application.metadata,
       created_at: application.created_at,
       updated_at: application.updated_at,

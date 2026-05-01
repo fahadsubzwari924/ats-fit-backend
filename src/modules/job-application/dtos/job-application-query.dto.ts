@@ -16,6 +16,10 @@ import {
 } from 'class-validator';
 import { ApplicationStatus } from '../../../database/entities/job-application.entity';
 import { JobApplicationQueryDateRangesConstraint } from './job-application-query-date-ranges.constraint';
+import { JobBoardSource } from '../enums/job-board-source.enum';
+import { WorkMode } from '../enums/work-mode.enum';
+import { EmploymentType } from '../enums/employment-type.enum';
+import { ApplicationPriority } from '../enums/application-priority.enum';
 
 const JOB_APPLICATION_QUERY_SORT_FIELDS = [
   'created_at',
@@ -81,6 +85,58 @@ export class JobApplicationQueryDto {
   @IsString()
   @MaxLength(200)
   q?: string;
+
+  @ApiPropertyOptional({
+    description: 'Job board source filter',
+    enum: JobBoardSource,
+  })
+  @IsOptional()
+  @IsEnum(JobBoardSource)
+  job_board_source?: JobBoardSource;
+
+  @ApiPropertyOptional({ description: 'Work mode filter', enum: WorkMode })
+  @IsOptional()
+  @IsEnum(WorkMode)
+  work_mode?: WorkMode;
+
+  @ApiPropertyOptional({
+    description: 'Employment type filter',
+    enum: EmploymentType,
+  })
+  @IsOptional()
+  @IsEnum(EmploymentType)
+  employment_type?: EmploymentType;
+
+  @ApiPropertyOptional({
+    description: 'Application priority filter',
+    enum: ApplicationPriority,
+  })
+  @IsOptional()
+  @IsEnum(ApplicationPriority)
+  priority?: ApplicationPriority;
+
+  @ApiPropertyOptional({
+    description: 'Filter by a single tag (exact match)',
+    maxLength: 40,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  tag?: string;
+
+  @ApiPropertyOptional({
+    description: 'Decision deadline on or after (ISO 8601)',
+  })
+  @IsOptional()
+  @IsDateString()
+  decision_deadline_from?: string;
+
+  @ApiPropertyOptional({
+    description: 'Decision deadline on or before (ISO 8601)',
+  })
+  @IsOptional()
+  @IsDateString()
+  decision_deadline_to?: string;
 
   @ApiPropertyOptional({ description: 'Applied on or after (ISO 8601)' })
   @IsOptional()
