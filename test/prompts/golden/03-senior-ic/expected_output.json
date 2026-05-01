@@ -1,0 +1,7 @@
+{
+  "minBulletsPerExperience": [4, 3, 2],
+  "mustContainKeywords": ["distributed systems", "TypeScript", "Kubernetes"],
+  "bannedPhrases": ["passionate", "results-driven", "team player", "hard-working", "detail-oriented", "go-getter", "synergy", "proven track record", "dynamic"],
+  "noInventedMetrics": true,
+  "summaryMaxSentences": 3
+}

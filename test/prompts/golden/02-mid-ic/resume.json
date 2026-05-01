@@ -1,0 +1,48 @@
+{
+  "title": "Backend Software Engineer",
+  "contactInfo": {
+    "name": "Marcus Chen",
+    "email": "marcus.chen@email.com",
+    "location": "Seattle, WA"
+  },
+  "summary": "Backend engineer with 3 years of experience designing and scaling Python/Django services. Built APIs serving hundreds of thousands of daily requests and led database migration efforts for two product lines.",
+  "skills": {
+    "languages": ["Python", "SQL", "Bash"],
+    "frameworks": ["Django", "Django REST Framework", "Celery"],
+    "tools": ["PostgreSQL", "Redis", "Docker", "GitHub Actions", "AWS S3"]
+  },
+  "experience": [
+    {
+      "company": "Stackline Analytics",
+      "position": "Software Engineer",
+      "startDate": "2022-03",
+      "endDate": "Present",
+      "responsibilities": [
+        "Designed and implemented 12 REST API endpoints consumed by the mobile and web clients",
+        "Migrated 3 legacy MySQL tables to PostgreSQL, reducing query latency by 30%",
+        "Built an async Celery task queue that processes 50,000 nightly data ingestion jobs"
+      ],
+      "achievements": []
+    },
+    {
+      "company": "Orion Software",
+      "position": "Junior Software Engineer",
+      "startDate": "2021-01",
+      "endDate": "2022-02",
+      "responsibilities": [
+        "Maintained and extended Django admin tooling for 5 internal operational workflows",
+        "Wrote integration tests covering 80% of new feature code using pytest"
+      ],
+      "achievements": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Washington",
+      "degree": "B.S. Computer Science",
+      "startDate": "2017",
+      "endDate": "2021"
+    }
+  ],
+  "certifications": []
+}
