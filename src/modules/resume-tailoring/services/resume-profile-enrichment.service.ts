@@ -17,6 +17,11 @@ import {
   ForbiddenException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
+import {
+  MODEL_PROFILE_ENRICHMENT,
+  TEMP_PROFILE_ENRICHMENT,
+  MAX_TOKENS_PROFILE_ENRICHMENT,
+} from '../../../shared/constants/resume-tailoring.constants';
 import { get } from 'lodash';
 import { ClaudeResponse } from '../../../shared/modules/external/interfaces';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
@@ -70,7 +75,7 @@ export class ResumeProfileEnrichmentService {
   ) {
     this.enrichmentModel = this.configService.get<string>(
       'CLAUDE_ENRICHMENT_MODEL',
-      'claude-haiku-4-5-20251001',
+      MODEL_PROFILE_ENRICHMENT,
     );
   }
 
@@ -142,8 +147,8 @@ export class ResumeProfileEnrichmentService {
       try {
         const response = await this.claudeService.chatCompletion({
           model: this.enrichmentModel,
-          max_tokens: 2000,
-          temperature: 0.2,
+          max_tokens: MAX_TOKENS_PROFILE_ENRICHMENT,
+          temperature: TEMP_PROFILE_ENRICHMENT,
           messages: [{ role: 'user', content: prompt }],
         });
         const rewrittenBullets = this.parseDeltaEnrichmentResponse(response);

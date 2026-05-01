@@ -23,6 +23,8 @@ import { BulletRelevanceScoringService } from './bullet-relevance-scoring.servic
 import {
   BULLET_BUDGET_PER_RANK,
   MAX_TOKENS_OPTIMIZATION,
+  MODEL_OPTIMIZER_FALLBACK,
+  TEMP_OPTIMIZER,
 } from '../../../shared/constants/resume-tailoring.constants';
 
 // changesDiff has been removed from the AI response — it is computed
@@ -520,7 +522,7 @@ export class ResumeOptimizerService {
         },
       ],
       max_tokens: MAX_TOKENS_OPTIMIZATION,
-      temperature: 0.2,
+      temperature: TEMP_OPTIMIZER,
     });
 
     return this.parseOptimizationResponse(response);
@@ -547,10 +549,10 @@ export class ResumeOptimizerService {
     );
 
     const response = await this.openAIService.chatCompletion({
-      model: 'gpt-4-turbo',
+      model: MODEL_OPTIMIZER_FALLBACK,
       messages: [{ role: 'user', content: optimizationPrompt }],
       response_format: { type: 'json_object' },
-      temperature: 0.2,
+      temperature: TEMP_OPTIMIZER,
       max_tokens: MAX_TOKENS_OPTIMIZATION,
     });
 

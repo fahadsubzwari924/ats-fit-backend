@@ -11,6 +11,10 @@ import {
   NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
+import {
+  TEMP_COVER_LETTER,
+  MAX_TOKENS_COVER_LETTER,
+} from '../../../shared/constants/resume-tailoring.constants';
 import { CoverLetterResult } from '../interfaces/cover-letter.interface';
 import { JobAnalysisService } from './job-analysis.service';
 import { ResumeContentProcessorService } from './resume-content-processor.service';
@@ -150,8 +154,8 @@ export class CoverLetterGenerationService {
 
     const response = await this.claudeService.chatCompletion({
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 1500,
-      temperature: 0.3,
+      max_tokens: MAX_TOKENS_COVER_LETTER,
+      temperature: TEMP_COVER_LETTER,
     });
 
     const content = response.choices?.[0]?.message?.content;

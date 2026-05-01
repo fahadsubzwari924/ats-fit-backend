@@ -9,6 +9,11 @@ import {
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { JD_ANALYSIS_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
+import {
+  MODEL_JD_ANALYSIS,
+  TEMP_JD_ANALYSIS,
+  MAX_TOKENS_JD_ANALYSIS,
+} from '../../../shared/constants/resume-tailoring.constants';
 import { get, head, isEmpty } from 'lodash';
 import {
   ChatCompletionChoice,
@@ -88,11 +93,11 @@ export class JobAnalysisService {
       );
 
       const response = await this.openAIService.chatCompletion({
-        model: 'gpt-4o-mini',
+        model: MODEL_JD_ANALYSIS,
         messages: [{ role: 'user', content: analysisPrompt }],
         response_format: { type: 'json_object' },
-        temperature: 0.05,
-        max_tokens: 1500, // Sufficient for structured keyword/skills extraction
+        temperature: TEMP_JD_ANALYSIS,
+        max_tokens: MAX_TOKENS_JD_ANALYSIS, // Sufficient for structured keyword/skills extraction
       });
 
       const result = this.parseAnalysisResponse(response);

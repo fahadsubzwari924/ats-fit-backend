@@ -14,7 +14,12 @@ import {
   ResolvedProfileQuestion,
 } from '../interfaces/profile-question.interface';
 import { ProfileQuestionSelectionService } from './profile-question-selection.service';
-import { MAX_QUESTIONS_TOTAL } from '../../../shared/constants/resume-tailoring.constants';
+import {
+  MAX_QUESTIONS_TOTAL,
+  MODEL_PROFILE_QUESTIONS,
+  TEMP_PROFILE_QUESTIONS,
+  MAX_TOKENS_PROFILE_QUESTIONS,
+} from '../../../shared/constants/resume-tailoring.constants';
 
 /**
  * Profile Question Generation Service
@@ -129,11 +134,11 @@ export class ProfileQuestionGenerationService {
       this.promptService.getProfileQuestionGenerationPrompt(bulletContexts);
 
     const response = await this.openAIService.chatCompletion({
-      model: 'gpt-4o-mini',
+      model: MODEL_PROFILE_QUESTIONS,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
-      temperature: 0.3,
-      max_tokens: 2000,
+      temperature: TEMP_PROFILE_QUESTIONS,
+      max_tokens: MAX_TOKENS_PROFILE_QUESTIONS,
     });
 
     const content = response.choices?.[0]?.message?.content;
