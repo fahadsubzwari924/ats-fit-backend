@@ -103,7 +103,7 @@ export const MAX_TOKENS_OPTIMIZATION = 8000;
 // ---------------------------------------------------------------------------
 export const MODEL_RESUME_EXTRACTION = 'gpt-4o';
 export const MODEL_JD_ANALYSIS = 'gpt-4o-mini';
-export const MODEL_OPTIMIZER_FALLBACK = 'gpt-4-turbo';
+export const MODEL_OPTIMIZER_FALLBACK = 'gpt-4o-2024-11-20';
 export const MODEL_PROFILE_QUESTIONS = 'gpt-4o-mini';
 export const MODEL_PROFILE_ENRICHMENT = 'claude-haiku-4-5-20251001';
 

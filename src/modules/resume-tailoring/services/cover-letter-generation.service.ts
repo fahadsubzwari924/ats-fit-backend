@@ -16,6 +16,7 @@ import {
   MAX_TOKENS_COVER_LETTER,
 } from '../../../shared/constants/resume-tailoring.constants';
 import { COVER_LETTER_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
+import { RETURN_COVER_LETTER_TOOL } from '../types/claude-tools';
 import { CoverLetterResult } from '../interfaces/cover-letter.interface';
 import { JobAnalysisService } from './job-analysis.service';
 import { ResumeContentProcessorService } from './resume-content-processor.service';
@@ -134,6 +135,11 @@ export class CoverLetterGenerationService {
       primaryKeywords: (input.jobAnalysis?.keywords as Record<string, unknown>)
         ?.primary,
       promptVersion: PromptService.COVER_LETTER_PROMPT_VERSION,
+      verifiedFactsDigest: JSON.stringify(
+        [...(input.verifiedFacts ?? [])].sort((a, b) =>
+          a.originalBulletPoint.localeCompare(b.originalBulletPoint),
+        ),
+      ),
     });
 
     const cached = this.cacheService.get<CoverLetterResult>(
@@ -145,7 +151,7 @@ export class CoverLetterGenerationService {
       return cached;
     }
 
-    const prompt = this.promptService.getCoverLetterGenerationPrompt(
+    const { system, user } = this.promptService.getCoverLetterGenerationPromptParts(
       input.jobAnalysis,
       input.candidateContent,
       input.companyName,
@@ -154,11 +160,14 @@ export class CoverLetterGenerationService {
     );
 
     const response = await this.claudeService.chatCompletion({
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: user }],
+      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       max_tokens: MAX_TOKENS_COVER_LETTER,
       temperature: TEMP_COVER_LETTER,
       promptId: 'cover-letter',
       promptVersion: COVER_LETTER_PROMPT_VERSION,
+      tools: [RETURN_COVER_LETTER_TOOL],
+      tool_choice: { type: 'tool', name: 'return_cover_letter' },
     });
 
     const content = response.choices?.[0]?.message?.content;
@@ -181,11 +190,7 @@ export class CoverLetterGenerationService {
 
   private parseCoverLetterResponse(content: string): CoverLetterResult {
     try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in cover letter response');
-      }
-      const parsed = JSON.parse(jsonMatch[0]) as CoverLetterResult;
+      const parsed = JSON.parse(content) as CoverLetterResult;
 
       if (!parsed.coverLetter?.opening || !parsed.coverLetter?.body) {
         throw new Error('Invalid cover letter structure');

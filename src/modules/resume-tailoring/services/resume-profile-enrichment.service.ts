@@ -23,6 +23,7 @@ import {
   MAX_TOKENS_PROFILE_ENRICHMENT,
 } from '../../../shared/constants/resume-tailoring.constants';
 import { PROFILE_ENRICHMENT_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
+import { RETURN_REWRITTEN_BULLETS_TOOL } from '../types/claude-tools';
 import { get } from 'lodash';
 import { ClaudeResponse } from '../../../shared/modules/external/interfaces';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
@@ -141,7 +142,7 @@ export class ResumeProfileEnrichmentService {
         `No answered questions with responses for user ${userId}; using original content`,
       );
     } else {
-      const prompt = this.promptService.getProfileEnrichmentPrompt(
+      const { system, user } = this.promptService.getProfileEnrichmentPromptParts(
         questionsAndResponses,
       );
 
@@ -150,9 +151,12 @@ export class ResumeProfileEnrichmentService {
           model: this.enrichmentModel,
           max_tokens: MAX_TOKENS_PROFILE_ENRICHMENT,
           temperature: TEMP_PROFILE_ENRICHMENT,
-          messages: [{ role: 'user', content: prompt }],
+          system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+          messages: [{ role: 'user', content: user }],
           promptId: 'profile-enrichment',
           promptVersion: PROFILE_ENRICHMENT_PROMPT_VERSION,
+          tools: [RETURN_REWRITTEN_BULLETS_TOOL],
+          tool_choice: { type: 'tool', name: 'return_rewritten_bullets' },
         });
         const rewrittenBullets = this.parseDeltaEnrichmentResponse(response);
         enrichedContent = this.mergeEnrichedBullets(
@@ -221,14 +225,10 @@ export class ResumeProfileEnrichmentService {
     response: ClaudeResponse,
   ): DeltaBullet[] {
     const raw = String(get(response, 'choices[0].message.content', ''));
-    const content = raw
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim();
 
-    if (!content) {
-      this.logger.error('Empty AI response for profile enrichment delta', {
-        rawLength: raw.length,
+    if (!raw) {
+      this.logger.error('Empty AI response for profile enrichment', {
+        rawLength: 0,
       });
       throw new InternalServerErrorException(
         'Empty AI response',
@@ -237,7 +237,7 @@ export class ResumeProfileEnrichmentService {
     }
 
     try {
-      const parsed = JSON.parse(content) as Record<string, unknown>;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
       if (
         !Array.isArray(parsed.rewrittenBullets) ||
         parsed.rewrittenBullets.length === 0
@@ -253,7 +253,7 @@ export class ResumeProfileEnrichmentService {
         throw error;
       }
       this.logger.error('Failed to parse profile enrichment delta response', {
-        contentPreview: content.substring(0, 500),
+        contentPreview: raw.substring(0, 500),
         error: error instanceof Error ? error.message : String(error),
       });
       throw new InternalServerErrorException(

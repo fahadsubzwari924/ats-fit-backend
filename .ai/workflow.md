@@ -10,14 +10,14 @@ For **any** work type—feature, bugfix, idea/spike, refactor, documentation, or
 
 ## Lifecycle (map each step to Superpowers skills + Agency)
 
-| Phase          | What to do                                                        | Superpowers skills (typical)                                             | Agency                                                                                                               |
-| -------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| **Understand** | Restate goal, constraints, acceptance (3–7 bullets)               | using-superpowers; systematic-debugging if bug-first                     | Pick roles from `.ai/agents.md` for later tasks                                                                      |
-| **Design**     | Data flow, boundaries, failure modes; link `docs/ARCHITECTURE.md` | brainstorming when shape is unclear                                      | —                                                                                                                    |
-| **Plan**       | Ordered tasks: path, verify, **specialist per task**              | writing-plans                                                            | One Agency specialist per task (`subagent_type` or `@agency-*.mdc`)                                                  |
-| **Implement**  | Smallest vertical slice; reviewable diffs                         | subagent-driven-development; test-driven-development when harness exists | **Required** on every implementation worker — `/implement` or equivalent                                             |
-| **Review**     | Lint/test evidence                                                | requesting-code-review; verification-before-completion                   | Reviewer/security roles where appropriate; not for Superpowers **gate** reviewers inside subagent-driven-development |
-| **Ship**       | Merge/release readiness                                           | verification-before-completion                                           | —                                                                                                                    |
+| Phase | What to do | Superpowers skills (typical) | Agency |
+|-------|------------|------------------------------|--------|
+| **Understand** | Restate goal, constraints, acceptance (3–7 bullets) | using-superpowers; systematic-debugging if bug-first | Pick roles from `.ai/agents.md` for later tasks |
+| **Design** | Data flow, boundaries, failure modes; link `docs/ARCHITECTURE.md` | brainstorming when shape is unclear | — |
+| **Plan** | Ordered tasks: path, verify, **specialist per task** | writing-plans | One Agency specialist per task (`subagent_type` or `@agency-*.mdc`) |
+| **Implement** | Smallest vertical slice; reviewable diffs | subagent-driven-development; test-driven-development when harness exists | **Required** on every implementation worker — `/implement` or equivalent |
+| **Review** | Lint/test evidence | requesting-code-review; verification-before-completion | Reviewer/security roles where appropriate; not for Superpowers **gate** reviewers inside subagent-driven-development |
+| **Ship** | Merge/release readiness | verification-before-completion | — |
 
 Repo commands: `npm run lint`, `npm run test`, `npm run build`.
 
@@ -25,10 +25,10 @@ Repo commands: `npm run lint`, `npm run test`, `npm run build`.
 
 **Both modes require Agency specialists per task.** The difference is how tasks are dispatched:
 
-| Mode             | How tasks run                                                      | Agency binding                                                                                                          |
-| ---------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Mode | How tasks run | Agency binding |
+|------|---------------|-----------------|
 | Sub-agent driven | Each task isolated in fresh context with Superpowers orchestration | REQUIRED: prepend Agency role to each subagent prompt; use `/implement` command or manually load `.ai/agents/<role>.md` |
-| Session-wise     | Tasks sequential in current session                                | REQUIRED: use `/implement` or inline `.ai/agents/<role>.md` before each task                                            |
+| Session-wise | Tasks sequential in current session | REQUIRED: use `/implement` or inline `.ai/agents/<role>.md` before each task |
 
 **Key:** "Sub-agent driven" describes the **transport/isolation**, not the **persona**. Persona always comes from Agency.
 
@@ -42,11 +42,11 @@ Skip TDD only when user explicitly opts out or project has no harness yet—then
 
 ## Planning standards
 
-| Rule             | Target                                    |
-| ---------------- | ----------------------------------------- |
-| Task size        | Completable in one focused session        |
+| Rule | Target |
+|------|--------|
+| Task size | Completable in one focused session |
 | Task description | Verb + object + location (path or module) |
-| Verification     | Command or observable outcome per task    |
+| Verification | Command or observable outcome per task |
 
 ## Review checklist (self)
 
@@ -58,8 +58,8 @@ Skip TDD only when user explicitly opts out or project has no harness yet—then
 
 ## Commands (local)
 
-| Step  | Command         |
-| ----- | --------------- |
-| Lint  | `npm run lint`  |
-| Test  | `jest`          |
+| Step | Command |
+|------|---------|
+| Lint | `npm run lint` |
+| Test | `jest` |
 | Build | `npm run build` |

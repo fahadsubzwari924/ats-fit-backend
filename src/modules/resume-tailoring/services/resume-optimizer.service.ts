@@ -26,10 +26,12 @@ import {
   MODEL_OPTIMIZER_FALLBACK,
   TEMP_OPTIMIZER,
 } from '../../../shared/constants/resume-tailoring.constants';
+import { ResumeOptimizationJsonSchema } from '../types/resume-optimization.json-schema';
 import {
   RESUME_OPTIMIZATION_PROMPT_VERSION,
   PRECISION_OPTIMIZATION_PROMPT_VERSION,
 } from '../../../shared/constants/prompt-versions.constants';
+import { RETURN_OPTIMIZED_RESUME_TOOL } from '../types/claude-tools';
 
 // changesDiff has been removed from the AI response — it is computed
 // programmatically in a background Bull job (ChangesDiffProcessor).
@@ -209,6 +211,12 @@ export class ResumeOptimizerService {
         result.optimizedContent.summary,
       );
 
+      this.scrubInventedMetrics(
+        result.optimizedContent,
+        rankedCandidateContent,
+        verifiedFacts ?? [],
+      );
+
       // Post-LLM validation: ensure no experience or bullet was silently dropped
       this.validateNoExperienceDropped(
         rankedCandidateContent,
@@ -273,30 +281,8 @@ export class ResumeOptimizerService {
     }
 
     try {
-      // Check for truncated response (token limit hit mid-JSON)
-      const stopReason = response.choices?.[0]?.finish_reason;
-      if (stopReason === 'max_tokens') {
-        this.logger.error(
-          'Claude response was truncated — max_tokens limit hit. Increase max_tokens.',
-          { contentLength: content.length },
-        );
-        throw new InternalServerErrorException(
-          'AI response was truncated. Please try again.',
-          ERROR_CODES.AI_RESPONSE_PARSING_FAILED,
-        );
-      }
-
-      // Extract JSON from response (Claude might include explanatory text or markdown fences)
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new InternalServerErrorException(
-          'No JSON found in response',
-          ERROR_CODES.AI_RESPONSE_PARSING_FAILED,
-        );
-      }
-
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const parsedResult = JSON.parse(jsonMatch[0]);
+      const parsedResult = JSON.parse(content) as unknown;
       this.validateOptimizationResult(parsedResult);
 
       return parsedResult as Omit<
@@ -458,6 +444,65 @@ export class ResumeOptimizerService {
     });
   }
 
+  private scrubInventedMetrics(
+    optimizedContent: TailoredContent,
+    sourceContent: TailoredContent,
+    verifiedFacts: VerifiedFact[],
+  ): void {
+    const verifiedText = verifiedFacts.map((f) => f.userResponse).join('\n');
+
+    for (let i = 0; i < optimizedContent.experience.length; i++) {
+      const outputExp = optimizedContent.experience[i];
+      const sourceExp = sourceContent.experience[i];
+
+      for (const field of ['responsibilities', 'achievements'] as const) {
+        const outputBullets = outputExp[field] ?? [];
+        const sourceBullets = sourceExp?.[field] ?? [];
+
+        outputExp[field] = outputBullets
+          .map((bullet, j) => {
+            const tokens = bullet.match(/\d+[%xkK]?|\$[\d,]+/g) ?? [];
+            if (tokens.length === 0) return bullet;
+
+            const sourceBullet = sourceBullets[j] ?? '';
+            const sourceFieldText = sourceBullets.join('\n');
+            const failingTokens = tokens.filter(
+              (token) =>
+                !sourceFieldText.includes(token) && !verifiedText.includes(token),
+            );
+
+            if (failingTokens.length === 0) return bullet;
+
+            if (!sourceBullet) {
+              this.logger.warn(
+                'hallucinated_metric on out-of-bounds bullet — keeping original',
+                {
+                  experienceIndex: i,
+                  bulletIndex: j,
+                  offendingTokens: failingTokens,
+                  outputBullet: bullet,
+                },
+              );
+              return bullet;
+            }
+
+            this.logger.warn(
+              'hallucinated_metric detected — reverting bullet',
+              {
+                experienceIndex: i,
+                bulletIndex: j,
+                offendingTokens: failingTokens,
+                outputBullet: bullet,
+                sourceBullet,
+              },
+            );
+
+            return sourceBullet;
+          });
+      }
+    }
+  }
+
   private shouldUsePrecisionOptimizationPrompt(
     tailoringMode?: TailoringModeResult,
     verifiedFacts?: VerifiedFact[],
@@ -509,28 +554,37 @@ export class ResumeOptimizerService {
     usePrecisionPrompt: boolean,
     verifiedFacts?: VerifiedFact[],
   ): Promise<Omit<ResumeOptimizationResult, 'processingMetadata'>> {
-    const optimizationPrompt = this.buildOptimizationPrompt(
-      jobAnalysis,
-      candidateContent,
-      companyName,
-      jobPosition,
-      usePrecisionPrompt,
-      verifiedFacts,
-    );
+    let system: string;
+    let user: string;
+
+    if (usePrecisionPrompt && verifiedFacts?.length) {
+      ({ system, user } = this.promptService.getPrecisionOptimizationPromptParts(
+        jobAnalysis as unknown as Record<string, unknown>,
+        candidateContent as unknown as Record<string, unknown>,
+        companyName,
+        jobPosition,
+        verifiedFacts,
+      ));
+    } else {
+      ({ system, user } = this.promptService.getResumeOptimizationPromptParts(
+        jobAnalysis,
+        candidateContent,
+        companyName,
+        jobPosition,
+      ));
+    }
 
     const response = await this.claudeService.chatCompletion({
-      messages: [
-        {
-          role: 'user',
-          content: optimizationPrompt,
-        },
-      ],
+      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: user }],
       max_tokens: MAX_TOKENS_OPTIMIZATION,
       temperature: TEMP_OPTIMIZER,
       promptId: 'resume-optimization',
       promptVersion: usePrecisionPrompt
         ? PRECISION_OPTIMIZATION_PROMPT_VERSION
         : RESUME_OPTIMIZATION_PROMPT_VERSION,
+      tools: [RETURN_OPTIMIZED_RESUME_TOOL],
+      tool_choice: { type: 'tool', name: 'return_optimized_resume' },
     });
 
     return this.parseOptimizationResponse(response);
@@ -559,7 +613,14 @@ export class ResumeOptimizerService {
     const response = await this.openAIService.chatCompletion({
       model: MODEL_OPTIMIZER_FALLBACK,
       messages: [{ role: 'user', content: optimizationPrompt }],
-      response_format: { type: 'json_object' },
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'resume_optimization',
+          strict: true,
+          schema: ResumeOptimizationJsonSchema,
+        },
+      },
       temperature: TEMP_OPTIMIZER,
       max_tokens: MAX_TOKENS_OPTIMIZATION,
       promptId: 'resume-optimization-fallback',
@@ -570,10 +631,6 @@ export class ResumeOptimizerService {
     // Parse OpenAI response (similar structure to Claude)
     return this.parseOpenAIOptimizationResponse(response);
   }
-
-  /**
-   * Check if error is due to Claude being overloaded
-   */
 
   /**
    * Parse optimization response from OpenAI

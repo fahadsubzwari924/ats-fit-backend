@@ -5,11 +5,22 @@ export interface ClaudeRequestParams {
     role: 'user' | 'assistant';
     content: string;
   }>;
+  system?: Array<{
+    type: 'text';
+    text: string;
+    cache_control?: { type: 'ephemeral' };
+  }>;
   response_format?: { type: 'json_object' };
   temperature?: number;
   max_tokens?: number;
   promptId?: string;
   promptVersion?: string;
+  tools?: Array<{
+    name: string;
+    description: string;
+    input_schema: Record<string, unknown>;
+  }>;
+  tool_choice?: { type: 'tool'; name: string };
 }
 
 export interface ClaudeResponse {
