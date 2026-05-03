@@ -21,6 +21,7 @@ export interface ClaudeRequestParams {
     input_schema: Record<string, unknown>;
   }>;
   tool_choice?: { type: 'tool'; name: string };
+  thinking?: { type: 'enabled'; budget_tokens: number };
 }
 
 export interface ClaudeResponse {

@@ -15,6 +15,7 @@ import {
   MAX_TOKENS_JD_ANALYSIS,
 } from '../../../shared/constants/resume-tailoring.constants';
 import { get, head, isEmpty } from 'lodash';
+import { JobAnalysisJsonSchema } from '../types/job-analysis.json-schema';
 import {
   ChatCompletionChoice,
   ChatCompletionResponse,
@@ -86,18 +87,29 @@ export class JobAnalysisService {
         `Starting job description analysis for position: ${jobPosition} at ${companyName}`,
       );
 
-      const analysisPrompt = this.promptService.getJobDescriptionAnalysisPrompt(
-        jobDescription,
-        jobPosition,
-        companyName,
-      );
+      const { system, user } =
+        this.promptService.getJobDescriptionAnalysisPromptParts(
+          jobDescription,
+          jobPosition,
+          companyName,
+        );
 
       const response = await this.openAIService.chatCompletion({
         model: MODEL_JD_ANALYSIS,
-        messages: [{ role: 'user', content: analysisPrompt }],
-        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'job_analysis',
+            strict: true,
+            schema: JobAnalysisJsonSchema,
+          },
+        },
         temperature: TEMP_JD_ANALYSIS,
-        max_tokens: MAX_TOKENS_JD_ANALYSIS, // Sufficient for structured keyword/skills extraction
+        max_tokens: MAX_TOKENS_JD_ANALYSIS,
         promptId: 'jd-analysis',
         promptVersion: JD_ANALYSIS_PROMPT_VERSION,
       });
@@ -176,7 +188,6 @@ export class JobAnalysisService {
 
     try {
       const parsedResult: unknown = JSON.parse(content);
-      this.validateAnalysisResult(parsedResult);
       return parsedResult as Omit<JobAnalysisResult, 'metadata'> & {
         metadata: Omit<JobAnalysisResult['metadata'], 'processedAt'>;
       };
@@ -193,73 +204,6 @@ export class JobAnalysisService {
       throw new InternalServerErrorException(
         'Failed to parse job analysis response',
         ERROR_CODES.INTERNAL_SERVER,
-      );
-    }
-  }
-
-  /**
-   * Validate the parsed analysis result structure
-   */
-  private validateAnalysisResult(result: unknown): void {
-    if (!result || typeof result !== 'object') {
-      throw new InternalServerErrorException(
-        'Invalid result: must be an object',
-        ERROR_CODES.INVALID_AI_RESPONSE_STRUCTURE,
-      );
-    }
-
-    const resultObj = result as Record<string, unknown>;
-    const requiredFields = [
-      'position',
-      'technical',
-      'experience',
-      'qualifications',
-      'context',
-      'keywords',
-      'metadata',
-    ];
-
-    for (const field of requiredFields) {
-      if (!resultObj[field]) {
-        throw new InternalServerErrorException(
-          `Missing required field in AI response: ${field}`,
-          ERROR_CODES.MISSING_REQUIRED_AI_FIELD,
-        );
-      }
-    }
-
-    const validLevels = [
-      'entry',
-      'junior',
-      'mid',
-      'senior',
-      'lead',
-      'principal',
-      'director',
-    ];
-
-    const position = resultObj.position as Record<string, unknown>;
-    const level = position?.level;
-
-    if (!level || typeof level !== 'string' || !validLevels.includes(level)) {
-      const levelStr = typeof level === 'string' ? level : 'unknown';
-      throw new BadRequestException(
-        `Invalid position level: ${levelStr}`,
-        ERROR_CODES.INVALID_POSITION_LEVEL,
-      );
-    }
-
-    const metadata = resultObj.metadata as Record<string, unknown>;
-    const confidenceScore = metadata?.confidenceScore;
-
-    if (
-      typeof confidenceScore !== 'number' ||
-      confidenceScore < 0 ||
-      confidenceScore > 100
-    ) {
-      throw new BadRequestException(
-        'Invalid confidence score',
-        ERROR_CODES.INVALID_CONFIDENCE_SCORE,
       );
     }
   }

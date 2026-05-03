@@ -3,76 +3,62 @@
  *
  * Contains comprehensive analysis of job description including
  * extracted keywords, requirements, and categorized information.
+ * Shape matches JobAnalysisJsonSchema exactly.
  */
 export interface JobAnalysisResult {
-  // Position information
   position: {
     title: string;
-    level: string;
+    level: 'junior' | 'mid' | 'senior' | 'lead' | 'principal' | 'director';
     department: string;
-    workType: string;
-    location?: string;
+    workType: 'remote' | 'hybrid' | 'onsite' | 'flexible';
   };
 
-  // Technical requirements
   technical: {
     mandatorySkills: string[];
     preferredSkills: string[];
     programmingLanguages: string[];
     frameworks: string[];
     tools: string[];
-    databases?: string[];
-    cloudPlatforms?: string[];
-    certifications?: string[];
+    databases: string[];
+    cloudPlatforms: string[];
+    methodologies: string[];
   };
 
-  // Experience requirements
   experience: {
     minimumYears: number;
-    maximumYears?: number;
-    industries?: string[];
-    roleTypes?: string[];
-    teamLeadership?: boolean;
-    projectManagement?: boolean;
+    maximumYears: number;
+    industryPreferences: string[];
+    domainExperience: string[];
   };
 
-  // Company and role context
+  qualifications: {
+    education: {
+      required: string[];
+      preferred: string[];
+    };
+    certifications: string[];
+    softSkills: string[];
+    leadership: string[];
+  };
+
   context: {
-    companySize?: string;
-    industry?: string;
-    companyStage?: string;
-    workEnvironment?: string;
-    teamStructure?: string;
+    companyStage: string;
+    teamSize: string;
+    reportingStructure: string;
     keyResponsibilities: string[];
     successMetrics: string[];
-    challenges?: string[];
-    growthOpportunities?: string[];
   };
 
-  // Extracted keywords for ATS optimization
   keywords: {
     primary: string[];
     secondary: string[];
-    industrySpecific: string[];
-    roleSpecific: string[];
-    technicalTerms: string[];
-    softSkills: string[];
+    synonyms: Array<{ term: string; alternatives: string[] }>;
   };
 
-  // Analysis metadata
-  analysisMetadata: {
-    confidence: number;
-    processingTime: number;
-    aiModel: string;
-    extractedSections: string[];
-    analysisQuality: 'high' | 'medium' | 'low';
-  };
-
-  // Additional metadata for backward compatibility
   metadata: {
     complexity: 'low' | 'medium' | 'high';
     competitiveness: 'low' | 'medium' | 'high';
-    processedAt: Date;
     confidenceScore: number;
+    processedAt: Date;
   };
 }

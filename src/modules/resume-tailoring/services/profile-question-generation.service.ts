@@ -21,6 +21,7 @@ import {
   MAX_TOKENS_PROFILE_QUESTIONS,
 } from '../../../shared/constants/resume-tailoring.constants';
 import { PROFILE_QUESTION_GEN_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
+import { ProfileQuestionJsonSchema } from '../types/profile-question.json-schema';
 
 /**
  * Profile Question Generation Service
@@ -137,7 +138,14 @@ export class ProfileQuestionGenerationService {
     const response = await this.openAIService.chatCompletion({
       model: MODEL_PROFILE_QUESTIONS,
       messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'profile_questions',
+          strict: true,
+          schema: ProfileQuestionJsonSchema,
+        },
+      },
       temperature: TEMP_PROFILE_QUESTIONS,
       max_tokens: MAX_TOKENS_PROFILE_QUESTIONS,
       promptId: 'profile-questions',
@@ -152,20 +160,8 @@ export class ProfileQuestionGenerationService {
 
   private parseQuestionsResponse(content: string): AIQuestionFromLLM[] {
     try {
-      const parsed = JSON.parse(content) as {
-        questions?: Record<string, unknown>[];
-      };
-      const questions = parsed.questions ?? [];
-      return questions
-        .filter(
-          (q) =>
-            typeof q.questionText === 'string' &&
-            typeof q.questionCategory === 'string',
-        )
-        .map((q) => ({
-          questionText: q.questionText as string,
-          questionCategory: q.questionCategory as string,
-        }));
+      const parsed = JSON.parse(content) as { questions?: AIQuestionFromLLM[] };
+      return parsed.questions ?? [];
     } catch {
       this.logger.warn('Profile question generation returned invalid JSON');
       return [];

@@ -187,6 +187,8 @@ export class ClaudeService {
         input_schema: Record<string, unknown>;
       }>;
       tool_choice?: { type: 'tool'; name: string };
+      thinking?: { type: 'enabled'; budget_tokens: number };
+      betas?: string[];
     }
 
     // Optimize request body for better performance
@@ -207,6 +209,9 @@ export class ClaudeService {
 
     if (params.tools) requestBody.tools = params.tools;
     if (params.tool_choice) requestBody.tool_choice = params.tool_choice;
+    if (params.thinking) {
+      requestBody.thinking = params.thinking;
+    }
 
     const startTime = Date.now();
     this.logger.debug(`Claude API request started at ${startTime}`);
@@ -224,7 +229,9 @@ export class ClaudeService {
           'Content-Type': 'application/json',
           'x-api-key': this.apiKey,
           'anthropic-version': '2023-06-01',
-          'anthropic-beta': 'prompt-caching-2024-07-31',
+          'anthropic-beta': params.thinking
+            ? 'prompt-caching-2024-07-31,interleaved-thinking-2025-05-14'
+            : 'prompt-caching-2024-07-31',
           'User-Agent': 'ATS-Fit-Backend/1.0',
         },
         body: JSON.stringify(requestBody),
