@@ -40,7 +40,13 @@ export const RETURN_OPTIMIZED_RESUME_TOOL = {
               databases: { type: 'array', items: { type: 'string' } },
               concepts: { type: 'array', items: { type: 'string' } },
             },
-            required: ['languages', 'frameworks', 'tools', 'databases', 'concepts'],
+            required: [
+              'languages',
+              'frameworks',
+              'tools',
+              'databases',
+              'concepts',
+            ],
           },
           experience: {
             type: 'array',
@@ -81,7 +87,13 @@ export const RETURN_OPTIMIZED_RESUME_TOOL = {
                 startDate: { type: 'string' },
                 endDate: { type: 'string' },
               },
-              required: ['institution', 'degree', 'major', 'startDate', 'endDate'],
+              required: [
+                'institution',
+                'degree',
+                'major',
+                'startDate',
+                'endDate',
+              ],
             },
           },
           certifications: {
@@ -95,7 +107,13 @@ export const RETURN_OPTIMIZED_RESUME_TOOL = {
                 expiryDate: { type: 'string' },
                 credentialId: { type: 'string' },
               },
-              required: ['name', 'issuer', 'date', 'expiryDate', 'credentialId'],
+              required: [
+                'name',
+                'issuer',
+                'date',
+                'expiryDate',
+                'credentialId',
+              ],
             },
           },
           additionalSections: {
@@ -141,7 +159,11 @@ export const RETURN_OPTIMIZED_RESUME_TOOL = {
     },
     required: ['optimizedContent', 'optimizationMetrics'],
   } as Record<string, unknown>,
-} satisfies { name: string; description: string; input_schema: Record<string, unknown> };
+} satisfies {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+};
 
 export const RETURN_REWRITTEN_BULLETS_TOOL = {
   name: 'return_rewritten_bullets',
@@ -163,7 +185,11 @@ export const RETURN_REWRITTEN_BULLETS_TOOL = {
     },
     required: ['rewrittenBullets'],
   } as Record<string, unknown>,
-} satisfies { name: string; description: string; input_schema: Record<string, unknown> };
+} satisfies {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+};
 
 export const RETURN_COVER_LETTER_TOOL = {
   name: 'return_cover_letter',
@@ -202,4 +228,8 @@ export const RETURN_COVER_LETTER_TOOL = {
     },
     required: ['coverLetter', 'metadata'],
   } as Record<string, unknown>,
-} satisfies { name: string; description: string; input_schema: Record<string, unknown> };
+} satisfies {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+};

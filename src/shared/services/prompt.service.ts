@@ -7,7 +7,16 @@ import {
   PROFILE_ENRICHMENT_PROMPT_VERSION,
   COVER_LETTER_PROMPT_VERSION,
 } from '../constants/prompt-versions.constants';
-import { VERB_TIERS, BANNED_PHRASES, NO_METRIC_FALLBACKS, TENSE_RULES, HOOK_PATTERNS, TONE_CALIBRATION, OPENER_ANTI_PATTERNS, CONSTITUTIONAL_RUBRIC } from '../../modules/resume-tailoring/prompts/constants/prompt-components.constants';
+import {
+  VERB_TIERS,
+  BANNED_PHRASES,
+  NO_METRIC_FALLBACKS,
+  TENSE_RULES,
+  HOOK_PATTERNS,
+  TONE_CALIBRATION,
+  OPENER_ANTI_PATTERNS,
+  CONSTITUTIONAL_RUBRIC,
+} from '../../modules/resume-tailoring/prompts/constants/prompt-components.constants';
 import { OPTIMIZER_EXAMPLES } from '../../modules/resume-tailoring/prompts/examples/optimizer.examples';
 import { ENRICHMENT_EXAMPLES } from '../../modules/resume-tailoring/prompts/examples/enrichment.examples';
 import { COVER_LETTER_EXAMPLES } from '../../modules/resume-tailoring/prompts/examples/cover-letter.examples';
@@ -339,7 +348,10 @@ ${jobDescription}`;
     candidateContent: Record<string, any>,
     companyName: string,
     jobPosition: string,
-    verifiedFacts?: Array<{ originalBulletPoint: string; userResponse: string }>,
+    verifiedFacts?: Array<{
+      originalBulletPoint: string;
+      userResponse: string;
+    }>,
     includeRubric = false,
   ): string {
     const technical = (jobAnalysis.technical as Record<string, any>) || {};
@@ -495,7 +507,10 @@ ${includeRubric ? CONSTITUTIONAL_RUBRIC : ''}
     candidateContent: Record<string, any>,
     companyName: string,
     jobPosition: string,
-    verifiedFacts?: Array<{ originalBulletPoint: string; userResponse: string }>,
+    verifiedFacts?: Array<{
+      originalBulletPoint: string;
+      userResponse: string;
+    }>,
     includeRubric = false,
   ): { system: string; user: string } {
     const technical = (jobAnalysis.technical as Record<string, any>) || {};

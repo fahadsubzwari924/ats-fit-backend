@@ -23,9 +23,7 @@ export class AdminInviteThrottleGuard implements CanActivate {
   private readonly windows = new Map<string, WindowEntry>();
 
   canActivate(context: ExecutionContext): boolean {
-    const request = context
-      .switchToHttp()
-      .getRequest<RequestWithUserContext>();
+    const request = context.switchToHttp().getRequest<RequestWithUserContext>();
     const userId = request.userContext?.userId;
 
     if (!userId) {
@@ -47,7 +45,10 @@ export class AdminInviteThrottleGuard implements CanActivate {
       this.logger.warn(
         `Admin invite throttle exceeded for userId=${userId}, retryAfterSec=${retryAfterSec}`,
       );
-      throw new HttpException(BETA_ERRORS.RATE_LIMITED, HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        BETA_ERRORS.RATE_LIMITED,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     entry.count += 1;

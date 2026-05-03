@@ -127,6 +127,10 @@ migration.log
 !scripts/**/create-secrets.sh
 !**/package-lock.json
 !src/shared/enums/*-key.enum.ts
+!src/database/entities/password-reset-token.entity.ts
+!src/modules/auth/dtos/forgot-password.dto.ts
+!src/modules/auth/dtos/reset-password.dto.ts
+!src/modules/auth/services/password-reset.service.ts
 
 # Configuration files with sensitive data
 config/production.json

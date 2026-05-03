@@ -151,17 +151,20 @@ export class CoverLetterGenerationService {
       return cached;
     }
 
-    const { system, user } = this.promptService.getCoverLetterGenerationPromptParts(
-      input.jobAnalysis,
-      input.candidateContent,
-      input.companyName,
-      input.jobPosition,
-      input.verifiedFacts,
-    );
+    const { system, user } =
+      this.promptService.getCoverLetterGenerationPromptParts(
+        input.jobAnalysis,
+        input.candidateContent,
+        input.companyName,
+        input.jobPosition,
+        input.verifiedFacts,
+      );
 
     const response = await this.claudeService.chatCompletion({
       messages: [{ role: 'user', content: user }],
-      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+      system: [
+        { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
+      ],
       max_tokens: MAX_TOKENS_COVER_LETTER,
       temperature: TEMP_COVER_LETTER,
       promptId: 'cover-letter',

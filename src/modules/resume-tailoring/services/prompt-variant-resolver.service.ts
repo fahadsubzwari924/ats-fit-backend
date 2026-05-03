@@ -15,7 +15,7 @@ export class PromptVariantResolverService implements OnModuleInit {
   }
 
   resolve(userId: string, experimentKey: string): string {
-    const experiment = AB_EXPERIMENTS.find(e => e.key === experimentKey);
+    const experiment = AB_EXPERIMENTS.find((e) => e.key === experimentKey);
     if (!experiment) return 'control';
 
     const hash = this.djb2Hash(userId + experimentKey) % 100;

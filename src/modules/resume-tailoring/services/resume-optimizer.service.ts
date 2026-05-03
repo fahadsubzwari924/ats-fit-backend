@@ -32,9 +32,7 @@ import {
 } from '../../../shared/constants/resume-tailoring.constants';
 import { AB_EXPERIMENT_KEYS } from '../constants/ab-experiments.constants';
 import { ResumeOptimizationJsonSchema } from '../types/resume-optimization.json-schema';
-import {
-  OPTIMIZATION_PROMPT_VERSION,
-} from '../../../shared/constants/prompt-versions.constants';
+import { OPTIMIZATION_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
 import { RETURN_OPTIMIZED_RESUME_TOOL } from '../types/claude-tools';
 
 // changesDiff has been removed from the AI response — it is computed
@@ -288,7 +286,6 @@ export class ResumeOptimizerService {
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const parsedResult = JSON.parse(content) as unknown;
       this.validateOptimizationResult(parsedResult);
 
@@ -466,46 +463,42 @@ export class ResumeOptimizerService {
         const outputBullets = outputExp[field] ?? [];
         const sourceBullets = sourceExp?.[field] ?? [];
 
-        outputExp[field] = outputBullets
-          .map((bullet, j) => {
-            const tokens = bullet.match(/\d+[%xkK]?|\$[\d,]+/g) ?? [];
-            if (tokens.length === 0) return bullet;
+        outputExp[field] = outputBullets.map((bullet, j) => {
+          const tokens = bullet.match(/\d+[%xkK]?|\$[\d,]+/g) ?? [];
+          if (tokens.length === 0) return bullet;
 
-            const sourceBullet = sourceBullets[j] ?? '';
-            const sourceFieldText = sourceBullets.join('\n');
-            const failingTokens = tokens.filter(
-              (token) =>
-                !sourceFieldText.includes(token) && !verifiedText.includes(token),
-            );
+          const sourceBullet = sourceBullets[j] ?? '';
+          const sourceFieldText = sourceBullets.join('\n');
+          const failingTokens = tokens.filter(
+            (token) =>
+              !sourceFieldText.includes(token) && !verifiedText.includes(token),
+          );
 
-            if (failingTokens.length === 0) return bullet;
+          if (failingTokens.length === 0) return bullet;
 
-            if (!sourceBullet) {
-              this.logger.warn(
-                'hallucinated_metric on out-of-bounds bullet — keeping original',
-                {
-                  experienceIndex: i,
-                  bulletIndex: j,
-                  offendingTokens: failingTokens,
-                  outputBullet: bullet,
-                },
-              );
-              return bullet;
-            }
-
+          if (!sourceBullet) {
             this.logger.warn(
-              'hallucinated_metric detected — reverting bullet',
+              'hallucinated_metric on out-of-bounds bullet — keeping original',
               {
                 experienceIndex: i,
                 bulletIndex: j,
                 offendingTokens: failingTokens,
                 outputBullet: bullet,
-                sourceBullet,
               },
             );
+            return bullet;
+          }
 
-            return sourceBullet;
+          this.logger.warn('hallucinated_metric detected — reverting bullet', {
+            experienceIndex: i,
+            bulletIndex: j,
+            offendingTokens: failingTokens,
+            outputBullet: bullet,
+            sourceBullet,
           });
+
+          return sourceBullet;
+        });
       }
     }
   }
@@ -553,7 +546,9 @@ export class ResumeOptimizerService {
       'true';
 
     const response = await this.claudeService.chatCompletion({
-      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+      system: [
+        { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
+      ],
       messages: [{ role: 'user', content: user }],
       max_tokens: thinkingEnabled
         ? MAX_TOKENS_OPTIMIZATION_WITH_THINKING

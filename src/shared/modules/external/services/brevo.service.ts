@@ -20,10 +20,14 @@ export class BrevoService {
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('BREVO_API_KEY') ?? '';
     if (!this.apiKey) {
-      this.logger.warn('BREVO_API_KEY is not configured — Brevo email sending will fail at runtime');
+      this.logger.warn(
+        'BREVO_API_KEY is not configured — Brevo email sending will fail at runtime',
+      );
     }
     this.defaultSender = {
-      email: this.configService.get<string>('BREVO_FROM_EMAIL') ?? 'hello@tairly.com',
+      email:
+        this.configService.get<string>('BREVO_FROM_EMAIL') ??
+        'hello@tairly.com',
       name: this.configService.get<string>('BREVO_FROM_NAME') ?? 'Tailry',
     };
   }
@@ -53,7 +57,9 @@ export class BrevoService {
 
       if (!response.ok) {
         const responseBody = await response.text();
-        this.logger.error(`Brevo API error ${response.status}: ${responseBody}`);
+        this.logger.error(
+          `Brevo API error ${response.status}: ${responseBody}`,
+        );
         throw new InternalServerErrorException(
           'Failed to send email',
           ERROR_CODES.EMAIL_SEND_FAILED,

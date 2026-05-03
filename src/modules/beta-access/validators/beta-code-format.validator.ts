@@ -9,9 +9,7 @@ import {
 const BETA_CODE_REGEX = /^BETA-[A-Z2-9]{8}$/;
 
 @ValidatorConstraint({ name: 'isBetaCodeFormat', async: false })
-export class IsBetaCodeFormatConstraint
-  implements ValidatorConstraintInterface
-{
+export class IsBetaCodeFormatConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, _args: ValidationArguments): boolean {
     if (typeof value !== 'string') {
       return false;

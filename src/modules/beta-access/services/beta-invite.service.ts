@@ -100,7 +100,9 @@ export class BetaInviteService {
       }
 
       if (!code) {
-        this.logger.error(`Failed to generate unique code for ${email} after ${MAX_CODE_RETRIES} retries`);
+        this.logger.error(
+          `Failed to generate unique code for ${email} after ${MAX_CODE_RETRIES} retries`,
+        );
         skipped.push({ email, reason: 'CODE_GENERATION_FAILED' });
         continue;
       }
@@ -213,7 +215,9 @@ export class BetaInviteService {
     // The code is only disclosed once — in the createInvites response and the
     // invite email. Returning it here would expose all codes to any admin
     // session that can read HTTP traffic or logs.
-    const data: Omit<BetaInvite, 'code'>[] = raw.map(({ code: _code, ...rest }) => rest);
+    const data: Omit<BetaInvite, 'code'>[] = raw.map(
+      ({ code: _code, ...rest }) => rest,
+    );
 
     return { data, total, page, limit };
   }

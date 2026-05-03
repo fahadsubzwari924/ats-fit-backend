@@ -9,7 +9,9 @@ import { BETA_ERRORS } from '../constants/beta-error-codes';
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<{ user?: { email?: string } }>();
     const user = request.user;
     const adminEmails = (process.env.ADMIN_EMAILS ?? '')
       .split(',')

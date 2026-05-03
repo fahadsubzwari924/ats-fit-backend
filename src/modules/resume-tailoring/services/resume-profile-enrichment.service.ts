@@ -142,16 +142,23 @@ export class ResumeProfileEnrichmentService {
         `No answered questions with responses for user ${userId}; using original content`,
       );
     } else {
-      const { system, user } = this.promptService.getProfileEnrichmentPromptParts(
-        questionsAndResponses,
-      );
+      const { system, user } =
+        this.promptService.getProfileEnrichmentPromptParts(
+          questionsAndResponses,
+        );
 
       try {
         const response = await this.claudeService.chatCompletion({
           model: this.enrichmentModel,
           max_tokens: MAX_TOKENS_PROFILE_ENRICHMENT,
           temperature: TEMP_PROFILE_ENRICHMENT,
-          system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+          system: [
+            {
+              type: 'text',
+              text: system,
+              cache_control: { type: 'ephemeral' },
+            },
+          ],
           messages: [{ role: 'user', content: user }],
           promptId: 'profile-enrichment',
           promptVersion: PROFILE_ENRICHMENT_PROMPT_VERSION,

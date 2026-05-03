@@ -72,7 +72,9 @@ export class AuthController {
       (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
       req.ip;
     await this.passwordResetService.requestPasswordReset(dto.email, clientIp);
-    return { message: 'If that email is registered, a reset link has been sent.' };
+    return {
+      message: 'If that email is registered, a reset link has been sent.',
+    };
   }
 
   @Public()
@@ -83,7 +85,7 @@ export class AuthController {
     if (!token) {
       return { valid: false, reason: 'not_found' };
     }
-    return this.passwordResetService.validateResetToken(token);
+    return await this.passwordResetService.validateResetToken(token);
   }
 
   @Public()

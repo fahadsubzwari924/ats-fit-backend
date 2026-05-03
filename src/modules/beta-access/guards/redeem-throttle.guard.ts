@@ -34,9 +34,7 @@ export class RedeemThrottleGuard implements CanActivate {
   private readonly windows = new Map<string, WindowEntry>();
 
   canActivate(context: ExecutionContext): boolean {
-    const request = context
-      .switchToHttp()
-      .getRequest<RequestWithUserContext>();
+    const request = context.switchToHttp().getRequest<RequestWithUserContext>();
     const userId = request.userContext?.userId;
 
     if (!userId) {
@@ -61,7 +59,10 @@ export class RedeemThrottleGuard implements CanActivate {
       this.logger.warn(
         `Redeem throttle exceeded for userId=${userId}, retryAfterSec=${retryAfterSec}`,
       );
-      throw new HttpException(BETA_ERRORS.RATE_LIMITED, HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        BETA_ERRORS.RATE_LIMITED,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     entry.count += 1;
