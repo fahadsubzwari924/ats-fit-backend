@@ -2,13 +2,12 @@ import { Injectable } from '@nestjs/common';
 import {
   RESUME_EXTRACTION_PROMPT_VERSION,
   JD_ANALYSIS_PROMPT_VERSION,
-  RESUME_OPTIMIZATION_PROMPT_VERSION,
-  PRECISION_OPTIMIZATION_PROMPT_VERSION,
+  OPTIMIZATION_PROMPT_VERSION,
   PROFILE_QUESTION_GEN_PROMPT_VERSION,
   PROFILE_ENRICHMENT_PROMPT_VERSION,
   COVER_LETTER_PROMPT_VERSION,
 } from '../constants/prompt-versions.constants';
-import { VERB_TIERS, BANNED_PHRASES } from '../../modules/resume-tailoring/prompts/constants/prompt-components.constants';
+import { VERB_TIERS, BANNED_PHRASES, NO_METRIC_FALLBACKS, TENSE_RULES, HOOK_PATTERNS, TONE_CALIBRATION, OPENER_ANTI_PATTERNS, CONSTITUTIONAL_RUBRIC } from '../../modules/resume-tailoring/prompts/constants/prompt-components.constants';
 import { OPTIMIZER_EXAMPLES } from '../../modules/resume-tailoring/prompts/examples/optimizer.examples';
 import { ENRICHMENT_EXAMPLES } from '../../modules/resume-tailoring/prompts/examples/enrichment.examples';
 import { COVER_LETTER_EXAMPLES } from '../../modules/resume-tailoring/prompts/examples/cover-letter.examples';
@@ -18,10 +17,7 @@ export class PromptService {
   static readonly RESUME_EXTRACTION_PROMPT_VERSION =
     RESUME_EXTRACTION_PROMPT_VERSION;
   static readonly JD_ANALYSIS_PROMPT_VERSION = JD_ANALYSIS_PROMPT_VERSION;
-  static readonly RESUME_OPTIMIZATION_PROMPT_VERSION =
-    RESUME_OPTIMIZATION_PROMPT_VERSION;
-  static readonly PRECISION_OPTIMIZATION_PROMPT_VERSION =
-    PRECISION_OPTIMIZATION_PROMPT_VERSION;
+  static readonly OPTIMIZATION_PROMPT_VERSION = OPTIMIZATION_PROMPT_VERSION;
   static readonly PROFILE_QUESTION_GEN_PROMPT_VERSION =
     PROFILE_QUESTION_GEN_PROMPT_VERSION;
   static readonly PROFILE_ENRICHMENT_PROMPT_VERSION =
@@ -153,8 +149,14 @@ ${jobDescription}
 3. **Experience Requirements**: Extract years of experience and domain knowledge
 4. **Qualifications**: Separate required vs preferred education and certifications
 5. **Context Analysis**: Understand company stage, team dynamics, and success metrics
-6. **ATS Keywords**: Identify primary keywords most critical for ATS scoring
-7. **Synonyms**: Map technical terms to their common alternatives
+6. **Keyword Classification (follow these rules precisely):**
+   - **Primary keywords** (cap at 8 total): A term qualifies as primary if ANY of these conditions are true:
+     - It appears in the job title itself
+     - It appears under an explicit "Requirements", "Must Have", or "Required Skills" section header
+     - It appears 3 or more times across the full job description body
+   - **Secondary keywords**: Terms that appear 1-2 times in the body OR appear only in a "Preferred", "Nice to Have", or "Bonus" section
+   - **Synonyms**: Group canonical forms of the same concept together (e.g. K8s ↔ Kubernetes, JS ↔ JavaScript, ML ↔ Machine Learning). List the canonical form as the key; list alternate forms as values.
+   - If the job description is vague and fewer than 3 terms qualify as primary, include the most prominent terms up to the cap of 8.
 
 **Important Guidelines:**
 - Be comprehensive but avoid duplication
@@ -227,347 +229,124 @@ ${jobDescription}
   }
 
   /**
-   * Standard resume optimization: align resume to job (keywords, stack) without inventing facts.
-   * Used when the user has no profile Q&A facts yet. Same JSON shape as precision path.
+   * Split variant of getJobDescriptionAnalysisPrompt for OpenAI prompt caching.
+   * system: static persona + analysis instructions + output schema (cacheable)
+   * user: variable job position + company + raw JD text
    */
-  getResumeOptimizationPrompt(
-    jobAnalysis: Record<string, any>,
-    candidateContent: Record<string, any>,
-    companyName: string,
+  getJobDescriptionAnalysisPromptParts(
+    jobDescription: string,
     jobPosition: string,
-  ): string {
-    const technical = (jobAnalysis.technical as Record<string, any>) || {};
-    const keywords = (jobAnalysis.keywords as Record<string, any>) || {};
-
-    return `
-You are an expert resume optimization specialist. Tailor the candidate's resume to the target job. Your output MUST be valid JSON matching the specified structure.
-
-**CRITICAL RULE: ZERO HALLUCINATION (NO INVENTED METRICS)**
-- Use ONLY facts, numbers, and metrics that already appear in the candidate resume JSON below
-- NEVER invent, estimate, or assume quantifiable data (percentages, dollar amounts, counts, team sizes) that are not explicitly present in the resume
-- You MAY rephrase, reorder, and emphasize existing content; you MAY align wording with job keywords when it truthfully reflects the candidate's experience
-- If a bullet has no numbers in the source material, write a strong qualitative achievement — do NOT fabricate metrics
-- Prefer a factual bullet without numbers over one with invented metrics
-
-**RELEVANCE-RANKED BULLET STRATEGY (CRITICAL):**
-The candidate resume below already contains pre-selected, relevance-ranked bullets per experience.
-The number of bullets per experience has been sized by our system based on recency and JD relevance.
-You MUST:
-- REWRITE every bullet you receive for clarity, CAR framing, and JD keyword alignment
-- For bullets that have a matching USER-VERIFIED FACT (matched by bullet text): inject the metric exactly as stated
-- For bullets WITHOUT a matching fact: rewrite honestly using ONLY existing resume content + JD keywords that truthfully reflect the original bullet — do NOT fabricate metrics
-- NEVER drop a bullet that appears in the input experience array
-- NEVER add extra bullet points not present in the input
-- Output MUST contain exactly the same number of experience entries as the input, and each entry MUST contain exactly the same number of bullets (responsibilities) as given
-- **MANDATORY DATE FIELDS:** Every experience entry MUST have valid startDate and endDate fields
-
-**TARGET JOB INFORMATION:**
-- Position: ${jobPosition}
-- Company: ${companyName}
-- Mandatory Skills: ${Array.isArray(technical.mandatorySkills) ? technical.mandatorySkills.join(', ') : 'None specified'}
-- Programming Languages: ${Array.isArray(technical.programmingLanguages) ? technical.programmingLanguages.join(', ') : 'None specified'}
-- Frameworks: ${Array.isArray(technical.frameworks) ? technical.frameworks.join(', ') : 'None specified'}
-- Primary Keywords: ${Array.isArray(keywords.primary) ? keywords.primary.join(', ') : 'None specified'}
-
-**CURRENT CANDIDATE RESUME (bullets already pre-ranked and sized):**
-${JSON.stringify(candidateContent)}
-
-**OPTIMIZATION INSTRUCTIONS:**
-1. **Achievements and responsibilities:**
-   - Use CAR framing (Context, Action, Result) only with information that already exists in the resume
-   - Mirror job-relevant keywords and tech stack where they match the candidate's stated experience
-   - Do NOT add "realistic" or placeholder metrics
-
-2. **Work experience:**
-   - Rewrite every bullet for JD alignment — no bullet should be left unchanged if improvement is possible
-   - Preserve bullet count per experience exactly as provided — do not merge, split, or drop bullets
-   - Every experience entry must have valid startDate and endDate
-
-3. **Date format:**
-   - Use "YYYY-MM-DD", "YYYY-MM", or "YYYY"; use "Present" for current roles
-   - Never use "N/A" or invalid dates; infer dates only from explicit resume content
-
-4. **Skills and summary:**
-   - Summary MUST be written as a single flowing paragraph of 2-3 sentences maximum. Do NOT use bullet points, dashes, asterisks, numbered lists, or line breaks inside the summary. Pack job title, years of experience, domain expertise, and core value proposition into one cohesive paragraph.
-   - Summary must reflect real experience from the resume; no invented metrics
-   - Include only skills present in the resume; prioritize ordering and grouping to match the job when truthful
-
-**OUTPUT REQUIREMENTS:**
-Return valid JSON with the EXACT structure below. Set achievementsQuantified to 0 if you did not introduce any new numeric claims beyond what was already in the resume.
-
-{
-  "optimizedContent": {
-    "title": "string",
-    "contactInfo": {
-      "name": "string",
-      "email": "string", 
-      "phone": "string",
-      "location": "string",
-      "linkedin": "string",
-      "portfolio": "string",
-      "github": "string"
-    },
-    "summary": "string",
-    "skills": {
-      "languages": ["string"],
-      "frameworks": ["string"],
-      "tools": ["string"],
-      "databases": ["string"],
-      "concepts": ["string"]
-    },
-    "experience": [{
-      "company": "string",
-      "position": "string",
-      "duration": "string",
-      "location": "string",
-      "responsibilities": ["string"],
-      "achievements": [],
-      "startDate": "string - MUST BE VALID DATE",
-      "endDate": "string - MUST BE VALID DATE OR 'Present'",
-      "technologies": "string"
-    }],
-    "education": [{
-      "institution": "string",
-      "degree": "string",
-      "major": "string",
-      "startDate": "string - MUST BE VALID DATE",
-      "endDate": "string - MUST BE VALID DATE"
-    }],
-    "certifications": [{
-      "name": "string",
-      "issuer": "string",
-      "date": "string",
-      "expiryDate": "string",
-      "credentialId": "string"
-    }],
-    "additionalSections": [{
-      "title": "string",
-      "items": ["string"]
-    }]
-  },
-  "optimizationMetrics": {
-    "keywordsAdded": 5,
-    "sectionsOptimized": 3,
-    "achievementsQuantified": 0,
-    "skillsAligned": 8,
-    "confidenceScore": 85
-  }
-}
-
-**CRITICAL VALIDATION REQUIREMENTS:**
-- EVERY experience entry MUST have valid startDate and endDate fields
-- NEVER use "N/A", "Unknown", or invalid values for dates
-- Include ALL work experiences from candidate resume (don't skip any)
-- Ensure experience array is complete and properly formatted
-- Do NOT invent metrics
-- "achievements": Leave as empty array []. Do NOT invent achievement bullets — they are populated elsewhere in the pipeline.
-`;
-  }
-
-  /**
-   * Split variant of getResumeOptimizationPrompt for Anthropic prompt caching.
-   * system: static persona + rules + output schema (cacheable, no per-request variables)
-   * user: per-request job info + candidate resume JSON
-   */
-  getResumeOptimizationPromptParts(
-    jobAnalysis: Record<string, any>,
-    candidateContent: Record<string, any>,
     companyName: string,
-    jobPosition: string,
   ): { system: string; user: string } {
-    const technical = (jobAnalysis.technical as Record<string, any>) || {};
-    const keywords = (jobAnalysis.keywords as Record<string, any>) || {};
+    const system = `You are an expert job market analyst and ATS optimization specialist. Analyze job descriptions comprehensively and extract all relevant information for resume tailoring and ATS optimization.
 
-    const system = `You are a senior resume strategist with 12+ years coaching mid-to-senior engineers (L4–L7) into FAANG, late-stage startups, and Fortune 500 roles. You write for a 6-second recruiter skim. Every bullet is past-tense, action-led, and every metric is defensible in an interview. You never use filler phrases or invented numbers. Your output MUST be valid JSON matching the specified structure.
+**Analysis Instructions:**
+1. **Position Analysis**: Determine job level, department, and work arrangement
+2. **Technical Requirements**: Categorize all technical skills by importance and type
+3. **Experience Requirements**: Extract years of experience and domain knowledge
+4. **Qualifications**: Separate required vs preferred education and certifications
+5. **Context Analysis**: Understand company stage, team dynamics, and success metrics
+6. **Keyword Classification (follow these rules precisely):**
+   - **Primary keywords** (cap at 8 total): A term qualifies as primary if ANY of these conditions are true:
+     - It appears in the job title itself
+     - It appears under an explicit "Requirements", "Must Have", or "Required Skills" section header
+     - It appears 3 or more times across the full job description body
+   - **Secondary keywords**: Terms that appear 1-2 times in the body OR appear only in a "Preferred", "Nice to Have", or "Bonus" section
+   - **Synonyms**: Group canonical forms of the same concept together (e.g. K8s ↔ Kubernetes, JS ↔ JavaScript, ML ↔ Machine Learning). Return each group as an object with "term" (canonical form) and "alternatives" (list of alternate forms).
+   - If the job description is vague and fewer than 3 terms qualify as primary, include the most prominent terms up to the cap of 8.
 
-<zero_hallucination>
-- Use ONLY facts, numbers, and metrics that already appear in the candidate resume JSON below
-- NEVER invent, estimate, or assume quantifiable data (percentages, dollar amounts, counts, team sizes) that are not explicitly present in the resume
-- You MAY rephrase, reorder, and emphasize existing content; you MAY align wording with job keywords when it truthfully reflects the candidate's experience
-- If a bullet has no numbers in the source material, write a strong qualitative achievement — do NOT fabricate metrics
-- Prefer a factual bullet without numbers over one with invented metrics
-</zero_hallucination>
+**Important Guidelines:**
+- Be comprehensive but avoid duplication
+- Prioritize explicit requirements over inferred ones
+- Consider both technical and soft skill requirements
+- Extract quantifiable metrics when mentioned
+- Identify industry-specific terminology
+- Consider modern vs legacy technology preferences
 
-<bullet_strategy>
-The candidate resume below already contains pre-selected, relevance-ranked bullets per experience.
-The number of bullets per experience has been sized by our system based on recency and JD relevance.
-You MUST:
-- REWRITE every bullet you receive for clarity, CAR framing, and JD keyword alignment
-- For bullets that have a matching USER-VERIFIED FACT (matched by bullet text): inject the metric exactly as stated
-- For bullets WITHOUT a matching fact: rewrite honestly using ONLY existing resume content + JD keywords that truthfully reflect the original bullet — do NOT fabricate metrics
-- NEVER drop a bullet that appears in the input experience array
-- NEVER add extra bullet points not present in the input
-- Output MUST contain exactly the same number of experience entries as the input, and each entry MUST contain exactly the same number of bullets (responsibilities) as given
-- MANDATORY DATE FIELDS: Every experience entry MUST have valid startDate and endDate fields
-</bullet_strategy>
-
-<optimization_instructions>
-1. Achievements and responsibilities:
-   - Use CAR framing (Context, Action, Result) only with information that already exists in the resume
-   - Mirror job-relevant keywords and tech stack where they match the candidate's stated experience
-   - Do NOT add "realistic" or placeholder metrics
-
-2. Work experience:
-   - Rewrite every bullet for JD alignment — no bullet should be left unchanged if improvement is possible
-   - Preserve bullet count per experience exactly as provided — do not merge, split, or drop bullets
-   - Every experience entry must have valid startDate and endDate
-
-3. Date format:
-   - Use "YYYY-MM-DD", "YYYY-MM", or "YYYY"; use "Present" for current roles
-   - Never use "N/A" or invalid dates; infer dates only from explicit resume content
-
-4. Skills and summary:
-   - Include only skills present in the resume; prioritize ordering and grouping to match the job when truthful
-   - No invented metrics in the summary
-</optimization_instructions>
-
-<summary_pattern>
-Write the summary as a single flowing paragraph of 2-3 sentences. Follow this structure:
-[Job title] with [X] years in [domain], specializing in [2-3 core skills from resume]. [One concrete system, result, or project from the resume]. [Differentiating quality most relevant to the JD — no filler phrases].
-Do NOT use bullet points, dashes, numbered lists, or line breaks inside the summary.
-</summary_pattern>
-
-<summary_example>
-Input signals: 7-year backend engineer, Python + Go, built distributed payment service, JD requires Kafka + microservices.
-Output: "Backend engineer with 7 years building distributed systems in Python and Go. Designed and shipped a high-throughput payment processing service; strong advocate for event-driven architecture with Kafka. Brings a track record of reducing system latency through service decomposition."
-</summary_example>
-
-${OPTIMIZER_EXAMPLES}
-
-${VERB_TIERS}
-
-${BANNED_PHRASES}
-
-<bullet_rubric>
-Self-revise any bullet that fails one of these criteria before emitting:
-1. Action verb is tier-appropriate (see verb_tiers above) and in past tense for past roles
-2. Has at least one of: scope (team size, user count, codebase scale) OR outcome (result, impact, improvement)
-3. Mirrors at least one JD keyword if that keyword truthfully reflects the bullet's content
-4. ≤22 words
-5. Zero banned phrases (see banned_phrases above)
-6. Every number traces to the source resume or the user-verified facts — no invented metrics
-If a bullet fails criteria 4–6, rewrite it until it passes before including it in the output.
-</bullet_rubric>
-
-<failure_modes>
-Handle these edge cases explicitly before emitting output:
-- Missing startDate or endDate → use empty string ""; add a note to optimizationMetrics.confidenceScore (lower it) — never invent dates
-- Vague or short JD (< 100 words) → set confidenceScore ≤ 40; fall back to job-title keywords only; do not infer unstated requirements
-- User-verified fact contradicts source bullet → use the user-verified fact; preserve original user phrasing
-- Truncated or incomplete candidate resume input → set confidenceScore ≤ 30; do not silently complete or fabricate missing sections
-</failure_modes>
-
-<output_schema>
-Return valid JSON with the EXACT structure below. Set achievementsQuantified to 0 if you did not introduce any new numeric claims beyond what was already in the resume.
-
+**Return Format (JSON — strict schema enforced):**
 {
-  "optimizedContent": {
+  "position": {
     "title": "string",
-    "contactInfo": {
-      "name": "string",
-      "email": "string",
-      "phone": "string",
-      "location": "string",
-      "linkedin": "string",
-      "portfolio": "string",
-      "github": "string"
-    },
-    "summary": "string",
-    "skills": {
-      "languages": ["string"],
-      "frameworks": ["string"],
-      "tools": ["string"],
-      "databases": ["string"],
-      "concepts": ["string"]
-    },
-    "experience": [{
-      "company": "string",
-      "position": "string",
-      "duration": "string",
-      "location": "string",
-      "responsibilities": ["string"],
-      "achievements": [],
-      "startDate": "string - MUST BE VALID DATE",
-      "endDate": "string - MUST BE VALID DATE OR 'Present'",
-      "technologies": "string"
-    }],
-    "education": [{
-      "institution": "string",
-      "degree": "string",
-      "major": "string",
-      "startDate": "string - MUST BE VALID DATE",
-      "endDate": "string - MUST BE VALID DATE"
-    }],
-    "certifications": [{
-      "name": "string",
-      "issuer": "string",
-      "date": "string",
-      "expiryDate": "string",
-      "credentialId": "string"
-    }],
-    "additionalSections": [{
-      "title": "string",
-      "items": ["string"]
-    }]
+    "level": "junior|mid|senior|lead|principal|director",
+    "department": "string",
+    "workType": "remote|hybrid|onsite|flexible"
   },
-  "optimizationMetrics": {
-    "keywordsAdded": 5,
-    "sectionsOptimized": 3,
-    "achievementsQuantified": 0,
-    "skillsAligned": 8,
-    "confidenceScore": 85
+  "technical": {
+    "mandatorySkills": ["string"],
+    "preferredSkills": ["string"],
+    "programmingLanguages": ["string"],
+    "frameworks": ["string"],
+    "tools": ["string"],
+    "databases": ["string"],
+    "cloudPlatforms": ["string"],
+    "methodologies": ["string"]
+  },
+  "experience": {
+    "minimumYears": 0,
+    "maximumYears": 0,
+    "industryPreferences": ["string"],
+    "domainExperience": ["string"]
+  },
+  "qualifications": {
+    "education": {
+      "required": ["string"],
+      "preferred": ["string"]
+    },
+    "certifications": ["string"],
+    "softSkills": ["string"],
+    "leadership": ["string"]
+  },
+  "context": {
+    "companyStage": "string",
+    "teamSize": "string",
+    "reportingStructure": "string",
+    "keyResponsibilities": ["string"],
+    "successMetrics": ["string"]
+  },
+  "keywords": {
+    "primary": ["string"],
+    "secondary": ["string"],
+    "synonyms": [{"term": "string", "alternatives": ["string"]}]
+  },
+  "metadata": {
+    "complexity": "low|medium|high",
+    "competitiveness": "low|medium|high",
+    "confidenceScore": 0
   }
 }
-</output_schema>
 
-<validation_rules>
-- EVERY experience entry MUST have valid startDate and endDate fields
-- NEVER use "N/A", "Unknown", or invalid values for dates
-- Include ALL work experiences from candidate resume (don't skip any)
-- Ensure experience array is complete and properly formatted
-- Do NOT invent metrics
-- "achievements": Leave as empty array []. Do NOT invent achievement bullets — they are populated elsewhere in the pipeline.
-</validation_rules>
+**Quality Standards:**
+- Ensure all arrays contain relevant, non-duplicate items
+- Confidence score should be 0-100 based on job description clarity
+- Complexity based on technical requirements and responsibilities
+- Competitiveness based on skill requirements and market demand`;
 
-<thinking>
-Before calling the tool, reason through these steps in your response content:
-1. For each experience bullet, identify the matched user-verified fact (or note "none") — ensure no metric in your draft came from anywhere else
-2. Confirm bullet count per experience matches the input exactly (no additions, no drops)
-3. Scan every bullet for banned phrases (see banned_phrases) — revise any that contain them
-4. Verify the summary follows the summary_pattern and cites only real resume data
-Only the tool input is the final output; this reasoning block is for self-verification only.
-</thinking>`;
+    const user = `**Job Position:** ${jobPosition}
+**Company:** ${companyName}
 
-    const user = `**TARGET JOB INFORMATION:**
-- Position: ${jobPosition}
-- Company: ${companyName}
-- Mandatory Skills: ${Array.isArray(technical.mandatorySkills) ? technical.mandatorySkills.join(', ') : 'None specified'}
-- Programming Languages: ${Array.isArray(technical.programmingLanguages) ? technical.programmingLanguages.join(', ') : 'None specified'}
-- Frameworks: ${Array.isArray(technical.frameworks) ? technical.frameworks.join(', ') : 'None specified'}
-- Primary Keywords: ${Array.isArray(keywords.primary) ? keywords.primary.join(', ') : 'None specified'}
-
-**CURRENT CANDIDATE RESUME (bullets already pre-ranked and sized):**
-${JSON.stringify(candidateContent)}`;
+**Job Description:**
+${jobDescription}`;
 
     return { system, user };
   }
 
   /**
-   * Precision / enhanced resume optimization: job alignment without inventing metrics.
-   * Same JSON output shape as getResumeOptimizationPrompt; includes user-verified Q&A as source of truth.
+   * Unified optimization prompt (non-cached path / OpenAI fallback).
+   * When verifiedFacts is non-empty, injects them as source of truth.
    */
-  getPrecisionOptimizationPrompt(
-    jobAnalysis: Record<string, unknown>,
-    candidateContent: Record<string, unknown>,
+  getOptimizationPrompt(
+    jobAnalysis: Record<string, any>,
+    candidateContent: Record<string, any>,
     companyName: string,
     jobPosition: string,
-    verifiedFacts: Array<{ originalBulletPoint: string; userResponse: string }>,
+    verifiedFacts?: Array<{ originalBulletPoint: string; userResponse: string }>,
+    includeRubric = false,
   ): string {
-    const technical = (jobAnalysis.technical as Record<string, unknown>) || {};
-    const keywords = (jobAnalysis.keywords as Record<string, unknown>) || {};
+    const technical = (jobAnalysis.technical as Record<string, any>) || {};
+    const keywords = (jobAnalysis.keywords as Record<string, any>) || {};
 
     const factsBlock =
-      verifiedFacts.length > 0
+      verifiedFacts && verifiedFacts.length > 0
         ? verifiedFacts
             .map((f, i) => {
               const bullet = JSON.stringify(f.originalBulletPoint ?? '');
@@ -589,11 +368,6 @@ You are an expert resume optimization specialist. Your task is to tailor a candi
 
 **USER-VERIFIED FACTS (source of truth — preserve these exactly):**
 ${factsBlock}
-
-Every number or metric listed under USER-VERIFIED FACTS was provided by the candidate. You MUST:
-- Keep those figures exactly as stated (do not round, inflate, or rephrase numbers)
-- Integrate them naturally into the relevant work experience bullets
-- Not add additional metrics beyond what appears in the candidate content or USER-VERIFIED FACTS
 
 **RELEVANCE-RANKED BULLET STRATEGY (CRITICAL):**
 The candidate resume below already contains pre-selected, relevance-ranked bullets per experience.
@@ -646,7 +420,7 @@ Return valid JSON with the EXACT structure below. Metrics in optimizationMetrics
     "title": "string",
     "contactInfo": {
       "name": "string",
-      "email": "string", 
+      "email": "string",
       "phone": "string",
       "location": "string",
       "linkedin": "string",
@@ -706,23 +480,26 @@ Return valid JSON with the EXACT structure below. Metrics in optimizationMetrics
 - Include ALL work experiences from candidate resume
 - Do not introduce new numerical claims
 - "achievements": Leave as empty array []. Do NOT invent achievement bullets — they are populated elsewhere in the pipeline.
+
+${includeRubric ? CONSTITUTIONAL_RUBRIC : ''}
 `;
   }
 
   /**
-   * Split variant of getPrecisionOptimizationPrompt for Anthropic prompt caching.
-   * system: static persona + zero-hallucination policy + bullet strategy + output schema (no per-request variables)
-   * user: USER-VERIFIED FACTS block + target job info + candidate resume JSON
+   * Split variant of getOptimizationPrompt for Anthropic prompt caching.
+   * system: static persona + rules + output schema (cacheable, no per-request variables)
+   * user: USER-VERIFIED FACTS (if any) + job info + candidate resume JSON
    */
-  getPrecisionOptimizationPromptParts(
-    jobAnalysis: Record<string, unknown>,
-    candidateContent: Record<string, unknown>,
+  getOptimizationPromptParts(
+    jobAnalysis: Record<string, any>,
+    candidateContent: Record<string, any>,
     companyName: string,
     jobPosition: string,
-    verifiedFacts: Array<{ originalBulletPoint: string; userResponse: string }>,
+    verifiedFacts?: Array<{ originalBulletPoint: string; userResponse: string }>,
+    includeRubric = false,
   ): { system: string; user: string } {
-    const technical = (jobAnalysis.technical as Record<string, unknown>) || {};
-    const keywords = (jobAnalysis.keywords as Record<string, unknown>) || {};
+    const technical = (jobAnalysis.technical as Record<string, any>) || {};
+    const keywords = (jobAnalysis.keywords as Record<string, any>) || {};
 
     const system = `You are a senior resume strategist with 12+ years coaching mid-to-senior engineers (L4–L7) into FAANG, late-stage startups, and Fortune 500 roles. You write for a 6-second recruiter skim. Every bullet is past-tense, action-led, and every metric is defensible in an interview. You never use filler phrases or invented numbers. Your output MUST be valid JSON matching the specified structure.
 
@@ -738,6 +515,8 @@ Every number or metric listed under USER-VERIFIED FACTS (provided in the user me
 - Integrate them naturally into the relevant work experience bullets
 - Not add additional metrics beyond what appears in the candidate content or USER-VERIFIED FACTS
 </zero_hallucination>
+
+${NO_METRIC_FALLBACKS}
 
 <bullet_strategy>
 The candidate resume below already contains pre-selected, relevance-ranked bullets per experience.
@@ -786,6 +565,8 @@ Output: "Backend engineer with 7 years building distributed systems in Python an
 ${OPTIMIZER_EXAMPLES}
 
 ${VERB_TIERS}
+
+${TENSE_RULES}
 
 ${BANNED_PHRASES}
 
@@ -879,6 +660,8 @@ Return valid JSON with the EXACT structure below. Metrics in optimizationMetrics
 - "achievements": Leave as empty array []. Do NOT invent achievement bullets — they are populated elsewhere in the pipeline.
 </validation_rules>
 
+${includeRubric ? CONSTITUTIONAL_RUBRIC : ''}
+
 <thinking>
 Before calling the tool, reason through these steps in your response content:
 1. For each experience bullet, identify the matched user-verified fact (or note "none") — ensure no metric in your draft came from anywhere else
@@ -888,9 +671,8 @@ Before calling the tool, reason through these steps in your response content:
 Only the tool input is the final output; this reasoning block is for self-verification only.
 </thinking>`;
 
-    // Per-request — never enters the system (cached) block
     const factsBlock =
-      verifiedFacts.length > 0
+      verifiedFacts && verifiedFacts.length > 0
         ? verifiedFacts
             .map((f, i) => {
               const bullet = JSON.stringify(f.originalBulletPoint ?? '');
@@ -1188,6 +970,12 @@ Only use facts, numbers, and achievements that are explicitly present in the CAN
 
 ${COVER_LETTER_EXAMPLES}
 
+${HOOK_PATTERNS}
+
+${TONE_CALIBRATION}
+
+${OPENER_ANTI_PATTERNS}
+
 <failure_modes>
 Handle these edge cases explicitly:
 - Candidate resume has no quantified achievements → write strong qualitative hooks; never invent metrics for the opening hook
@@ -1227,6 +1015,8 @@ Handle these edge cases explicitly:
 </output_schema>
 
 ${BANNED_PHRASES}
+
+${TENSE_RULES}
 
 <thinking>
 Before calling the tool, reason through these steps in your response content:

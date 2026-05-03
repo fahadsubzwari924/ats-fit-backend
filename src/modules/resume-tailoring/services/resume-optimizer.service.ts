@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ClaudeService } from '../../../shared/modules/external/services/claude.service';
 import { OpenAIService } from '../../../shared/modules/external/services/open_ai.service';
 import { PromptService } from '../../../shared/services/prompt.service';
@@ -20,16 +21,19 @@ import {
   VerifiedFact,
 } from '../interfaces/user-context.interface';
 import { BulletRelevanceScoringService } from './bullet-relevance-scoring.service';
+import { PromptVariantResolverService } from './prompt-variant-resolver.service';
 import {
   BULLET_BUDGET_PER_RANK,
   MAX_TOKENS_OPTIMIZATION,
+  MAX_TOKENS_OPTIMIZATION_WITH_THINKING,
+  EXTENDED_THINKING_BUDGET_TOKENS,
   MODEL_OPTIMIZER_FALLBACK,
   TEMP_OPTIMIZER,
 } from '../../../shared/constants/resume-tailoring.constants';
+import { AB_EXPERIMENT_KEYS } from '../constants/ab-experiments.constants';
 import { ResumeOptimizationJsonSchema } from '../types/resume-optimization.json-schema';
 import {
-  RESUME_OPTIMIZATION_PROMPT_VERSION,
-  PRECISION_OPTIMIZATION_PROMPT_VERSION,
+  OPTIMIZATION_PROMPT_VERSION,
 } from '../../../shared/constants/prompt-versions.constants';
 import { RETURN_OPTIMIZED_RESUME_TOOL } from '../types/claude-tools';
 
@@ -66,6 +70,8 @@ export class ResumeOptimizerService {
     private readonly promptService: PromptService,
     private readonly cacheService: CacheService,
     private readonly bulletRelevanceScoringService: BulletRelevanceScoringService,
+    private readonly configService: ConfigService,
+    private readonly promptVariantResolverService: PromptVariantResolverService,
   ) {}
 
   /**
@@ -86,6 +92,7 @@ export class ResumeOptimizerService {
     jobPosition: string,
     tailoringMode?: TailoringModeResult,
     verifiedFacts?: VerifiedFact[],
+    userId?: string,
   ): Promise<ResumeOptimizationResult> {
     const startTime = Date.now();
 
@@ -97,9 +104,9 @@ export class ResumeOptimizerService {
         jobPosition,
       );
 
-      const usePrecisionPrompt = this.shouldUsePrecisionOptimizationPrompt(
-        tailoringMode,
-        verifiedFacts,
+      const variant = this.promptVariantResolverService.resolve(
+        userId ?? '',
+        AB_EXPERIMENT_KEYS.OPTIMIZER_CONSTITUTIONAL_RUBRIC,
       );
 
       // Always key on facts digest so partial-answer updates never hit a stale cache entry
@@ -115,9 +122,9 @@ export class ResumeOptimizerService {
         skills: candidateContent.skills,
         education: candidateContent.education,
         tailoringMode: tailoringMode ?? 'standard',
-        precisionPrompt: usePrecisionPrompt,
         verifiedFactsDigest,
-        promptVersion: PromptService.RESUME_OPTIMIZATION_PROMPT_VERSION,
+        promptVersion: PromptService.OPTIMIZATION_PROMPT_VERSION,
+        abVariant: variant,
       };
 
       // Check cache first
@@ -169,8 +176,8 @@ export class ResumeOptimizerService {
           rankedCandidateContent,
           companyName,
           jobPosition,
-          usePrecisionPrompt,
           verifiedFacts,
+          variant,
         );
         aiModel = this.claudeService.defaultModel;
         this.logger.log('Successfully used Claude for resume optimization');
@@ -194,8 +201,8 @@ export class ResumeOptimizerService {
             rankedCandidateContent,
             companyName,
             jobPosition,
-            usePrecisionPrompt,
             verifiedFacts,
+            variant,
           );
           aiModel = MODEL_OPTIMIZER_FALLBACK;
           this.logger.log(
@@ -503,43 +510,21 @@ export class ResumeOptimizerService {
     }
   }
 
-  private shouldUsePrecisionOptimizationPrompt(
-    tailoringMode?: TailoringModeResult,
-    verifiedFacts?: VerifiedFact[],
-  ): boolean {
-    const hasFacts = (verifiedFacts?.length ?? 0) > 0;
-    const isEnrichedMode =
-      tailoringMode === 'precision' || tailoringMode === 'enhanced';
-    if (isEnrichedMode && !hasFacts) {
-      this.logger.warn(
-        'Tailoring mode is precision/enhanced but no verified Q&A responses; using standard optimization prompt',
-      );
-    }
-    return hasFacts && isEnrichedMode;
-  }
-
   private buildOptimizationPrompt(
     jobAnalysis: JobAnalysisResult,
     candidateContent: TailoredContent,
     companyName: string,
     jobPosition: string,
-    usePrecisionPrompt: boolean,
     verifiedFacts?: VerifiedFact[],
+    variant = 'control',
   ): string {
-    if (usePrecisionPrompt && verifiedFacts?.length) {
-      return this.promptService.getPrecisionOptimizationPrompt(
-        jobAnalysis as unknown as Record<string, unknown>,
-        candidateContent as unknown as Record<string, unknown>,
-        companyName,
-        jobPosition,
-        verifiedFacts,
-      );
-    }
-    return this.promptService.getResumeOptimizationPrompt(
-      jobAnalysis,
-      candidateContent,
+    return this.promptService.getOptimizationPrompt(
+      jobAnalysis as unknown as Record<string, unknown>,
+      candidateContent as unknown as Record<string, unknown>,
       companyName,
       jobPosition,
+      verifiedFacts,
+      variant === 'with-rubric',
     );
   }
 
@@ -551,40 +536,40 @@ export class ResumeOptimizerService {
     candidateContent: TailoredContent,
     companyName: string,
     jobPosition: string,
-    usePrecisionPrompt: boolean,
     verifiedFacts?: VerifiedFact[],
+    variant: string = 'control',
   ): Promise<Omit<ResumeOptimizationResult, 'processingMetadata'>> {
-    let system: string;
-    let user: string;
+    const { system, user } = this.promptService.getOptimizationPromptParts(
+      jobAnalysis as unknown as Record<string, unknown>,
+      candidateContent as unknown as Record<string, unknown>,
+      companyName,
+      jobPosition,
+      verifiedFacts,
+      variant === 'with-rubric',
+    );
 
-    if (usePrecisionPrompt && verifiedFacts?.length) {
-      ({ system, user } = this.promptService.getPrecisionOptimizationPromptParts(
-        jobAnalysis as unknown as Record<string, unknown>,
-        candidateContent as unknown as Record<string, unknown>,
-        companyName,
-        jobPosition,
-        verifiedFacts,
-      ));
-    } else {
-      ({ system, user } = this.promptService.getResumeOptimizationPromptParts(
-        jobAnalysis,
-        candidateContent,
-        companyName,
-        jobPosition,
-      ));
-    }
+    const thinkingEnabled =
+      this.configService.get<string>('CLAUDE_EXTENDED_THINKING_ENABLED') ===
+      'true';
 
     const response = await this.claudeService.chatCompletion({
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: user }],
-      max_tokens: MAX_TOKENS_OPTIMIZATION,
-      temperature: TEMP_OPTIMIZER,
-      promptId: 'resume-optimization',
-      promptVersion: usePrecisionPrompt
-        ? PRECISION_OPTIMIZATION_PROMPT_VERSION
-        : RESUME_OPTIMIZATION_PROMPT_VERSION,
+      max_tokens: thinkingEnabled
+        ? MAX_TOKENS_OPTIMIZATION_WITH_THINKING
+        : MAX_TOKENS_OPTIMIZATION,
+      // Anthropic requires temperature=1 when extended thinking is enabled
+      temperature: thinkingEnabled ? 1 : TEMP_OPTIMIZER,
+      promptId: `resume-optimization:${variant}`,
+      promptVersion: OPTIMIZATION_PROMPT_VERSION,
       tools: [RETURN_OPTIMIZED_RESUME_TOOL],
       tool_choice: { type: 'tool', name: 'return_optimized_resume' },
+      ...(thinkingEnabled && {
+        thinking: {
+          type: 'enabled' as const,
+          budget_tokens: EXTENDED_THINKING_BUDGET_TOKENS,
+        },
+      }),
     });
 
     return this.parseOptimizationResponse(response);
@@ -598,16 +583,16 @@ export class ResumeOptimizerService {
     candidateContent: TailoredContent,
     companyName: string,
     jobPosition: string,
-    usePrecisionPrompt: boolean,
     verifiedFacts?: VerifiedFact[],
+    variant = 'control',
   ): Promise<Omit<ResumeOptimizationResult, 'processingMetadata'>> {
     const optimizationPrompt = this.buildOptimizationPrompt(
       jobAnalysis,
       candidateContent,
       companyName,
       jobPosition,
-      usePrecisionPrompt,
       verifiedFacts,
+      variant,
     );
 
     const response = await this.openAIService.chatCompletion({
@@ -623,8 +608,8 @@ export class ResumeOptimizerService {
       },
       temperature: TEMP_OPTIMIZER,
       max_tokens: MAX_TOKENS_OPTIMIZATION,
-      promptId: 'resume-optimization-fallback',
-      promptVersion: RESUME_OPTIMIZATION_PROMPT_VERSION,
+      promptId: `resume-optimization-fallback:${variant}`,
+      promptVersion: OPTIMIZATION_PROMPT_VERSION,
       fallback_triggered: true,
     });
 
