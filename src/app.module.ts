@@ -19,6 +19,7 @@ import { UserContextMiddleware } from './shared/middlewares/user-context.middlew
 import { HealthModule } from './health/health.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { BetaAccessModule } from './modules/beta-access/beta-access.module';
+import { ContactModule } from './modules/contact/contact.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { BetaAccessModule } from './modules/beta-access/beta-access.module';
     HealthModule,
     SubscriptionModule,
     BetaAccessModule,
+    ContactModule,
   ],
   providers: [
     {
