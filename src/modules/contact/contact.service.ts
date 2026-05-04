@@ -14,12 +14,9 @@ export class ContactService {
     private readonly brevoService: BrevoService,
     private readonly configService: ConfigService,
   ) {
-    const adminFirst = (this.configService.get<string>('ADMIN_EMAILS') ?? '')
-      .split(',')[0]
-      .trim();
     this.notificationEmail =
       this.configService.get<string>('CONTACT_NOTIFICATION_EMAIL') ??
-      (adminFirst || 'info@tairly.com');
+      'info@tairly.com';
 
     this.fromEmail =
       this.configService.get<string>('BREVO_FROM_EMAIL') ?? 'hello@tairly.com';
