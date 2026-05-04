@@ -60,6 +60,9 @@ export const validationSchema = Joi.object({
   BREVO_TEMPLATE_ID_BETA_POST_EXPIRY_FOLLOWUP: Joi.number().optional(),
   BREVO_TEMPLATE_ID_BETA_DAY3_CHECKIN: Joi.number().optional(),
 
+  // Contact form: where owner notifications are sent (falls back to first ADMIN_EMAILS entry)
+  CONTACT_NOTIFICATION_EMAIL: Joi.string().email().optional(),
+
   // Frontend URL (used to build reset links in emails)
   FRONTEND_URL: Joi.string().default('http://localhost:4200'),
 

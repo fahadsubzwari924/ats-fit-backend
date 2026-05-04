@@ -16,6 +16,14 @@ export interface BrevoTransactionalEmailPayload {
   sender?: BrevoSender;
 }
 
+export interface BrevoRawEmailPayload {
+  to: BrevoEmailRecipient[];
+  subject: string;
+  htmlContent: string;
+  replyTo?: BrevoEmailRecipient;
+  sender?: BrevoSender;
+}
+
 export interface BrevoSendResponse {
   messageId: string;
 }
