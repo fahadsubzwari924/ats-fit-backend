@@ -7,7 +7,7 @@
 | Language | TypeScript |
 | Framework | NestJS |
 | Database | SQL (TypeORM) |
-| Test | `npm run test` |
+| Test | `jest` |
 | Lint | `npm run lint` |
 | Build | `npm run build` |
 

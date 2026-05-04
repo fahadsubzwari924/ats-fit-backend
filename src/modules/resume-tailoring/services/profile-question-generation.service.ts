@@ -14,7 +14,14 @@ import {
   ResolvedProfileQuestion,
 } from '../interfaces/profile-question.interface';
 import { ProfileQuestionSelectionService } from './profile-question-selection.service';
-import { MAX_QUESTIONS_TOTAL } from '../../../shared/constants/resume-tailoring.constants';
+import {
+  MAX_QUESTIONS_TOTAL,
+  MODEL_PROFILE_QUESTIONS,
+  TEMP_PROFILE_QUESTIONS,
+  MAX_TOKENS_PROFILE_QUESTIONS,
+} from '../../../shared/constants/resume-tailoring.constants';
+import { PROFILE_QUESTION_GEN_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
+import { ProfileQuestionJsonSchema } from '../types/profile-question.json-schema';
 
 /**
  * Profile Question Generation Service
@@ -129,11 +136,20 @@ export class ProfileQuestionGenerationService {
       this.promptService.getProfileQuestionGenerationPrompt(bulletContexts);
 
     const response = await this.openAIService.chatCompletion({
-      model: 'gpt-4o-mini',
+      model: MODEL_PROFILE_QUESTIONS,
       messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-      max_tokens: 2000,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'profile_questions',
+          strict: true,
+          schema: ProfileQuestionJsonSchema,
+        },
+      },
+      temperature: TEMP_PROFILE_QUESTIONS,
+      max_tokens: MAX_TOKENS_PROFILE_QUESTIONS,
+      promptId: 'profile-questions',
+      promptVersion: PROFILE_QUESTION_GEN_PROMPT_VERSION,
     });
 
     const content = response.choices?.[0]?.message?.content;
@@ -144,20 +160,8 @@ export class ProfileQuestionGenerationService {
 
   private parseQuestionsResponse(content: string): AIQuestionFromLLM[] {
     try {
-      const parsed = JSON.parse(content) as {
-        questions?: Record<string, unknown>[];
-      };
-      const questions = parsed.questions ?? [];
-      return questions
-        .filter(
-          (q) =>
-            typeof q.questionText === 'string' &&
-            typeof q.questionCategory === 'string',
-        )
-        .map((q) => ({
-          questionText: q.questionText as string,
-          questionCategory: q.questionCategory as string,
-        }));
+      const parsed = JSON.parse(content) as { questions?: AIQuestionFromLLM[] };
+      return parsed.questions ?? [];
     } catch {
       this.logger.warn('Profile question generation returned invalid JSON');
       return [];

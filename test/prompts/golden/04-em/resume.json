@@ -1,0 +1,61 @@
+{
+  "title": "Engineering Manager",
+  "contactInfo": {
+    "name": "David Okonkwo",
+    "email": "david.okonkwo@email.com",
+    "location": "New York, NY"
+  },
+  "summary": "Engineering leader with 10 years of experience in software development and 3 years managing cross-functional teams of 8-12 engineers. Delivered a platform migration that reduced operational costs by $1.2M annually and built two high-performing teams from scratch.",
+  "skills": {
+    "languages": ["Java", "Python", "SQL"],
+    "frameworks": ["Spring Boot", "Kafka", "gRPC"],
+    "tools": ["AWS", "Terraform", "Datadog", "JIRA", "Confluence"]
+  },
+  "experience": [
+    {
+      "company": "Vantage Financial",
+      "position": "Engineering Manager",
+      "startDate": "2021-09",
+      "endDate": "Present",
+      "responsibilities": [
+        "Managed a team of 10 engineers across 3 squads delivering the core payments platform",
+        "Drove migration from on-premise infrastructure to AWS, reducing annual infrastructure spend by $1.2M",
+        "Established quarterly OKR process and engineering scorecards adopted across 4 product teams",
+        "Hired and onboarded 6 engineers in 12 months, growing the team from 4 to 10"
+      ],
+      "achievements": []
+    },
+    {
+      "company": "Vantage Financial",
+      "position": "Senior Software Engineer",
+      "startDate": "2019-01",
+      "endDate": "2021-08",
+      "responsibilities": [
+        "Designed and implemented a Kafka-based event streaming pipeline processing 5 million transactions per day",
+        "Led a 4-engineer team to rebuild the payment reconciliation engine, cutting nightly batch processing time by 60%",
+        "Mentored 3 mid-level engineers and conducted structured performance reviews"
+      ],
+      "achievements": []
+    },
+    {
+      "company": "BuildRight Technologies",
+      "position": "Software Engineer",
+      "startDate": "2015-06",
+      "endDate": "2018-12",
+      "responsibilities": [
+        "Built microservices for a construction project management SaaS platform in Java and Spring Boot",
+        "Developed an ETL pipeline ingesting data from 8 third-party APIs into a central data warehouse"
+      ],
+      "achievements": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "Cornell University",
+      "degree": "B.S. Computer Science",
+      "startDate": "2011",
+      "endDate": "2015"
+    }
+  ],
+  "certifications": []
+}

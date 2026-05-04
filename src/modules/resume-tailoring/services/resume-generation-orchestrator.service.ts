@@ -23,6 +23,7 @@ import {
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { MATCH_SCORE_MAX_PERCENTAGE } from '../../../shared/constants/resume-tailoring.constants';
+import { OPTIMIZATION_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
 
 /**
  * Resume Generation Orchestrator Service
@@ -202,6 +203,7 @@ export class ResumeGenerationOrchestratorService {
         input.jobPosition,
         resumeContent.tailoringMode,
         resumeContent.verifiedFacts,
+        input.userContext.userId,
       );
     const optimizationTime = Date.now() - start;
 
@@ -347,6 +349,7 @@ export class ResumeGenerationOrchestratorService {
         unknown
       >,
       changes_diff: null,
+      prompt_version: OPTIMIZATION_PROMPT_VERSION,
       atsChecksPassed: atsChecks.passed,
       atsChecksTotal: atsChecks.total,
       bulletsQuantifiedBefore: bulletsQuantified.before,

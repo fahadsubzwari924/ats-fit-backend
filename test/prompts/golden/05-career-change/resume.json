@@ -1,0 +1,49 @@
+{
+  "title": "Financial Analyst",
+  "contactInfo": {
+    "name": "Sofia Reyes",
+    "email": "sofia.reyes@email.com",
+    "location": "Chicago, IL"
+  },
+  "summary": "Financial analyst with 5 years of experience in FP&A, budgeting, and data-driven reporting. Built Excel and SQL-based models that reduced monthly reporting time and supported $80M in capital allocation decisions.",
+  "skills": {
+    "languages": ["SQL", "Python"],
+    "frameworks": [],
+    "tools": ["Excel", "Tableau", "Power BI", "Snowflake", "Salesforce"]
+  },
+  "experience": [
+    {
+      "company": "Harwick Capital Group",
+      "position": "Senior Financial Analyst",
+      "startDate": "2022-01",
+      "endDate": "Present",
+      "responsibilities": [
+        "Built a monthly FP&A dashboard in Tableau consolidating data from 4 source systems for 12 business units",
+        "Wrote SQL queries against Snowflake data warehouse to automate 6 recurring financial reports, saving 20 hours per month",
+        "Created a Python script to validate and clean 18 months of legacy transaction data before migration"
+      ],
+      "achievements": []
+    },
+    {
+      "company": "Lakeview Investments",
+      "position": "Financial Analyst",
+      "startDate": "2019-07",
+      "endDate": "2021-12",
+      "responsibilities": [
+        "Developed Excel-based financial models supporting portfolio allocation across 14 funds",
+        "Produced weekly variance analysis reports distributed to 8 senior stakeholders",
+        "Coordinated with IT to migrate 3 years of historical P&L data into Salesforce"
+      ],
+      "achievements": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Illinois at Chicago",
+      "degree": "B.S. Finance",
+      "startDate": "2015",
+      "endDate": "2019"
+    }
+  ],
+  "certifications": []
+}

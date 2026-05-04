@@ -1,7 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { BetaInvite, BetaInviteStatus } from '../../../database/entities/beta-invite.entity';
+import {
+  BetaInvite,
+  BetaInviteStatus,
+} from '../../../database/entities/beta-invite.entity';
 import { User } from '../../../database/entities/user.entity';
 import { BetaStatusResponseDto } from '../dtos/beta-status-response.dto';
 
@@ -48,7 +51,7 @@ export class BetaStatusService {
       betaAccessUntil !== null && betaAccessUntil > now;
 
     const daysRemaining = hasActiveBetaAccess
-      ? Math.ceil((betaAccessUntil!.getTime() - now.getTime()) / 86_400_000)
+      ? Math.ceil((betaAccessUntil.getTime() - now.getTime()) / 86_400_000)
       : null;
 
     // has_pending_redemption: invite exists (pending) and user hasn't activated beta access yet
@@ -60,7 +63,12 @@ export class BetaStatusService {
       user.is_beta_user && !hasActiveBetaAccess && user.founding_rate_locked;
 
     const postExpiryOffer = isExpiredBetaUser
-      ? { eligible: true as const, monthly_price_usd: 7.20, price_monthly: 7.20, discount_pct: 40 }
+      ? {
+          eligible: true as const,
+          monthly_price_usd: 7.2,
+          price_monthly: 7.2,
+          discount_pct: 40,
+        }
       : null;
 
     // Derive status from computed flags
@@ -69,7 +77,11 @@ export class BetaStatusService {
       status = 'active';
     } else if (hasPendingRedemption) {
       status = 'pending';
-    } else if (user.is_beta_user && betaAccessUntil !== null && betaAccessUntil <= now) {
+    } else if (
+      user.is_beta_user &&
+      betaAccessUntil !== null &&
+      betaAccessUntil <= now
+    ) {
       status = 'expired';
     } else {
       status = 'not_invited';

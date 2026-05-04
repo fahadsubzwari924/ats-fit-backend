@@ -6,6 +6,12 @@ import { TailoredContentSchema } from '../../modules/resume-tailoring/schemas/re
 import { TailoredContentJsonSchema } from '../../modules/resume-tailoring/schemas/resume-content-json-schema';
 import { InternalServerErrorException } from '../exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../constants/error-codes';
+import {
+  MODEL_RESUME_EXTRACTION,
+  TEMP_RESUME_EXTRACTION,
+  MAX_TOKENS_RESUME_EXTRACTION,
+} from '../constants/resume-tailoring.constants';
+import { RESUME_EXTRACTION_PROMPT_VERSION } from '../constants/prompt-versions.constants';
 
 @Injectable()
 export class AIContentService {
@@ -24,7 +30,7 @@ export class AIContentService {
       this.promptService.getResumeContentExtractionUserPrompt(resumeText);
 
     const result = await this.openAIService.chatCompletion({
-      model: 'gpt-4o',
+      model: MODEL_RESUME_EXTRACTION,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -40,8 +46,10 @@ export class AIContentService {
           >,
         },
       },
-      temperature: 0,
-      max_tokens: 4096,
+      temperature: TEMP_RESUME_EXTRACTION,
+      max_tokens: MAX_TOKENS_RESUME_EXTRACTION,
+      promptId: 'resume-extraction',
+      promptVersion: RESUME_EXTRACTION_PROMPT_VERSION,
     });
 
     const content = result.choices?.[0]?.message?.content;

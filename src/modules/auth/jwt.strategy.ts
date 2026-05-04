@@ -9,7 +9,6 @@ import { JwtPayload } from '../../shared/interfaces/jwt-payload.interface';
 import { UnauthorizedException } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 
-
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(

@@ -1,0 +1,61 @@
+{
+  "title": "Senior Full-Stack Engineer",
+  "contactInfo": {
+    "name": "Priya Nair",
+    "email": "priya.nair@email.com",
+    "location": "San Francisco, CA"
+  },
+  "summary": "Full-stack engineer with 7 years of experience across React, Node.js, and distributed backend systems. Delivered products adopted by over 200,000 users and drove architectural improvements that reduced infrastructure costs.",
+  "skills": {
+    "languages": ["TypeScript", "JavaScript", "Python", "SQL"],
+    "frameworks": ["React", "Next.js", "Node.js", "Express", "GraphQL"],
+    "tools": ["PostgreSQL", "Redis", "Kubernetes", "Terraform", "AWS", "GitHub Actions"]
+  },
+  "experience": [
+    {
+      "company": "Luminate Health",
+      "position": "Senior Software Engineer",
+      "startDate": "2021-04",
+      "endDate": "Present",
+      "responsibilities": [
+        "Architected a GraphQL federation layer consolidating 4 microservices, reducing average API response time by 40%",
+        "Led a 3-engineer squad to rewrite the patient onboarding flow in Next.js, cutting drop-off rate by 22%",
+        "Designed event-driven architecture using SQS and Lambda to process 2 million health records per month",
+        "Mentored 4 junior engineers through weekly 1:1s and structured code review sessions"
+      ],
+      "achievements": []
+    },
+    {
+      "company": "Nexus Payments",
+      "position": "Software Engineer",
+      "startDate": "2019-02",
+      "endDate": "2021-03",
+      "responsibilities": [
+        "Built the merchant dashboard frontend serving 15,000 active merchants using React and Redux",
+        "Implemented a Node.js webhook delivery system with retry logic handling 500,000 events per day",
+        "Optimized PostgreSQL queries for transaction reporting, reducing report generation time from 45s to 6s"
+      ],
+      "achievements": []
+    },
+    {
+      "company": "Toolbox Labs",
+      "position": "Software Engineer",
+      "startDate": "2017-07",
+      "endDate": "2019-01",
+      "responsibilities": [
+        "Developed RESTful APIs in Express.js for 3 internal SaaS tools",
+        "Migrated authentication system from session-based to JWT tokens for 10,000 users"
+      ],
+      "achievements": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "UC Berkeley",
+      "degree": "B.S. Electrical Engineering and Computer Science",
+      "startDate": "2013",
+      "endDate": "2017"
+    }
+  ],
+  "certifications": []
+}

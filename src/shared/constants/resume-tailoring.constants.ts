@@ -97,3 +97,36 @@ export const MAX_TOTAL_MINUTES = 7;
 
 /** Max output tokens for resume optimization LLM calls. */
 export const MAX_TOKENS_OPTIMIZATION = 8000;
+
+// Extended thinking budget. When enabled, max_tokens must cover budget + expected output.
+export const EXTENDED_THINKING_BUDGET_TOKENS = 4000;
+export const MAX_TOKENS_OPTIMIZATION_WITH_THINKING =
+  MAX_TOKENS_OPTIMIZATION + EXTENDED_THINKING_BUDGET_TOKENS; // 12 000
+
+// ---------------------------------------------------------------------------
+// AI Models
+// ---------------------------------------------------------------------------
+export const MODEL_RESUME_EXTRACTION = 'gpt-4o';
+export const MODEL_JD_ANALYSIS = 'gpt-4o-mini';
+export const MODEL_OPTIMIZER_FALLBACK = 'gpt-4o-2024-11-20';
+export const MODEL_PROFILE_QUESTIONS = 'gpt-4o-mini';
+export const MODEL_PROFILE_ENRICHMENT = 'claude-haiku-4-5-20251001';
+
+// ---------------------------------------------------------------------------
+// AI Temperatures (named per prompt / call-site)
+// ---------------------------------------------------------------------------
+export const TEMP_RESUME_EXTRACTION = 0;
+export const TEMP_JD_ANALYSIS = 0.05;
+export const TEMP_OPTIMIZER = 0.2;
+export const TEMP_PROFILE_QUESTIONS = 0.3;
+export const TEMP_PROFILE_ENRICHMENT = 0.2;
+export const TEMP_COVER_LETTER = 0.3;
+
+// ---------------------------------------------------------------------------
+// Max token budgets (per prompt / call-site)
+// ---------------------------------------------------------------------------
+export const MAX_TOKENS_RESUME_EXTRACTION = 4096;
+export const MAX_TOKENS_JD_ANALYSIS = 1500;
+export const MAX_TOKENS_PROFILE_QUESTIONS = 2000;
+export const MAX_TOKENS_PROFILE_ENRICHMENT = 2000;
+export const MAX_TOKENS_COVER_LETTER = 1500;

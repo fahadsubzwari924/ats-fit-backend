@@ -4,7 +4,10 @@ import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Queue, Job } from 'bull';
-import { BetaInvite, BetaInviteStatus } from '../../../database/entities/beta-invite.entity';
+import {
+  BetaInvite,
+  BetaInviteStatus,
+} from '../../../database/entities/beta-invite.entity';
 import { User } from '../../../database/entities/user.entity';
 
 @Processor('beta-access')
@@ -13,7 +16,8 @@ export class BetaPostExpiryEmailProcessor {
 
   constructor(
     @InjectQueue('beta-access') private readonly betaQueue: Queue,
-    @InjectRepository(BetaInvite) private readonly betaInviteRepo: Repository<BetaInvite>,
+    @InjectRepository(BetaInvite)
+    private readonly betaInviteRepo: Repository<BetaInvite>,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
   ) {}
 
@@ -36,14 +40,19 @@ export class BetaPostExpiryEmailProcessor {
     const invites = await this.betaInviteRepo
       .createQueryBuilder('invite')
       .where('invite.status = :status', { status: BetaInviteStatus.REDEEMED })
-      .andWhere('invite.pro_access_until BETWEEN :eightDaysAgo AND :sixDaysAgo', {
-        eightDaysAgo,
-        sixDaysAgo,
-      })
+      .andWhere(
+        'invite.pro_access_until BETWEEN :eightDaysAgo AND :sixDaysAgo',
+        {
+          eightDaysAgo,
+          sixDaysAgo,
+        },
+      )
       .andWhere('invite.redeemed_by_user_id IS NOT NULL')
       .getMany();
 
-    this.logger.log(`[BetaPostExpiryEmail] Found ${invites.length} candidates for T+7 follow-up`);
+    this.logger.log(
+      `[BetaPostExpiryEmail] Found ${invites.length} candidates for T+7 follow-up`,
+    );
 
     for (const invite of invites) {
       const user = await this.userRepo.findOne({
@@ -64,9 +73,13 @@ export class BetaPostExpiryEmailProcessor {
         { jobId: `post-expiry-${invite.id}` },
       );
 
-      this.logger.log(`[BetaPostExpiryEmail] Enqueued post-expiry follow-up for user ${user.id}`);
+      this.logger.log(
+        `[BetaPostExpiryEmail] Enqueued post-expiry follow-up for user ${user.id}`,
+      );
     }
 
-    this.logger.log(`[BetaPostExpiryEmail] Sweep complete, processed ${invites.length} candidates`);
+    this.logger.log(
+      `[BetaPostExpiryEmail] Sweep complete, processed ${invites.length} candidates`,
+    );
   }
 }

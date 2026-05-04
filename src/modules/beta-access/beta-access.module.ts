@@ -55,37 +55,47 @@ import { AdminInviteThrottleGuard } from './guards/admin-invite-throttle.guard';
 export class BetaAccessModule implements OnModuleInit {
   private readonly logger = new Logger(BetaAccessModule.name);
 
-  constructor(
-    @InjectQueue('beta-access') private readonly betaQueue: Queue,
-  ) {}
+  constructor(@InjectQueue('beta-access') private readonly betaQueue: Queue) {}
 
   async onModuleInit(): Promise<void> {
     // Remove then re-add each repeatable job so re-deploys are idempotent.
     // Bull deduplicates by the cron expression; explicit removal prevents
     // stale schedule entries accumulating after cron string changes.
 
-    await this.betaQueue.removeRepeatable('beta_expiry_sweep', { cron: '0 2 * * *' });
+    await this.betaQueue.removeRepeatable('beta_expiry_sweep', {
+      cron: '0 2 * * *',
+    });
     await this.betaQueue.add(
       'beta_expiry_sweep',
       {},
       { repeat: { cron: '0 2 * * *' }, jobId: 'beta_expiry_sweep' },
     );
-    this.logger.log('[BetaAccessModule] Registered repeatable job: beta_expiry_sweep (02:00 UTC daily)');
+    this.logger.log(
+      '[BetaAccessModule] Registered repeatable job: beta_expiry_sweep (02:00 UTC daily)',
+    );
 
-    await this.betaQueue.removeRepeatable('beta_post_expiry_email', { cron: '0 3 * * *' });
+    await this.betaQueue.removeRepeatable('beta_post_expiry_email', {
+      cron: '0 3 * * *',
+    });
     await this.betaQueue.add(
       'beta_post_expiry_email',
       {},
       { repeat: { cron: '0 3 * * *' }, jobId: 'beta_post_expiry_email' },
     );
-    this.logger.log('[BetaAccessModule] Registered repeatable job: beta_post_expiry_email (03:00 UTC daily)');
+    this.logger.log(
+      '[BetaAccessModule] Registered repeatable job: beta_post_expiry_email (03:00 UTC daily)',
+    );
 
-    await this.betaQueue.removeRepeatable('beta_invite_cleanup', { cron: '0 4 * * *' });
+    await this.betaQueue.removeRepeatable('beta_invite_cleanup', {
+      cron: '0 4 * * *',
+    });
     await this.betaQueue.add(
       'beta_invite_cleanup',
       {},
       { repeat: { cron: '0 4 * * *' }, jobId: 'beta_invite_cleanup' },
     );
-    this.logger.log('[BetaAccessModule] Registered repeatable job: beta_invite_cleanup (04:00 UTC daily)');
+    this.logger.log(
+      '[BetaAccessModule] Registered repeatable job: beta_invite_cleanup (04:00 UTC daily)',
+    );
   }
 }
