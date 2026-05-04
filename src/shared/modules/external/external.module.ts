@@ -5,9 +5,11 @@ import { EmbeddingService } from './services/embedding.service';
 import { ClaudeService } from './services/claude.service';
 import { CircuitBreakerService } from '../../services/circuit-breaker.service';
 import { BrevoService } from './services/brevo.service';
+import { LlmTelemetryService } from '../../services/llm-telemetry.service';
 
 @Module({
   providers: [
+    LlmTelemetryService,
     OpenAIService,
     S3Service,
     EmbeddingService,
@@ -16,6 +18,7 @@ import { BrevoService } from './services/brevo.service';
     BrevoService,
   ],
   exports: [
+    LlmTelemetryService,
     OpenAIService,
     S3Service,
     EmbeddingService,

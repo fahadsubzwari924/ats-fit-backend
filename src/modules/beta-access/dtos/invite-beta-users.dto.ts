@@ -16,9 +16,9 @@ export class InviteBetaUsersDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(200)
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     Array.isArray(value)
-      ? value.map((v: string) => v?.toLowerCase().trim())
+      ? (value as string[]).map((v) => v?.toLowerCase().trim())
       : value,
   )
   @IsEmail({}, { each: true })

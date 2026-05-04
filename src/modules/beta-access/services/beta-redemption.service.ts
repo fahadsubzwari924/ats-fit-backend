@@ -10,7 +10,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-import { BetaInvite, BetaInviteStatus } from '../../../database/entities/beta-invite.entity';
+import {
+  BetaInvite,
+  BetaInviteStatus,
+} from '../../../database/entities/beta-invite.entity';
 import { User } from '../../../database/entities/user.entity';
 import { BETA_ERRORS } from '../constants/beta-error-codes';
 import { normalizeEmail } from '../utils/email-normalize.util';
@@ -36,10 +39,7 @@ export class BetaRedemptionService {
     private readonly betaQueue: Queue,
   ) {}
 
-  async redeem(
-    userId: string,
-    code: string,
-  ): Promise<BetaRedemptionResult> {
+  async redeem(userId: string, code: string): Promise<BetaRedemptionResult> {
     const result = await this.dataSource.transaction(async (manager) => {
       // 1. Load invite with row-level lock to prevent concurrent redemptions
       const invite = await manager.findOne(BetaInvite, {

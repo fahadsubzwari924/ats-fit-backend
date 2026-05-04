@@ -1,0 +1,37 @@
+{
+  "title": "Frontend Developer",
+  "contactInfo": {
+    "name": "Aisha Patel",
+    "email": "aisha.patel@email.com",
+    "location": "Austin, TX"
+  },
+  "summary": "Frontend developer with 1 year of experience building responsive web applications using React and TypeScript. Focused on delivering accessible, performant user interfaces and eager to grow into a mid-level engineering role.",
+  "skills": {
+    "languages": ["JavaScript", "TypeScript", "HTML", "CSS"],
+    "frameworks": ["React", "Redux", "Tailwind CSS"],
+    "tools": ["Git", "Webpack", "Figma", "Jest"]
+  },
+  "experience": [
+    {
+      "company": "Brightline Digital",
+      "position": "Junior Frontend Developer",
+      "startDate": "2023-06",
+      "endDate": "Present",
+      "responsibilities": [
+        "Built and maintained 8 reusable React components used across 3 product pages",
+        "Reduced page load time by 15% by lazy-loading images and code-splitting bundles",
+        "Collaborated with 2 designers to translate Figma mockups into pixel-perfect UI"
+      ],
+      "achievements": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Texas at Austin",
+      "degree": "B.S. Computer Science",
+      "startDate": "2019",
+      "endDate": "2023"
+    }
+  ],
+  "certifications": []
+}

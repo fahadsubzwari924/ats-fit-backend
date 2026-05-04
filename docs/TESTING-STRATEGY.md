@@ -31,4 +31,4 @@
 
 ## Commands
 
-- Default test entry: `npm run test`
+- Default test entry: `jest`

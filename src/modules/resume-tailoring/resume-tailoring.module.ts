@@ -54,6 +54,7 @@ import { ChangesDiffComputationService } from './services/changes-diff-computati
 import { AtsChecksComputationService } from './services/ats-checks-computation.service';
 import { BulletsQuantifiedComputationService } from './services/bullets-quantified-computation.service';
 import { BulletRelevanceScoringService } from './services/bullet-relevance-scoring.service';
+import { PromptVariantResolverService } from './services/prompt-variant-resolver.service';
 
 @Module({
   imports: [
@@ -116,6 +117,7 @@ import { BulletRelevanceScoringService } from './services/bullet-relevance-scori
     ChangesDiffComputationService,
     AtsChecksComputationService,
     BulletsQuantifiedComputationService,
+    PromptVariantResolverService,
     // Interceptors
     {
       provide: APP_INTERCEPTOR,
@@ -141,6 +143,7 @@ import { BulletRelevanceScoringService } from './services/bullet-relevance-scori
     ResumeGenerationOrchestratorService,
     ResumeQueueService,
     ResumeProfileEnrichmentService,
+    PromptVariantResolverService,
   ],
 })
 export class ResumeTailoringModule {}

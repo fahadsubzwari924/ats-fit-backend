@@ -15,17 +15,17 @@
 
 ### Claude Code: dispatch via native `subagent_type`
 
-Claude Code auto-loads the full Agency persona when you dispatch with the matching `subagent_type`. The value must be the **frontmatter `name` field** from the agent file — not the filename stem:
+Claude Code auto-loads the full Agency persona when you dispatch with the matching `subagent_type`. Resolve this from `.claude/agents/_index.json`: use `subagentType` first, then `subagentTypeCandidates` in order if the first dispatch fails.
 
 ```
 Task({
-  subagent_type: "Backend Architect",   // frontmatter name, NOT "general-purpose" or "engineering-backend-architect"
+  subagent_type: "Backend Architect",   // from _index.json `subagentType`
   description: "Implement Task N: <short name>",
   prompt: "<task spec + context, exactly as Superpowers' implementer-prompt.md defines>"
 })
 ```
 
-Claude Code matches the `subagent_type` string against the `name` field in `.claude/agents/*.md` frontmatter and installs that file's body as the subagent's system prompt — no manual Read, no inlining, no ambiguity.
+Claude Code behavior can vary by version/build (display-name vs slug matching). `_index.json` compatibility candidates remove guesswork — keep retrying within that ordered list before treating it as missing.
 
 **Substitution rule for Superpowers:** when `subagent-driven-development`'s `implementer-prompt.md` shows `Task tool (general-purpose)`, **substitute** the Agency `subagent_type` from the tables below. The Superpowers template is transport; the persona is Agency. This is mandatory, not optional.
 
@@ -37,13 +37,13 @@ Claude Code matches the `subagent_type` string against the `name` field in `.cla
 | Plan is silent on roles | Map each task using the tables below. Prefer listing concrete agent filenames in the plan when ambiguous. |
 | User says "sub-agent" / "Task" execution | Treat that as Superpowers **transport** only; **persona** still comes from Agency as above. |
 
-> **Naming warning (Claude Code ≠ Cursor):** Claude Code uses the **frontmatter `name` field** (e.g. `Backend Architect`) — pass this as `subagent_type`. Cursor uses the slugified frontmatter `name:` field without spaces (`backend-architect`) as a rule reference (`@agency-backend-architect.mdc`). They are NOT interchangeable — use the column that matches your platform.
+> **Naming warning (Claude Code ≠ Cursor):** Cursor uses `@agency-<slug>.mdc`; use each agent entry's `_index.json` `cursorRule` field. Claude Code uses `subagent_type`; use `subagentType` then `subagentTypeCandidates`.
 
 **Anti-pattern:** Dispatching implementation subagents with `subagent_type: "general-purpose"` when this repo vendors Agency. The Agency file (200+ lines of constraints, anti-patterns, deliverable templates) is the point — skipping it produces generic output.
 
 ## Engineering agents
 
-> Claude Code uses the **frontmatter `name` field** as `subagent_type`. Cursor uses the slugified name as a rule reference. See warning above. If unsure, open `.claude/agents/_index.json` and use the `subagentType` value.
+> If unsure, open `.claude/agents/_index.json` and use `subagentType` (+ fallback `subagentTypeCandidates`) for Claude Code and `cursorRule` for Cursor.
 
 | Task focus | Claude Code `subagent_type` | Cursor rule | Role |
 |------------|-----------------------------|-------------|------|

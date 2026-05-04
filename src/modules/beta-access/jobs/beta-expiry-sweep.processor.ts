@@ -5,8 +5,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { In, Repository } from 'typeorm';
 import { Queue, Job } from 'bull';
-import { BetaInvite, BetaInviteStatus } from '../../../database/entities/beta-invite.entity';
-import { User } from '../../../database/entities/user.entity';
+import {
+  BetaInvite,
+  BetaInviteStatus,
+} from '../../../database/entities/beta-invite.entity';
+import { User, UserPlan } from '../../../database/entities/user.entity';
 import { BrevoService } from '../../../shared/modules/external/services/brevo.service';
 
 interface BetaExpiringSoonEmailJobData {
@@ -35,7 +38,8 @@ export class BetaExpirySweepProcessor {
 
   constructor(
     @InjectQueue('beta-access') private readonly betaQueue: Queue,
-    @InjectRepository(BetaInvite) private readonly betaInviteRepo: Repository<BetaInvite>,
+    @InjectRepository(BetaInvite)
+    private readonly betaInviteRepo: Repository<BetaInvite>,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     private readonly brevoService: BrevoService,
     private readonly configService: ConfigService,
@@ -67,10 +71,14 @@ export class BetaExpirySweepProcessor {
       .andWhere('invite.redeemed_by_user_id IS NOT NULL')
       .getMany();
 
-    this.logger.log(`[BetaExpirySweep] Sweep A: found ${expiringInvites.length} invites expiring soon`);
+    this.logger.log(
+      `[BetaExpirySweep] Sweep A: found ${expiringInvites.length} invites expiring soon`,
+    );
 
     for (const invite of expiringInvites) {
-      const user = await this.userRepo.findOne({ where: { id: invite.redeemed_by_user_id } });
+      const user = await this.userRepo.findOne({
+        where: { id: invite.redeemed_by_user_id },
+      });
       if (!user || !user.is_beta_user) continue;
 
       const msUntilExpiry = invite.pro_access_until.getTime() - now.getTime();
@@ -89,7 +97,9 @@ export class BetaExpirySweepProcessor {
         { jobId: `expiry-reminder-${invite.id}` },
       );
 
-      this.logger.log(`[BetaExpirySweep] Enqueued expiry reminder for user ${user.id} (${daysRemaining}d remaining)`);
+      this.logger.log(
+        `[BetaExpirySweep] Enqueued expiry reminder for user ${user.id} (${daysRemaining}d remaining)`,
+      );
     }
 
     // --- Sweep B: Downgrade expired beta users ---
@@ -100,16 +110,18 @@ export class BetaExpirySweepProcessor {
       .andWhere('user.beta_access_until < :now', { now })
       .getMany();
 
-    this.logger.log(`[BetaExpirySweep] Sweep B: found ${expiredUsers.length} expired beta users`);
+    this.logger.log(
+      `[BetaExpirySweep] Sweep B: found ${expiredUsers.length} expired beta users`,
+    );
 
     if (expiredUsers.length > 0) {
       const expiredUserIds = expiredUsers.map((u) => u.id);
 
       // Bulk downgrade: single UPDATE instead of per-user saves
-      await this.userRepo.update(
-        { id: In(expiredUserIds) },
-        { beta_access_until: null, plan: 'FREEMIUM' } as any,
-      );
+      await this.userRepo.update({ id: In(expiredUserIds) }, {
+        beta_access_until: null,
+        plan: UserPlan.FREEMIUM,
+      } as Partial<User>);
 
       // Lock founding rate for users who qualify but don't already have it set
       const usersNeedingRateLock = expiredUsers
@@ -117,25 +129,32 @@ export class BetaExpirySweepProcessor {
         .map((u) => u.id);
 
       if (usersNeedingRateLock.length > 0) {
-        await this.userRepo.update(
-          { id: In(usersNeedingRateLock) },
-          { founding_rate_locked: true } as any,
-        );
+        await this.userRepo.update({ id: In(usersNeedingRateLock) }, {
+          founding_rate_locked: true,
+        } as Partial<User>);
       }
 
       // Enqueue post-expiry emails for each downgraded user
       for (const user of expiredUsers) {
         await this.betaQueue.add(
           'beta_ended_offer_email',
-          { userId: user.id, email: user.email, name: user.full_name } as BetaEndedOfferEmailJobData,
+          {
+            userId: user.id,
+            email: user.email,
+            name: user.full_name,
+          } as BetaEndedOfferEmailJobData,
           { jobId: `beta-ended-${user.id}` },
         );
       }
 
-      this.logger.log(`[BetaExpirySweep] Bulk downgraded ${expiredUsers.length} users`);
+      this.logger.log(
+        `[BetaExpirySweep] Bulk downgraded ${expiredUsers.length} users`,
+      );
     }
 
-    this.logger.log(`[BetaExpirySweep] Sweep complete. A=${expiringInvites.length} reminders, B=${expiredUsers.length} downgrades`);
+    this.logger.log(
+      `[BetaExpirySweep] Sweep complete. A=${expiringInvites.length} reminders, B=${expiredUsers.length} downgrades`,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -157,7 +176,9 @@ export class BetaExpirySweepProcessor {
       .andWhere('code_expires_at < :now', { now })
       .execute();
 
-    this.logger.log(`[BetaInviteCleanup] Marked ${result.affected ?? 0} pending invites as expired`);
+    this.logger.log(
+      `[BetaInviteCleanup] Marked ${result.affected ?? 0} pending invites as expired`,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -165,18 +186,27 @@ export class BetaExpirySweepProcessor {
   // Enqueued by Sweep A above with a stable jobId for idempotency.
   // -------------------------------------------------------------------------
   @Process('beta_expiring_soon_email')
-  async handleBetaExpiringSoonEmail(job: Job<BetaExpiringSoonEmailJobData>): Promise<void> {
+  async handleBetaExpiringSoonEmail(
+    job: Job<BetaExpiringSoonEmailJobData>,
+  ): Promise<void> {
     const { userId, email, name, daysRemaining, betaAccessUntil } = job.data;
 
-    this.logger.log(`[BetaExpiringSoonEmail] Processing job ${job.id} for user ${userId}`);
+    this.logger.log(
+      `[BetaExpiringSoonEmail] Processing job ${job.id} for user ${userId}`,
+    );
 
-    const templateId = this.configService.get<number>('BREVO_TEMPLATE_ID_BETA_EXPIRING_SOON');
+    const templateId = this.configService.get<number>(
+      'BREVO_TEMPLATE_ID_BETA_EXPIRING_SOON',
+    );
     if (!templateId) {
-      this.logger.warn(`BREVO_TEMPLATE_ID_BETA_EXPIRING_SOON not configured — skipping for user ${userId}`);
+      this.logger.warn(
+        `BREVO_TEMPLATE_ID_BETA_EXPIRING_SOON not configured — skipping for user ${userId}`,
+      );
       return;
     }
 
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') ?? 'https://tairly.com';
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ?? 'https://tairly.com';
 
     try {
       await this.brevoService.sendTransactionalEmail({
@@ -190,7 +220,9 @@ export class BetaExpirySweepProcessor {
         },
       });
 
-      this.logger.log(`[BetaExpiringSoonEmail] Sent to ${email} (user: ${userId})`);
+      this.logger.log(
+        `[BetaExpiringSoonEmail] Sent to ${email} (user: ${userId})`,
+      );
     } catch (error) {
       this.logger.error(`[BetaExpiringSoonEmail] Failed for user ${userId}`, {
         error: (error as Error).message,
@@ -205,18 +237,27 @@ export class BetaExpirySweepProcessor {
   // Enqueued by Sweep B above with a stable jobId for idempotency.
   // -------------------------------------------------------------------------
   @Process('beta_ended_offer_email')
-  async handleBetaEndedOfferEmail(job: Job<BetaEndedOfferEmailJobData>): Promise<void> {
+  async handleBetaEndedOfferEmail(
+    job: Job<BetaEndedOfferEmailJobData>,
+  ): Promise<void> {
     const { userId, email, name } = job.data;
 
-    this.logger.log(`[BetaEndedOfferEmail] Processing job ${job.id} for user ${userId}`);
+    this.logger.log(
+      `[BetaEndedOfferEmail] Processing job ${job.id} for user ${userId}`,
+    );
 
-    const templateId = this.configService.get<number>('BREVO_TEMPLATE_ID_BETA_ENDED_OFFER');
+    const templateId = this.configService.get<number>(
+      'BREVO_TEMPLATE_ID_BETA_ENDED_OFFER',
+    );
     if (!templateId) {
-      this.logger.warn(`BREVO_TEMPLATE_ID_BETA_ENDED_OFFER not configured — skipping for user ${userId}`);
+      this.logger.warn(
+        `BREVO_TEMPLATE_ID_BETA_ENDED_OFFER not configured — skipping for user ${userId}`,
+      );
       return;
     }
 
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') ?? 'https://tairly.com';
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ?? 'https://tairly.com';
 
     try {
       await this.brevoService.sendTransactionalEmail({
@@ -228,7 +269,9 @@ export class BetaExpirySweepProcessor {
         },
       });
 
-      this.logger.log(`[BetaEndedOfferEmail] Sent to ${email} (user: ${userId})`);
+      this.logger.log(
+        `[BetaEndedOfferEmail] Sent to ${email} (user: ${userId})`,
+      );
     } catch (error) {
       this.logger.error(`[BetaEndedOfferEmail] Failed for user ${userId}`, {
         error: (error as Error).message,
@@ -243,18 +286,27 @@ export class BetaExpirySweepProcessor {
   // Enqueued by the post-expiry cron processor (Job 2).
   // -------------------------------------------------------------------------
   @Process('beta_post_expiry_followup_email')
-  async handleBetaPostExpiryFollowupEmail(job: Job<BetaPostExpiryFollowupEmailJobData>): Promise<void> {
+  async handleBetaPostExpiryFollowupEmail(
+    job: Job<BetaPostExpiryFollowupEmailJobData>,
+  ): Promise<void> {
     const { userId, email, name } = job.data;
 
-    this.logger.log(`[BetaPostExpiryFollowupEmail] Processing job ${job.id} for user ${userId}`);
+    this.logger.log(
+      `[BetaPostExpiryFollowupEmail] Processing job ${job.id} for user ${userId}`,
+    );
 
-    const templateId = this.configService.get<number>('BREVO_TEMPLATE_ID_BETA_POST_EXPIRY_FOLLOWUP');
+    const templateId = this.configService.get<number>(
+      'BREVO_TEMPLATE_ID_BETA_POST_EXPIRY_FOLLOWUP',
+    );
     if (!templateId) {
-      this.logger.warn(`BREVO_TEMPLATE_ID_BETA_POST_EXPIRY_FOLLOWUP not configured — skipping for user ${userId}`);
+      this.logger.warn(
+        `BREVO_TEMPLATE_ID_BETA_POST_EXPIRY_FOLLOWUP not configured — skipping for user ${userId}`,
+      );
       return;
     }
 
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') ?? 'https://tairly.com';
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ?? 'https://tairly.com';
 
     try {
       await this.brevoService.sendTransactionalEmail({
@@ -266,12 +318,17 @@ export class BetaExpirySweepProcessor {
         },
       });
 
-      this.logger.log(`[BetaPostExpiryFollowupEmail] Sent to ${email} (user: ${userId})`);
+      this.logger.log(
+        `[BetaPostExpiryFollowupEmail] Sent to ${email} (user: ${userId})`,
+      );
     } catch (error) {
-      this.logger.error(`[BetaPostExpiryFollowupEmail] Failed for user ${userId}`, {
-        error: (error as Error).message,
-        jobId: job.id,
-      });
+      this.logger.error(
+        `[BetaPostExpiryFollowupEmail] Failed for user ${userId}`,
+        {
+          error: (error as Error).message,
+          jobId: job.id,
+        },
+      );
       throw error;
     }
   }

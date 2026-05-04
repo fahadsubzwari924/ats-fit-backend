@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { ConfigService } from '@nestjs/config';
 import { head } from 'lodash';
 import { InternalServerErrorException } from '../../../exceptions/custom-http-exceptions';
+import { LlmTelemetryService } from '../../../services/llm-telemetry.service';
 
 type OpenApiResponseFormat =
   | { type: 'text' }
@@ -26,6 +27,9 @@ interface OpenApiRequestParams {
   response_format?: OpenApiResponseFormat;
   temperature?: number;
   max_tokens?: number;
+  promptId?: string;
+  promptVersion?: string;
+  fallback_triggered?: boolean;
 }
 
 @Injectable()
@@ -33,38 +37,47 @@ export class OpenAIService {
   private readonly logger = new Logger(OpenAIService.name);
   private openai: OpenAI;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private readonly telemetryService: LlmTelemetryService,
+  ) {
     this.openai = new OpenAI({
       apiKey: this.configService.get<string>('OPENAI_API_KEY'),
     });
   }
 
   async chatCompletion(params: OpenApiRequestParams) {
-    // try {
-    //   const completion = await this.openai.chat.completions.create({
-    //     model: params.model || 'gpt-4',
-    //     messages: params.messages,
-    //     response_format: params.response_format,
-    //     temperature: params.temperature || 0.7, // Balanced creativity
-    //     max_tokens: params.max_tokens || 2000,
-    //   });
+    const maxRetries = this.configService.get<number>('OPENAI_MAX_RETRIES', 3);
+    const initialDelay = this.configService.get<number>(
+      'OPENAI_RETRY_DELAY',
+      1000,
+    );
 
-    //   return completion;
-    // } catch (error) {
-    //   this.logger.error('OpenAI API Error', error);
-    //   throw new Error('Failed to generate AI response');
-    // }
-
-    const maxRetries = this.configService.get<number>('OPENAI_MAX_RETRIES');
-    const initialDelay = this.configService.get<number>('OPENAI_RETRY_DELAY');
-
+    const callStart = Date.now();
     let attempt = 0;
+    let retryCount = 0;
     while (attempt < maxRetries) {
       try {
         const response = await this.makeOpenAiRequest(params);
+
+        this.telemetryService.record({
+          prompt_id: params.promptId ?? 'unknown',
+          prompt_version: params.promptVersion ?? 'unknown',
+          model: params.model,
+          input_tokens: response.usage?.prompt_tokens ?? 0,
+          output_tokens: response.usage?.completion_tokens ?? 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          latency_ms: Date.now() - callStart,
+          retry_count: retryCount,
+          parse_outcome: 'success',
+          fallback_triggered: params.fallback_triggered ?? false,
+        });
+
         return response;
       } catch (error) {
         attempt++;
+        retryCount++;
         if (attempt === maxRetries) {
           this.logger.error(
             `Open AI API failed after ${maxRetries} attempts`,

@@ -25,15 +25,22 @@ export class BetaInviteEmailProcessor {
   async handleBetaInviteEmail(job: Job<BetaInviteEmailJobData>): Promise<void> {
     const { inviteId, email, name, code, expiresAt } = job.data;
 
-    this.logger.log(`Processing beta_invite_email job ${job.id} for invite ${inviteId}`);
+    this.logger.log(
+      `Processing beta_invite_email job ${job.id} for invite ${inviteId}`,
+    );
 
-    const templateId = this.configService.get<number>('BREVO_TEMPLATE_ID_BETA_INVITE');
+    const templateId = this.configService.get<number>(
+      'BREVO_TEMPLATE_ID_BETA_INVITE',
+    );
     if (!templateId) {
-      this.logger.warn(`BREVO_TEMPLATE_ID_BETA_INVITE not configured — skipping email for invite ${inviteId}`);
+      this.logger.warn(
+        `BREVO_TEMPLATE_ID_BETA_INVITE not configured — skipping email for invite ${inviteId}`,
+      );
       return;
     }
 
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') ?? 'https://tairly.com';
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ?? 'https://tairly.com';
 
     try {
       await this.brevoService.sendTransactionalEmail({
@@ -47,12 +54,17 @@ export class BetaInviteEmailProcessor {
         },
       });
 
-      this.logger.log(`Beta invite email sent to ${email} (invite: ${inviteId})`);
+      this.logger.log(
+        `Beta invite email sent to ${email} (invite: ${inviteId})`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to send beta invite email to ${email} (invite: ${inviteId})`, {
-        error: (error as Error).message,
-        jobId: job.id,
-      });
+      this.logger.error(
+        `Failed to send beta invite email to ${email} (invite: ${inviteId})`,
+        {
+          error: (error as Error).message,
+          jobId: job.id,
+        },
+      );
       throw error;
     }
   }

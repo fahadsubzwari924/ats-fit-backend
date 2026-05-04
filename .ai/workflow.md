@@ -61,5 +61,5 @@ Skip TDD only when user explicitly opts out or project has no harness yet—then
 | Step | Command |
 |------|---------|
 | Lint | `npm run lint` |
-| Test | `npm run test` |
+| Test | `jest` |
 | Build | `npm run build` |

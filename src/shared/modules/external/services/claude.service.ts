@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InternalServerErrorException } from '../../../exceptions/custom-http-exceptions';
 import { ClaudeRequestParams, ClaudeResponse } from '../interfaces';
 import { AIErrorUtil } from '../../../utils/ai-error.util';
+import { LlmTelemetryService } from '../../../services/llm-telemetry.service';
 
 @Injectable()
 export class ClaudeService {
@@ -21,7 +22,10 @@ export class ClaudeService {
   /** Default model resolved once at startup from env; callers may override per-request. */
   readonly defaultModel: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private readonly telemetryService: LlmTelemetryService,
+  ) {
     this.apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
     this.baseUrl = this.configService.get<string>('CLAUDE_CHAT_API_ENDPOINT');
     this.defaultModel = this.configService.get<string>(
@@ -57,13 +61,31 @@ export class ClaudeService {
       });
     }
 
+    const callStart = Date.now();
     let attempt = 0;
+    let retryCount = 0;
     while (attempt < maxRetries) {
       try {
         this.activeRequests++;
         const response = await this.makeClaudeRequest(params);
         this.activeRequests--;
         this.processQueue();
+
+        this.telemetryService.record({
+          prompt_id: params.promptId ?? 'unknown',
+          prompt_version: params.promptVersion ?? 'unknown',
+          model: params.model ?? this.defaultModel,
+          input_tokens: response.usage?.input_tokens ?? 0,
+          output_tokens: response.usage?.output_tokens ?? 0,
+          cache_read_input_tokens: response.usage?.cache_read_input_tokens ?? 0,
+          cache_creation_input_tokens:
+            response.usage?.cache_creation_input_tokens ?? 0,
+          latency_ms: Date.now() - callStart,
+          retry_count: retryCount,
+          parse_outcome: 'success',
+          fallback_triggered: false,
+        });
+
         return response;
       } catch (error) {
         this.activeRequests--;
@@ -74,17 +96,44 @@ export class ClaudeService {
           this.logger.warn(
             'Claude API overloaded (529), skipping retries and failing fast for immediate fallback',
           );
+          this.telemetryService.record({
+            prompt_id: params.promptId ?? 'unknown',
+            prompt_version: params.promptVersion ?? 'unknown',
+            model: params.model ?? this.defaultModel,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+            latency_ms: Date.now() - callStart,
+            retry_count: retryCount,
+            parse_outcome: 'failure',
+            fallback_triggered: false,
+          });
           throw new InternalServerErrorException(
             'Claude API overloaded - immediate fallback required',
           );
         }
 
         attempt++;
+        retryCount++;
         if (attempt === maxRetries) {
           this.logger.error(
             `Claude API failed after ${maxRetries} attempts`,
             error,
           );
+          this.telemetryService.record({
+            prompt_id: params.promptId ?? 'unknown',
+            prompt_version: params.promptVersion ?? 'unknown',
+            model: params.model ?? this.defaultModel,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+            latency_ms: Date.now() - callStart,
+            retry_count: retryCount,
+            parse_outcome: 'failure',
+            fallback_triggered: false,
+          });
           throw new InternalServerErrorException(
             'Claude API failed after maximum retries',
           );
@@ -120,24 +169,48 @@ export class ClaudeService {
       throw new Error('ANTHROPIC_API_KEY is required for Claude API calls');
     }
 
+    interface AnthropicRequestBody {
+      model: string;
+      messages: ClaudeRequestParams['messages'];
+      max_tokens: number;
+      temperature: number;
+      system?:
+        | string
+        | Array<{
+            type: 'text';
+            text: string;
+            cache_control?: { type: 'ephemeral' };
+          }>;
+      tools?: Array<{
+        name: string;
+        description: string;
+        input_schema: Record<string, unknown>;
+      }>;
+      tool_choice?: { type: 'tool'; name: string };
+      thinking?: { type: 'enabled'; budget_tokens: number };
+      betas?: string[];
+    }
+
     // Optimize request body for better performance
-    const requestBody: any = {
+    const requestBody: AnthropicRequestBody = {
       model: params.model || this.defaultModel,
       messages: params.messages,
       max_tokens: params.max_tokens || 4000,
       temperature: params.temperature || 0.1,
     };
 
-    // Add system parameter for better performance if not present
-    const hasSystemMessage = params.messages.some(
-      (msg) =>
-        typeof msg === 'object' &&
-        'role' in msg &&
-        (msg as { role?: string }).role === 'system',
-    );
-    if (!hasSystemMessage) {
-      (requestBody as { system?: string }).system =
+    if (params.system) {
+      requestBody.system = params.system;
+    } else {
+      // Fallback default for callers that don't pass a structured system block
+      requestBody.system =
         'You are a helpful AI assistant. Provide concise, accurate responses in the requested format.';
+    }
+
+    if (params.tools) requestBody.tools = params.tools;
+    if (params.tool_choice) requestBody.tool_choice = params.tool_choice;
+    if (params.thinking) {
+      requestBody.thinking = params.thinking;
     }
 
     const startTime = Date.now();
@@ -156,6 +229,9 @@ export class ClaudeService {
           'Content-Type': 'application/json',
           'x-api-key': this.apiKey,
           'anthropic-version': '2023-06-01',
+          'anthropic-beta': params.thinking
+            ? 'prompt-caching-2024-07-31,interleaved-thinking-2025-05-14'
+            : 'prompt-caching-2024-07-31',
           'User-Agent': 'ATS-Fit-Backend/1.0',
         },
         body: JSON.stringify(requestBody),
@@ -180,28 +256,35 @@ export class ClaudeService {
 
       // Transform Claude response to match OpenAI format for compatibility
       let content = '';
-      function isClaudeApiResponse(
-        data: unknown,
-      ): data is { content: Array<{ text: string }> } {
-        if (
-          typeof data === 'object' &&
-          data !== null &&
-          Object.prototype.hasOwnProperty.call(data, 'content')
-        ) {
-          const content = (data as { content?: unknown }).content;
-          return (
-            Array.isArray(content) &&
-            content.length > 0 &&
-            typeof content[0] === 'object' &&
-            content[0] !== null &&
-            'text' in content[0] &&
-            typeof (content[0] as { text?: unknown }).text === 'string'
-          );
-        }
-        return false;
+
+      const rawData = data as {
+        content?: Array<{ type?: string; text?: string; input?: unknown }>;
+        usage?: {
+          input_tokens?: number;
+          output_tokens?: number;
+          cache_read_input_tokens?: number;
+          cache_creation_input_tokens?: number;
+        };
+        stop_reason?: string;
+      };
+
+      // Handle tool_use response blocks first, then fall back to text blocks
+      const toolBlock = rawData.content?.find((c) => c.type === 'tool_use');
+      if (toolBlock?.input !== undefined && toolBlock.input !== null) {
+        content = JSON.stringify(toolBlock.input);
+      } else if (rawData.content?.[0]?.type === 'text') {
+        content = rawData.content[0].text ?? '';
       }
-      if (isClaudeApiResponse(data)) {
-        content = data.content[0].text;
+
+      let usage: ClaudeResponse['usage'];
+      if (rawData.usage) {
+        usage = {
+          input_tokens: rawData.usage.input_tokens ?? 0,
+          output_tokens: rawData.usage.output_tokens ?? 0,
+          cache_read_input_tokens: rawData.usage.cache_read_input_tokens ?? 0,
+          cache_creation_input_tokens:
+            rawData.usage.cache_creation_input_tokens ?? 0,
+        };
       }
 
       return {
@@ -210,8 +293,10 @@ export class ClaudeService {
             message: {
               content,
             },
+            finish_reason: rawData.stop_reason,
           },
         ],
+        usage,
       };
     } catch (error) {
       const processingTime = Date.now() - startTime;

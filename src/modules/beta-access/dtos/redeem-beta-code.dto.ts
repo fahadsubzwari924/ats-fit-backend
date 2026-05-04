@@ -3,7 +3,7 @@ import { Transform } from 'class-transformer';
 
 export class RedeemBetaCodeDto {
   @IsString()
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.toUpperCase().trim() : value,
   )
   @Matches(/^BETA-[A-Z2-9]{8}$/)
