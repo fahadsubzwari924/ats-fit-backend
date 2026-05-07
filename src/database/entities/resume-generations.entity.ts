@@ -82,6 +82,9 @@ export class ResumeGeneration {
   @Column('jsonb', { nullable: true })
   changes_diff: any;
 
+  @Column('jsonb', { nullable: true })
+  cover_letter: any;
+
   @Column({ name: 'prompt_version', nullable: true, length: 16 })
   prompt_version: string | null;
 

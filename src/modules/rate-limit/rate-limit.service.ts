@@ -516,12 +516,19 @@ export class RateLimitService {
   /**
    * Initialize rate limit configurations if they don't exist.
    *
-   * Canonical set (5 configs):
-   *   FREEMIUM / RESUME_GENERATION        → 3
-   *   FREEMIUM / COVER_LETTER             → 1
-   *   PREMIUM  / RESUME_GENERATION        → 30
-   *   PREMIUM  / COVER_LETTER             → 15
-   *   PREMIUM  / RESUME_BATCH_GENERATION  → 10
+   * Canonical set (5 configs) — shared-pool model:
+   *   FREEMIUM / RESUME_GENERATION        → 3   tailored resumes / month
+   *   FREEMIUM / COVER_LETTER             → 1   cover letter / month
+   *   PREMIUM  / RESUME_GENERATION        → 30  tailored resumes / month (single + batch share this pool)
+   *   PREMIUM  / COVER_LETTER             → 15  cover letters / month
+   *   PREMIUM  / RESUME_BATCH_GENERATION  → 10  batch JOBS / month (structural cap on batch UX, NOT a separate resume budget)
+   *
+   * Shared-pool semantics:
+   *   - Single tailoring → +1 RESUME_GENERATION
+   *   - Batch tailoring with N jobs → +1 RESUME_BATCH_GENERATION AND +1 RESUME_GENERATION per
+   *     resume successfully produced inside the batch (so a 3-job batch costs 3 from the monthly 30).
+   *   - Batch route pre-checks both `currentUsage(RESUME_GENERATION) + N ≤ 30` and
+   *     `currentUsage(RESUME_BATCH_GENERATION) + 1 ≤ 10` before enqueueing.
    *
    * Intentional omissions:
    *   - FREEMIUM / RESUME_BATCH_GENERATION: blocked at route level by PremiumUserGuard
@@ -534,35 +541,37 @@ export class RateLimitService {
         user_type: UserType.REGISTERED,
         feature_type: FeatureType.RESUME_GENERATION,
         monthly_limit: 3,
-        description: 'Freemium users can generate 3 resumes per month',
+        description: 'Free plan: 3 tailored resumes per month',
       },
       {
         plan: UserPlan.FREEMIUM,
         user_type: UserType.REGISTERED,
         feature_type: FeatureType.COVER_LETTER,
         monthly_limit: 1,
-        description: 'Freemium users can generate 1 cover letter per month',
+        description: 'Free plan: 1 cover letter per month',
       },
       {
         plan: UserPlan.PREMIUM,
         user_type: UserType.REGISTERED,
         feature_type: FeatureType.RESUME_GENERATION,
         monthly_limit: 30,
-        description: 'Premium users can generate 30 resumes per month',
+        description:
+          'Pro plan: 30 tailored resumes per month — single + batch share this pool',
       },
       {
         plan: UserPlan.PREMIUM,
         user_type: UserType.REGISTERED,
         feature_type: FeatureType.COVER_LETTER,
         monthly_limit: 15,
-        description: 'Premium users can generate 15 cover letters per month',
+        description: 'Pro plan: 15 cover letters per month',
       },
       {
         plan: UserPlan.PREMIUM,
         user_type: UserType.REGISTERED,
         feature_type: FeatureType.RESUME_BATCH_GENERATION,
         monthly_limit: 10,
-        description: 'Premium users can run 10 batch generations per month',
+        description:
+          'Pro plan: 10 batch jobs per month (structural cap; each resume in a batch also counts toward the 30/mo tailored-resume pool)',
       },
     ];
 

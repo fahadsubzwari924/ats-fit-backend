@@ -3,11 +3,31 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Request } from 'express';
 import { Repository } from 'typeorm';
 import { User } from '../../database/entities/user.entity';
 import { JwtPayload } from '../../shared/interfaces/jwt-payload.interface';
 import { UnauthorizedException } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
+
+/**
+ * Paths allowed to authenticate via `?access_token=` query parameter.
+ *
+ * URL-based tokens leak into access logs, `Referer` headers, browser history,
+ * and APM tools, so they are restricted to Server-Sent Events (SSE) endpoints
+ * where the EventSource browser API cannot send custom Authorization headers.
+ * All other endpoints must use the `Authorization: Bearer` header.
+ */
+const ssePaths = [/\/batch\/v2\/[^/]+\/events$/];
+
+const ssePathExtractor = (req: Request): string | null => {
+  if (!req?.url) return null;
+  const matchesSse = ssePaths.some((re) => re.test(req.url.split('?')[0]));
+  if (!matchesSse) return null;
+  const token = (req.query as { access_token?: string } | undefined)
+    ?.access_token;
+  return typeof token === 'string' ? token : null;
+};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -17,7 +37,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly userRepository: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        ssePathExtractor,
+      ]),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET'),
     });

@@ -1,5 +1,7 @@
 # Freemium + Pro Pricing Model Implementation Plan
 
+> **2026-05-07 — partially superseded by shared-pool quota model.** Tasks 1–8 below describe the original separate-pools implementation (30 single + 10 batch jobs of 3 = up to 60 tailored resumes/month). After unit-economics review, the model was revised so single + batch share a single pool of 30 tailored resumes/month, with 10 batch jobs as a structural cap. The revised semantics live in `docs/superpowers/specs/2026-04-13-freemium-pro-pricing-model-design.md` (Section 2 onward). The seed data, plan entitlements, and `initializeRateLimitConfigs` numeric limits in this plan still apply — the change is in **how `RESUME_GENERATION` is incremented for batch jobs** (now +1 per resume produced in a batch) and an added in-handler pre-check on the batch route. See the design spec for the canonical implementation details.
+
 > **For agentic workers:** Dispatch each task using the Agency specialist agent below. Use `subagent_type: "engineering-backend-architect"` for all implementation tasks and `subagent_type: "testing-api-tester"` for test-only tasks. Follow the superpowers:subagent-driven-development skill for transport (fresh context, two-stage review, status handling).
 
 **Goal:** Replace the old three-plan seed data and misaligned rate limit configs with a clean Freemium + Pro two-tier pricing model, enforcing all per-plan limits in the backend.

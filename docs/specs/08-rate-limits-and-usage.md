@@ -32,12 +32,24 @@ Used for quotas and guard metadata:
 
 | Value | Typical use |
 |-------|-------------|
-| `resume_generation` | Single tailored PDF generation |
+| `resume_generation` | **Tailored resume produced (single OR each resume inside a batch).** This is the canonical "tailored resume" counter shown to the user. |
 | `job_application_tracking` | Reserved for application tracking limits (if enforced) |
 | `cover_letter` | Cover letter generation |
-| `resume_batch_generation` | Batch tailor endpoint |
+| `resume_batch_generation` | **Batch *job* (per request to the batch endpoint), structural cap on how often the batch UX can be invoked.** Independent from the per-resume counter. |
 
 **Authoritative enum:** `database/entities/usage-tracking.entity.ts`.
+
+### Shared-pool model (Pro)
+
+Pro users get **30 tailored resumes per month** as a single shared pool. Every resume produced — by single tailoring or batch — consumes 1 unit of `resume_generation`. The `resume_batch_generation` counter (10/mo for Pro) is a structural cap on **batch jobs**, not an additional resume budget.
+
+**Increment rules:**
+- Single tailoring (`POST /resume-tailoring/generate`) → `resume_generation += 1`.
+- Batch tailoring (`POST /resume-tailoring/batch-generate` with N jobs) → `resume_batch_generation += 1` (the job itself), and `resume_generation += 1` per resume successfully completed inside the batch.
+
+**Pre-check on batch:** The batch endpoint pre-validates that `currentUsage(resume_generation) + N ≤ 30` (and that `currentUsage(resume_batch_generation) + 1 ≤ 10`). Either condition failing → **403** `RATE_LIMIT_EXCEEDED` with the limiting feature in the error payload.
+
+**User-facing display:** Dashboard shows ONE primary stat — `resume_generation` (e.g. *"23 of 30 tailored resumes used this month"*). The batch-jobs counter is secondary and only surfaced inside the Quick Tailor flow.
 
 ## Global guard
 

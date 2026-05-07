@@ -20,45 +20,57 @@ import {
   EnrichedResumeProfile,
   PasswordResetToken,
   BetaInvite,
+  BatchTailoringRun,
+  BatchTailoringJob,
 } from './entities';
 
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DATABASE_HOST'),
-        port: configService.get<number>('DATABASE_PORT'),
-        username: configService.get<string>('DATABASE_USERNAME'),
-        password: configService.get<string>('DATABASE_PASSWORD'),
-        database: configService.get<string>('DATABASE_NAME'),
-        entities: [
-          User,
-          ResumeGeneration,
-          ResumeTemplate,
-          UsageTracking,
-          RateLimitConfig,
-          AtsMatchHistory,
-          Resume,
-          JobApplication,
-          QueueMessage,
-          ExtractedResumeContent,
-          ResumeGenerationResult,
-          SubscriptionPlan,
-          UserSubscription,
-          PaymentHistory,
-          TailoringQuestion,
-          EnrichedResumeProfile,
-          PasswordResetToken,
-          BetaInvite,
-        ],
-        synchronize: false, // Disabled to use migrations instead
-        logging: process.env.NODE_ENV !== 'production',
-        migrations: [__dirname + '/migrations/*.ts'],
-        migrationsTableName: 'migrations',
-        migrationsRun: false, // Set to true if you want to run migrations automatically
-      }),
+      useFactory: (configService: ConfigService) => {
+        const dbUrl = configService.get<string>('DATABASE_URL');
+        const connectionConfig = dbUrl
+          ? { url: dbUrl }
+          : {
+              host: configService.get<string>('DATABASE_HOST'),
+              port: configService.get<number>('DATABASE_PORT'),
+              username: configService.get<string>('DATABASE_USERNAME'),
+              password: configService.get<string>('DATABASE_PASSWORD'),
+              database: configService.get<string>('DATABASE_NAME'),
+            };
+        return {
+          type: 'postgres' as const,
+          ...connectionConfig,
+          entities: [
+            User,
+            ResumeGeneration,
+            ResumeTemplate,
+            UsageTracking,
+            RateLimitConfig,
+            AtsMatchHistory,
+            Resume,
+            JobApplication,
+            QueueMessage,
+            ExtractedResumeContent,
+            ResumeGenerationResult,
+            SubscriptionPlan,
+            UserSubscription,
+            PaymentHistory,
+            TailoringQuestion,
+            EnrichedResumeProfile,
+            PasswordResetToken,
+            BetaInvite,
+            BatchTailoringRun,
+            BatchTailoringJob,
+          ],
+          synchronize: false,
+          logging: process.env.NODE_ENV !== 'production',
+          migrations: [__dirname + '/migrations/*.ts'],
+          migrationsTableName: 'migrations',
+          migrationsRun: false,
+        };
+      },
       inject: [ConfigService],
     }),
   ],

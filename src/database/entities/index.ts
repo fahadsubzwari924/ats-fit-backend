@@ -1,4 +1,6 @@
 export * from './ats-match-history.entity';
+export * from './batch-tailoring-run.entity';
+export * from './batch-tailoring-job.entity';
 export * from './beta-invite.entity';
 export * from './extracted-resume-content.entity';
 export * from './job-application.entity';

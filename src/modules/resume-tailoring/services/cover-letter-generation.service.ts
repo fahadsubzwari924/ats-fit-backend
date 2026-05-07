@@ -52,6 +52,7 @@ export class CoverLetterGenerationService {
         'candidate_content',
         'company_name',
         'job_position',
+        'cover_letter',
       ],
     });
 
@@ -62,6 +63,10 @@ export class CoverLetterGenerationService {
       );
     }
 
+    if (record.cover_letter) {
+      return record.cover_letter as CoverLetterResult;
+    }
+
     if (!record.job_analysis || !record.candidate_content) {
       throw new BadRequestException(
         'Cover letter generation is only available for resumes generated after this feature was released. Please generate a new tailored resume first.',
@@ -69,7 +74,7 @@ export class CoverLetterGenerationService {
       );
     }
 
-    return this.generateCoverLetter({
+    const result = await this.generateCoverLetter({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       jobAnalysis: record.job_analysis,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -77,6 +82,38 @@ export class CoverLetterGenerationService {
       companyName: record.company_name ?? '',
       jobPosition: record.job_position ?? '',
     });
+
+    await this.resumeGenerationRepository.update({ id: resumeGenerationId }, {
+      cover_letter: result,
+    } as unknown as Partial<ResumeGeneration>);
+
+    return result;
+  }
+
+  async getByResumeGenerationId(
+    resumeGenerationId: string,
+    userId: string,
+  ): Promise<CoverLetterResult> {
+    const record = await this.resumeGenerationRepository.findOne({
+      where: { id: resumeGenerationId, user_id: userId },
+      select: ['id', 'cover_letter'],
+    });
+
+    if (!record) {
+      throw new NotFoundException(
+        'Resume generation record not found',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    if (!record.cover_letter) {
+      throw new NotFoundException(
+        'Cover letter has not been generated for this resume',
+        ERROR_CODES.RESUME_NOT_FOUND,
+      );
+    }
+
+    return record.cover_letter as CoverLetterResult;
   }
 
   /**

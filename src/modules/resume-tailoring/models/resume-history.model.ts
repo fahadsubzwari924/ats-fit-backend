@@ -12,6 +12,7 @@ export class ResumeHistoryItem {
   templateId: string | null;
   createdAt: Date;
   canDownload: boolean;
+  hasCoverLetter: boolean;
   matchScore: { before: number; after: number; delta: number } | null;
   atsChecks: { passed: number; total: number } | null;
 
@@ -25,6 +26,7 @@ export class ResumeHistoryItem {
     this.templateId = entity.template_id ?? null;
     this.createdAt = entity.created_at;
     this.canDownload = !!entity.pdf_s3_key;
+    this.hasCoverLetter = !!entity.cover_letter;
 
     this.matchScore =
       entity.matchScoreBefore != null && entity.matchScoreAfter != null

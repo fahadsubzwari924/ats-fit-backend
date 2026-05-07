@@ -68,6 +68,7 @@ describe('ResumeTailoringController - Batch Resume Tailoring Limit', () => {
     const mockCoverLetterGenerationService = {
       generateFromResumeGeneration: jest.fn(),
       generateStandalone: jest.fn(),
+      getByResumeGenerationId: jest.fn(),
     };
 
     const mockRateLimitService = {

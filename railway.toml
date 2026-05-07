@@ -1,0 +1,17 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Use Dockerfile's CMD (wrapped by dumb-init ENTRYPOINT for proper signal handling).
+# Do NOT set startCommand — overriding it bypasses dumb-init.
+#
+# Healthcheck path includes the URI version prefix (`v1`) — the app uses
+# NestJS's enableVersioning({ type: URI, defaultVersion: '1' }) so all routes
+# are served under /api/v1/*. Hitting /api/health returns 404 (Railway interpreted
+# this as "service unavailable" during prior deploy attempts).
+healthcheckPath = "/api/v1/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+preDeployCommand = "npm run migration:run:prod"
