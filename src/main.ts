@@ -34,7 +34,7 @@ async function bootstrap() {
 
   // Enable CORS for all origins (adjust for production)
   app.enableCors({
-    origin: true, // Allow all origins for development
+    origin: process.env.CORS_ORIGIN || 'http://localhost:4200',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
@@ -132,8 +132,9 @@ async function bootstrap() {
     defaultVersion: '1',
   });
 
-  // Cloud Run expects app to listen on PORT environment variable
-  const port = process.env.PORT || 3000;
+  // Railway injects PORT at runtime; default to 3000 for local dev.
+  // Coerce to number — string PORT can cause subtle issues with some Node versions.
+  const port = Number(process.env.PORT) || 3000;
   await app.listen(port, '0.0.0.0');
   logger.log(`🚀 Application is running on port ${port}`);
 
@@ -181,4 +182,14 @@ async function setupNgrokTunnel(port: number | string, logger: Logger) {
   }
 }
 
-void bootstrap();
+// Surface any silent bootstrap failures (e.g. listen() rejections) instead of
+// letting the process exit cleanly with no log output.
+process.on('unhandledRejection', (reason) => {
+  console.error('[Bootstrap] Unhandled rejection:', reason);
+  process.exit(1);
+});
+
+bootstrap().catch((err) => {
+  console.error('[Bootstrap] Fatal error during bootstrap:', err);
+  process.exit(1);
+});

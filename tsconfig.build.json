@@ -1,4 +1,13 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts", "vendor"]
+  "exclude": [
+    "node_modules",
+    "test",
+    "dist",
+    "**/*spec.ts",
+    "vendor",
+    "scripts",
+    "src/database/migrations-archive",
+    "src/database/migrations-legacy"
+  ]
 }

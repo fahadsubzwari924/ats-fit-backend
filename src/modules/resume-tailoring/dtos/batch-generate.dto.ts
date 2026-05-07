@@ -63,6 +63,9 @@ export interface BatchJobResult {
   filename?: string;
   optimizationConfidence?: number;
   keywordsAdded?: number;
+  sectionsChanged?: number;
+  matchScoreBefore?: number;
+  matchScoreAfter?: number;
   error?: string;
 }
 

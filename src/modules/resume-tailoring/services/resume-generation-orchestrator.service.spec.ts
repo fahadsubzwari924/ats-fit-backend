@@ -7,9 +7,9 @@ import { ResumeContentProcessorService } from './resume-content-processor.servic
 import { ResumeOptimizerService } from './resume-optimizer.service';
 import { PdfGenerationOrchestratorService } from './pdf-generation-orchestrator.service';
 import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
-import { ResumeQueueService } from './resume-queue.service';
 import { AtsChecksComputationService } from './ats-checks-computation.service';
 import { BulletsQuantifiedComputationService } from './bullets-quantified-computation.service';
+import { ChangesDiffComputationService } from './changes-diff-computation.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 
 describe('ResumeGenerationOrchestratorService', () => {
@@ -39,10 +39,6 @@ describe('ResumeGenerationOrchestratorService', () => {
     uploadGeneratedPdf: jest.fn(),
   };
 
-  const mockResumeQueueService = {
-    addChangesDiffJob: jest.fn(),
-  };
-
   const mockResumeGenerationRepository = {
     create: jest.fn(),
     save: jest.fn(),
@@ -58,6 +54,10 @@ describe('ResumeGenerationOrchestratorService', () => {
     computeQuantified: jest
       .fn()
       .mockReturnValue({ before: 2, after: 5, total: 10 }),
+  };
+
+  const mockChangesDiffComputationService = {
+    computeDiff: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -84,7 +84,6 @@ describe('ResumeGenerationOrchestratorService', () => {
           provide: TailoredResumePdfStorageService,
           useValue: mockTailoredResumePdfStorageService,
         },
-        { provide: ResumeQueueService, useValue: mockResumeQueueService },
         {
           provide: AtsChecksComputationService,
           useValue: mockAtsChecksComputationService,
@@ -92,6 +91,10 @@ describe('ResumeGenerationOrchestratorService', () => {
         {
           provide: BulletsQuantifiedComputationService,
           useValue: mockBulletsQuantifiedComputationService,
+        },
+        {
+          provide: ChangesDiffComputationService,
+          useValue: mockChangesDiffComputationService,
         },
         {
           provide: getRepositoryToken(ResumeGeneration),
@@ -105,11 +108,10 @@ describe('ResumeGenerationOrchestratorService', () => {
     );
   });
 
-  describe('generateOptimizedResume — diff job baseline', () => {
-    it('should pass rawContent (not enriched content) as originalContent to addChangesDiffJob', async () => {
-      // Arrange — distinct objects so we can assert which one was used
+  describe('generateOptimizedResume — inline diff', () => {
+    it('should compute diff synchronously and persist changes_diff in the saved record', async () => {
+      // Arrange
       const enrichedContent = { summary: 'enriched summary', experience: [] };
-      const rawContent = { summary: 'raw summary', experience: [] };
 
       mockValidatorService.validateGenerationRequest.mockResolvedValue({
         isValid: true,
@@ -126,7 +128,7 @@ describe('ResumeGenerationOrchestratorService', () => {
 
       mockResumeContentProcessorService.processResumeContent.mockResolvedValue({
         content: enrichedContent,
-        rawContent: rawContent,
+        rawContent: { summary: 'raw summary', experience: [] },
         source: 'database_existing',
         originalText: 'raw text',
         tailoringMode: 'enhanced',
@@ -159,11 +161,29 @@ describe('ResumeGenerationOrchestratorService', () => {
         's3/key/resume.pdf',
       );
 
+      const fakeDiff = {
+        version: 2 as const,
+        totalChanges: 5,
+        sectionsChanged: 3,
+        computedAt: new Date().toISOString(),
+        summary: null,
+        skills: null,
+        experience: [],
+        keywordAnalysis: {
+          targetKeywords: ['TypeScript', 'NestJS', 'Node.js'],
+          originalMatches: ['TypeScript'],
+          newlyAdded: ['NestJS', 'Node.js'],
+          stillMissing: [],
+          coverageOriginal: 33,
+          coverageOptimized: 100,
+        },
+        changes: [],
+      };
+      mockChangesDiffComputationService.computeDiff.mockReturnValue(fakeDiff);
+
       const savedRecord = { id: 'gen-uuid-123' };
       mockResumeGenerationRepository.create.mockReturnValue(savedRecord);
       mockResumeGenerationRepository.save.mockResolvedValue(savedRecord);
-
-      mockResumeQueueService.addChangesDiffJob.mockResolvedValue(undefined);
 
       const input = {
         jobDescription: 'Build backend services',
@@ -175,25 +195,26 @@ describe('ResumeGenerationOrchestratorService', () => {
       };
 
       // Act
-      await service.generateOptimizedResume(input as any);
+      const result = await service.generateOptimizedResume(input as any);
 
-      // Allow the fire-and-forget void promise to settle
-      await new Promise((resolve) => setImmediate(resolve));
-
-      // Assert — addChangesDiffJob must have been called with rawContent as originalContent
-      expect(mockResumeQueueService.addChangesDiffJob).toHaveBeenCalledWith(
-        expect.objectContaining({
-          originalContent: rawContent,
-        }),
-      );
-
-      // Guard: enriched content must NOT be used as the diff baseline
-      const callArg = mockResumeQueueService.addChangesDiffJob.mock.calls[0][0];
-      expect(callArg.originalContent).not.toBe(enrichedContent);
-      expect(callArg.originalContent).toEqual({
-        summary: 'raw summary',
-        experience: [],
+      // Assert — computeDiff was called synchronously (before save)
+      expect(
+        mockChangesDiffComputationService.computeDiff,
+      ).toHaveBeenCalledWith(enrichedContent, optimizedContent, {
+        mandatorySkills: ['Node.js'],
+        primaryKeywords: ['TypeScript', 'NestJS'],
       });
+
+      // Assert — changes_diff is persisted in the save record (not null)
+      const savedPayload =
+        mockResumeGenerationRepository.create.mock.calls[0][0];
+      expect(savedPayload.changes_diff).toEqual(fakeDiff);
+
+      // Assert — keywordsAdded in result derives from diff.keywordAnalysis.newlyAdded.length
+      expect(result.keywordsAdded).toBe(2);
+
+      // Assert — sectionsChanged in result derives from diff.sectionsChanged
+      expect(result.sectionsChanged).toBe(3);
     });
   });
 });

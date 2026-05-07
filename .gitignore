@@ -119,18 +119,30 @@ migration.log
 # =================================
 # SENSITIVE CONFIGURATION
 # =================================
+# IMPORTANT: do NOT use broad wildcards like *secret*, *key*, *password*.
+# They match legitimate source files (e.g. resume-extracted-keywords.interface.ts,
+# password-reset.service.ts, aws-configuration-key.enum.ts).
+# More importantly: tools like Railway CLI apply .gitignore patterns naively
+# when packaging the upload tarball — even tracked files matching the pattern
+# get stripped, breaking the build. Always be specific by file extension or full name.
 
-# Any file containing secrets or API keys
-*secret*
-*key*
-*password*
-!scripts/**/create-secrets.sh
-!**/package-lock.json
-!src/shared/enums/*-key.enum.ts
-!src/database/entities/password-reset-token.entity.ts
-!src/modules/auth/dtos/forgot-password.dto.ts
-!src/modules/auth/dtos/reset-password.dto.ts
-!src/modules/auth/services/password-reset.service.ts
+# JSON / PEM files holding credentials
+*-credentials.json
+*credentials.json
+*service-account*.json
+gcloud-*-key.json
+*.pem
+*.p12
+*.pfx
+
+# Plain-text secret files
+secrets.json
+secrets.yaml
+secrets.yml
+*.secret
+*-secrets.env
+*-keys.env
+*-passwords.env
 
 # Configuration files with sensitive data
 config/production.json

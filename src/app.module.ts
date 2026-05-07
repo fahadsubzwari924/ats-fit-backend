@@ -5,6 +5,7 @@ import { DatabaseModule } from './database/database.module';
 import { validationSchema } from './config/validation.schema';
 import { AuthModule } from './modules/auth/auth.module';
 import { ResumeTailoringModule } from './modules/resume-tailoring/resume-tailoring.module';
+import { BatchTailoringV2Module } from './modules/resume-tailoring/batch-tailoring-v2/batch-tailoring-v2.module';
 import { APP_GUARD, Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './modules/auth/jwt.guard';
 import { SharedModule } from './shared/shared.module';
@@ -56,6 +57,7 @@ import { ContactModule } from './modules/contact/contact.module';
     DatabaseModule,
     AuthModule,
     ResumeTailoringModule,
+    BatchTailoringV2Module,
     SharedModule,
     AtsMatchModule,
     UserModule,

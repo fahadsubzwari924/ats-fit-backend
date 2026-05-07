@@ -21,6 +21,7 @@ import {
   ResumeHistoryQueryOptions,
 } from '../models/resume-history.model';
 import { FREEMIUM_HISTORY_LOOKBACK_DAYS } from '../../../shared/constants/plan-limits.constants';
+import { generateResumeFilename } from '../../../shared/utils/resume-filename.util';
 
 @Injectable()
 export class ResumeService {
@@ -241,6 +242,7 @@ export class ResumeService {
         'template_id',
         'created_at',
         'pdf_s3_key',
+        'cover_letter',
       ],
     });
 
@@ -280,6 +282,7 @@ export class ResumeService {
       'rg.template_id',
       'rg.created_at',
       'rg.pdf_s3_key',
+      'rg.cover_letter',
     ])
       .orderBy('rg.created_at', sortOrder)
       .skip(skip)
@@ -379,31 +382,17 @@ export class ResumeService {
       key: record.pdf_s3_key,
     });
 
-    const filename = this.buildDownloadFilename(
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['full_name'],
+    });
+
+    const filename = generateResumeFilename(
+      user?.full_name ?? '',
       record.job_position,
-      record.company_name,
     );
 
     return { buffer, filename };
-  }
-
-  private buildDownloadFilename(
-    jobPosition: string,
-    companyName: string,
-  ): string {
-    const sanitize = (s: string) =>
-      s
-        .trim()
-        .replace(/[^a-zA-Z0-9\s]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '')
-        .slice(0, 40);
-
-    const parts = [sanitize(jobPosition), sanitize(companyName)].filter(
-      Boolean,
-    );
-    return parts.length ? `${parts.join('-')}-Resume.pdf` : 'Resume.pdf';
   }
 
   /**

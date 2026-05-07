@@ -7,11 +7,12 @@ import { ResumeOptimizerService } from './resume-optimizer.service';
 import { PdfGenerationOrchestratorService } from './pdf-generation-orchestrator.service';
 import { ResumeValidationService } from './resume-validation.service';
 import { TailoredResumePdfStorageService } from './tailored-resume-pdf-storage.service';
-import { ResumeQueueService } from './resume-queue.service';
 import { AtsChecksComputationService } from './ats-checks-computation.service';
 import { BulletsQuantifiedComputationService } from './bullets-quantified-computation.service';
+import { ChangesDiffComputationService } from './changes-diff-computation.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
+import { EnhancedResumeDiff } from '../interfaces/enhanced-resume-diff.interface';
 import {
   ResumeGenerationInput,
   ResumeGenerationResult,
@@ -48,9 +49,9 @@ export class ResumeGenerationOrchestratorService {
     private readonly resumeOptimizerService: ResumeOptimizerService,
     private readonly pdfGenerationOrchestratorService: PdfGenerationOrchestratorService,
     private readonly tailoredResumePdfStorageService: TailoredResumePdfStorageService,
-    private readonly resumeQueueService: ResumeQueueService,
     private readonly atsChecksComputationService: AtsChecksComputationService,
     private readonly bulletsQuantifiedComputationService: BulletsQuantifiedComputationService,
+    private readonly changesDiffComputationService: ChangesDiffComputationService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
   ) {}
@@ -82,6 +83,17 @@ export class ResumeGenerationOrchestratorService {
         input,
         optimizationResult,
       );
+
+      // Compute diff synchronously before persisting
+      const diff = this.changesDiffComputationService.computeDiff(
+        resumeContent.content as unknown as TailoredContent,
+        optimizationResult.optimizedContent,
+        {
+          mandatorySkills: jobAnalysis.technical.mandatorySkills,
+          primaryKeywords: jobAnalysis.keywords.primary,
+        },
+      );
+
       const { savedGeneration, dbTime } = await this.persistGeneration(
         input,
         resumeContent,
@@ -89,21 +101,14 @@ export class ResumeGenerationOrchestratorService {
         pdfResult,
         jobAnalysis,
         scores,
-      );
-
-      this.dispatchDiffJob(
-        savedGeneration.id,
-        input,
-        resumeContent,
-        optimizationResult,
-        jobAnalysis,
+        diff,
       );
 
       const totalProcessingTime = Date.now() - startTime;
       this.logger.log(
         `Resume generation completed in ${totalProcessingTime}ms ` +
           `(Validation: ${validationTime}ms, Parallel: ${parallelOperationsTime}ms, ` +
-          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, Diff: background)`,
+          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, Diff: inline)`,
       );
 
       return this.buildResult(
@@ -114,6 +119,7 @@ export class ResumeGenerationOrchestratorService {
         optimizationResult,
         jobAnalysis,
         scores,
+        diff,
         {
           validationTime,
           parallelOperationsTime,
@@ -310,6 +316,7 @@ export class ResumeGenerationOrchestratorService {
       ReturnType<typeof this.jobAnalysisService.analyzeJobDescription>
     >,
     scores: ReturnType<typeof this.computeScores>,
+    diff: EnhancedResumeDiff,
   ) {
     const start = Date.now();
 
@@ -323,6 +330,8 @@ export class ResumeGenerationOrchestratorService {
     const { matchScoreBefore, matchScoreAfter, atsChecks, bulletsQuantified } =
       scores;
 
+    const computedKeywordsAdded = diff.keywordAnalysis.newlyAdded.length;
+
     const savedGeneration = await this.saveResumeGenerationRecord({
       user_id: input.userContext.userId,
       file_path:
@@ -335,7 +344,7 @@ export class ResumeGenerationOrchestratorService {
       company_name: input.companyName,
       job_position: input.jobPosition,
       analysis: optimizationResult.optimizedContent,
-      keywords_added: optimizationResult.optimizationMetrics.keywordsAdded,
+      keywords_added: computedKeywordsAdded,
       sections_optimized:
         optimizationResult.optimizationMetrics.sectionsOptimized,
       achievements_quantified:
@@ -348,7 +357,7 @@ export class ResumeGenerationOrchestratorService {
         string,
         unknown
       >,
-      changes_diff: null,
+      changes_diff: diff as unknown as Record<string, unknown>,
       prompt_version: OPTIMIZATION_PROMPT_VERSION,
       atsChecksPassed: atsChecks.passed,
       atsChecksTotal: atsChecks.total,
@@ -364,45 +373,6 @@ export class ResumeGenerationOrchestratorService {
     );
 
     return { savedGeneration, dbTime };
-  }
-
-  private dispatchDiffJob(
-    resumeGenerationId: string,
-    input: ResumeGenerationInput,
-    resumeContent: Awaited<
-      ReturnType<typeof this.resumeContentProcessorService.processResumeContent>
-    >,
-    optimizationResult: Awaited<
-      ReturnType<typeof this.resumeOptimizerService.optimizeResumeContent>
-    >,
-    jobAnalysis: Awaited<
-      ReturnType<typeof this.jobAnalysisService.analyzeJobDescription>
-    >,
-  ): void {
-    void this.resumeQueueService
-      .addChangesDiffJob({
-        resumeGenerationId,
-        userId: input.userContext.userId || '',
-        originalContent: resumeContent.rawContent as unknown as Record<
-          string,
-          unknown
-        >,
-        optimizedContent:
-          optimizationResult.optimizedContent as unknown as Record<
-            string,
-            unknown
-          >,
-        jobAnalysisKeywords: {
-          mandatorySkills: jobAnalysis.technical.mandatorySkills,
-          primaryKeywords: jobAnalysis.keywords.primary,
-        },
-      })
-      .catch((error: unknown) => {
-        this.logger.warn(
-          '[Background] Changes diff job dispatch failed — diff will be unavailable for this generation',
-          error,
-        );
-      });
   }
 
   private buildResult(
@@ -423,6 +393,7 @@ export class ResumeGenerationOrchestratorService {
       ReturnType<typeof this.jobAnalysisService.analyzeJobDescription>
     >,
     scores: ReturnType<typeof this.computeScores>,
+    diff: EnhancedResumeDiff,
     timings: {
       validationTime: number;
       parallelOperationsTime: number;
@@ -440,11 +411,15 @@ export class ResumeGenerationOrchestratorService {
       bulletsQuantified,
     } = scores;
 
+    const keywordsAdded = diff.keywordAnalysis.newlyAdded.length;
+    const sectionsChanged = diff.sectionsChanged;
+
     return {
       pdfContent: pdfResult.pdfContent,
       filename: pdfResult.filename,
       resumeGenerationId: savedGeneration.id,
-      keywordsAdded: optimizationResult.optimizationMetrics.keywordsAdded,
+      keywordsAdded,
+      sectionsChanged,
       sectionsOptimized:
         optimizationResult.optimizationMetrics.sectionsOptimized,
       achievementsQuantified:

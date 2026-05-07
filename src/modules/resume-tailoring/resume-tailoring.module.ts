@@ -12,6 +12,8 @@ import {
   QueueMessage,
   TailoringQuestion,
   EnrichedResumeProfile,
+  BatchTailoringRun,
+  BatchTailoringJob,
 } from '../../database/entities';
 import { HandlebarsService } from '../../shared/services/handlebars.service';
 import {
@@ -67,6 +69,8 @@ import { PromptVariantResolverService } from './services/prompt-variant-resolver
       QueueMessage,
       TailoringQuestion,
       EnrichedResumeProfile,
+      BatchTailoringRun,
+      BatchTailoringJob,
     ]),
     ConfigModule,
     SharedModule,

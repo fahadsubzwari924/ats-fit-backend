@@ -6,6 +6,24 @@ import { ConfigService } from '@nestjs/config';
 import { UserContext } from '../../modules/auth/types/user-context.type';
 import { shouldSkipUserContext } from '../constants/middleware-config';
 
+/**
+ * Routes allowed to authenticate via `?access_token=` query parameter.
+ * Mirrors the SSE-only allowlist in `JwtStrategy` so middleware sees the same
+ * token source as the Passport guard. Browser EventSource cannot send custom
+ * headers, so SSE endpoints accept the token in the query string instead.
+ */
+const SSE_QUERY_TOKEN_PATHS = [/\/batch\/v2\/[^/]+\/events$/];
+
+function extractSseQueryToken(req: Request): string | null {
+  const url = req.originalUrl || req.url;
+  if (!url) return null;
+  const path = url.split('?')[0];
+  if (!SSE_QUERY_TOKEN_PATHS.some((re) => re.test(path))) return null;
+  const token = (req.query as { access_token?: string } | undefined)
+    ?.access_token;
+  return typeof token === 'string' && token.length ? token : null;
+}
+
 @Injectable()
 export class UserContextMiddleware implements NestMiddleware {
   private readonly logger = new Logger(UserContextMiddleware.name);
@@ -32,14 +50,15 @@ export class UserContextMiddleware implements NestMiddleware {
     }
 
     const authHeader = req.headers['authorization'];
+    const headerToken = authHeader?.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : null;
+    const token = headerToken ?? extractSseQueryToken(req);
     let userContext: UserContext | null = null;
 
     try {
-      if (authHeader?.startsWith('Bearer ')) {
-        userContext = await this.buildAuthenticatedContext(
-          req,
-          authHeader.split(' ')[1],
-        );
+      if (token) {
+        userContext = await this.buildAuthenticatedContext(req, token);
       }
 
       if (userContext) {

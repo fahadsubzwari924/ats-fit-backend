@@ -37,6 +37,21 @@ describe('ResumeHistoryItem', () => {
     expect(item.templateId).toBe('tpl-abc');
     expect(item.createdAt).toEqual(new Date('2025-01-15T10:00:00Z'));
     expect(item.canDownload).toBe(true);
+    expect(item.hasCoverLetter).toBe(false);
+  });
+
+  it('sets hasCoverLetter to true when cover_letter is present', () => {
+    const entity = buildEntity({
+      cover_letter: { coverLetter: { opening: 'x' } } as any,
+    });
+    const item = new ResumeHistoryItem(entity);
+    expect(item.hasCoverLetter).toBe(true);
+  });
+
+  it('sets hasCoverLetter to false when cover_letter is null', () => {
+    const entity = buildEntity({ cover_letter: null as any });
+    const item = new ResumeHistoryItem(entity);
+    expect(item.hasCoverLetter).toBe(false);
   });
 
   it('sets canDownload to true when pdf_s3_key is set', () => {

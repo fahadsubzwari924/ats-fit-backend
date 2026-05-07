@@ -6,28 +6,54 @@ export const validationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().default(3000),
 
-  // Database configuration
-  DATABASE_HOST: Joi.string().required(),
+  // Database — Railway uses DATABASE_URL; local dev uses individual vars
+  DATABASE_URL: Joi.string().uri().optional(),
+  DATABASE_HOST: Joi.when('DATABASE_URL', {
+    is: Joi.exist(),
+    then: Joi.string().optional(),
+    otherwise: Joi.string().required(),
+  }),
   DATABASE_PORT: Joi.number().default(5432),
-  DATABASE_USERNAME: Joi.string().required(),
-  DATABASE_PASSWORD: Joi.string().required(),
-  DATABASE_NAME: Joi.string().required(),
+  DATABASE_USERNAME: Joi.when('DATABASE_URL', {
+    is: Joi.exist(),
+    then: Joi.string().optional(),
+    otherwise: Joi.string().required(),
+  }),
+  DATABASE_PASSWORD: Joi.when('DATABASE_URL', {
+    is: Joi.exist(),
+    then: Joi.string().optional(),
+    otherwise: Joi.string().required(),
+  }),
+  DATABASE_NAME: Joi.when('DATABASE_URL', {
+    is: Joi.exist(),
+    then: Joi.string().optional(),
+    otherwise: Joi.string().required(),
+  }),
+
+  // Redis — used by BullModule
+  REDIS_HOST: Joi.string().default('localhost'),
+  REDIS_PORT: Joi.number().default(6379),
+  REDIS_PASSWORD: Joi.string().optional().allow(''),
+  REDIS_DB: Joi.number().default(0),
 
   // JWT configuration
   JWT_SECRET: Joi.string().required(),
   JWT_EXPIRES_IN: Joi.string().default('24h'),
+  CORS_ORIGIN: Joi.string().uri().default('http://localhost:4200'),
 
   // AWS configuration
   AWS_REGION: Joi.string().required(),
+  AWS_BUCKET_REGION: Joi.string().optional(),
   AWS_ACCESS_KEY_ID: Joi.string().required(),
   AWS_SECRET_ACCESS_KEY: Joi.string().required(),
   AWS_S3_RESUME_TEMPLATES_BUCKET: Joi.string().required(),
-  AWS_S3_GENERATED_RESUMES_BUCKET: Joi.when('NODE_ENV', {
-    is: 'production',
-    then: Joi.string().required(),
-    otherwise: Joi.string().optional(),
-  }),
+  // Required: candidates resumes bucket — used as the primary store and as fallback for tailored PDFs
+  AWS_S3_CANDIDATES_RESUMES_BUCKET: Joi.string().required(),
+  // Optional: dedicated bucket for tailored PDFs. If unset, code falls back to AWS_S3_CANDIDATES_RESUMES_BUCKET.
+  AWS_S3_GENERATED_RESUMES_BUCKET: Joi.string().optional().allow(''),
   AWS_S3_EMAIL_TEMPLATES_BUCKET: Joi.string().optional(),
+  AWS_S3_BUCKET_ATS_FIT_EMAIL_TEMPLATES: Joi.string().optional(),
+  AWS_S3_BUCKET: Joi.string().optional(),
 
   // OpenAI configuration
   OPENAI_API_KEY: Joi.string().required(),

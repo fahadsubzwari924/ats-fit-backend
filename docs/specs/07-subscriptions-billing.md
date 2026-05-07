@@ -50,6 +50,20 @@ Pro is offered in two billing cycles:
 
 Plan names, prices, and `payment_gateway_variant_id` values are seeded via `scripts/seed/seed-subscription-plans-service.ts`. Gateway variant IDs must be set to real Lemon Squeezy variant IDs before going live (placeholders are used in development).
 
+### Plan entitlements (canonical)
+
+| Entitlement | Free | Pro (Monthly + Annual) |
+|---|---|---|
+| Tailored resumes / month | 3 | **30 (single + batch share this pool)** |
+| Cover letters / month | 1 | 15 |
+| Batch tailoring | not available | up to 10 batch jobs / month, 3 resumes per batch |
+| Generation history | last 30 days | full history |
+| Templates | basic | all templates |
+| Job application tracking | unlimited | unlimited |
+| Support | community | priority |
+
+**"Tailored resumes" is the canonical user-facing unit.** Whether produced via single tailoring or as part of a batch, every resume counts as 1 unit against the 30 (Pro) or 3 (Free) monthly limit. The 10 batch-jobs cap is a structural limit on batch UX invocations, not an additional resume budget. See [08-rate-limits-and-usage.md](./08-rate-limits-and-usage.md) for the increment rules and pre-check semantics.
+
 ## Plans API
 
 - **`GET /subscriptions/plans`** — Active subscription plans (**JWT required**; controller uses global auth except `@Public` webhook/test utilities).

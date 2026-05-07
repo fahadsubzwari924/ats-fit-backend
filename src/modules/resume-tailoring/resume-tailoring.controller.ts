@@ -30,6 +30,7 @@ import {
 import { FileValidationPipe } from '../../shared/pipes/file-validation.pipe';
 import { ResumeGenerationOrchestratorService } from './services/resume-generation-orchestrator.service';
 import type { UserContext as ResumeUserContext } from './interfaces/user-context.interface';
+import type { UserContext as AuthUserContext } from '../auth/types/user-context.type';
 import { ValidationLoggingInterceptor } from './interceptors/validation-logging.interceptor';
 import {
   NotFoundException,
@@ -37,8 +38,10 @@ import {
 } from '../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../shared/constants/error-codes';
 import { RateLimitFeature } from '../rate-limit/rate-limit.guard';
+import { RateLimitService } from '../rate-limit/rate-limit.service';
 import { UsageTrackingInterceptor } from '../rate-limit/usage-tracking.interceptor';
 import { FeatureType } from '../../database/entities/usage-tracking.entity';
+import { ForbiddenException } from '@nestjs/common';
 import { PremiumUserGuard } from '../auth/guards/premium-user.guard';
 import { UserPlan } from '../../database/entities/user.entity';
 import { Public } from '../auth/decorators/public.decorator';
@@ -65,6 +68,7 @@ export class ResumeTailoringController {
     private readonly resumeGenerationOrchestratorService: ResumeGenerationOrchestratorService,
     private readonly resumeService: ResumeService,
     private readonly coverLetterGenerationService: CoverLetterGenerationService,
+    private readonly rateLimitService: RateLimitService,
   ) {}
 
   @Get('templates')
@@ -310,6 +314,30 @@ export class ResumeTailoringController {
   }
 
   /**
+   * GET /resume-tailoring/cover-letter/:generationId
+   * Fetch a previously persisted cover letter for a resume generation.
+   * Does not consume cover letter quota.
+   */
+  @Get('cover-letter/:generationId')
+  @TransformUserContext()
+  async getCoverLetter(
+    @Param('generationId') generationId: string,
+    @Req() req: RequestWithUserContext,
+  ) {
+    const userId = req.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+    return this.coverLetterGenerationService.getByResumeGenerationId(
+      generationId,
+      userId,
+    );
+  }
+
+  /**
    * POST /resume-tailoring/batch-generate
    * Sequentially generates tailored resumes for multiple jobs in one request.
    * Premium-only feature.
@@ -339,6 +367,26 @@ export class ResumeTailoringController {
       );
     }
 
+    // Shared-pool pre-check: every resume produced (single or batch) draws from
+    // the same monthly RESUME_GENERATION pool. Reject before enqueueing if this
+    // batch would push the user over their tailored-resume limit.
+    const authUserContext = request.userContext as AuthUserContext;
+    const tailoredResumeUsage = await this.rateLimitService.checkRateLimit(
+      authUserContext,
+      FeatureType.RESUME_GENERATION,
+    );
+    if (tailoredResumeUsage.currentUsage + dto.jobs.length > tailoredResumeUsage.limit) {
+      throw new ForbiddenException({
+        message: `This batch would exceed your monthly tailored-resume limit. ${tailoredResumeUsage.remaining} of ${tailoredResumeUsage.limit} remaining; you requested ${dto.jobs.length}.`,
+        errorCode: ERROR_CODES.RATE_LIMIT_EXCEEDED,
+        feature: FeatureType.RESUME_GENERATION,
+        currentUsage: tailoredResumeUsage.currentUsage,
+        limit: tailoredResumeUsage.limit,
+        remaining: tailoredResumeUsage.remaining,
+        resetDate: tailoredResumeUsage.resetDate,
+      });
+    }
+
     const startTime = Date.now();
     const userContext = request.userContext as ResumeUserContext;
     const results: BatchJobResult[] = [];
@@ -357,6 +405,13 @@ export class ResumeTailoringController {
             },
           );
 
+        // Each resume successfully produced inside the batch consumes 1 unit of
+        // the shared RESUME_GENERATION pool. Failed jobs do NOT consume quota.
+        await this.rateLimitService.recordUsage(
+          authUserContext,
+          FeatureType.RESUME_GENERATION,
+        );
+
         results.push({
           jobPosition: job.jobPosition,
           companyName: job.companyName,
@@ -366,6 +421,9 @@ export class ResumeTailoringController {
           filename: result.filename,
           optimizationConfidence: result.optimizationConfidence,
           keywordsAdded: result.keywordsAdded,
+          sectionsChanged: result.sectionsChanged,
+          matchScoreBefore: result.matchScoreBefore,
+          matchScoreAfter: result.matchScoreAfter,
         });
       } catch (error) {
         this.logger.warn(

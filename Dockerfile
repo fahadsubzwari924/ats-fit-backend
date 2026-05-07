@@ -1,14 +1,13 @@
 # ========================================================================
-# Multi-stage Docker build optimized for Google Cloud Run
+# Multi-stage Docker build optimized for Railway
 # ========================================================================
 # Build time optimization: ~15 min first build → ~2 min subsequent builds
-# IMPORTANT: Cloud Run uses linux/amd64 architecture
 # ========================================================================
 
 # ========================================================================
 # Stage 1: Base Image with System Dependencies (Cached Layer)
 # ========================================================================
-FROM --platform=linux/amd64 node:20-alpine AS base
+FROM node:20-alpine AS base
 
 # Install system dependencies for Puppeteer (this layer is cached)
 RUN apk add --no-cache \
@@ -73,11 +72,13 @@ COPY --from=builder --chown=nestjs:nodejs /usr/src/app/dist ./dist
 
 # Copy necessary runtime files
 COPY --from=builder --chown=nestjs:nodejs /usr/src/app/src/resume-templates ./src/resume-templates
+COPY --from=builder --chown=nestjs:nodejs /usr/src/app/src/email-templates ./src/email-templates
 
 # Switch to non-root user
 USER nestjs
 
-# Cloud Run will inject PORT env variable (default 8080)
+# Railway injects PORT env variable at runtime; the app reads $PORT.
+# EXPOSE is documentation-only here — Railway's router uses the PORT env var.
 EXPOSE 8080
 
 # Use dumb-init for proper signal handling

@@ -18,10 +18,10 @@ coverage
 logs
 *.log
 
-# Environment files
+# Environment files — never bake secrets into image
 .env
 .env.*
-!.env.example
+src/config/.env*
 
 # IDE and editor files
 .vscode
@@ -75,9 +75,8 @@ yarn.lock
 .pnpm-store
 # Note: package-lock.json is needed for npm ci
 
-# Scripts
-scripts/seed/
-scripts/deployment/
+# Scripts (seeds run locally, deploy runs on host — none needed inside container)
+scripts/
 start-proxy.sh
 
 # Development tools
@@ -103,3 +102,9 @@ Makefile
 # Git files
 .gitattributes
 .github/
+
+# Claude / AI workspace files
+.claude
+.ai
+.worktrees
+vendor

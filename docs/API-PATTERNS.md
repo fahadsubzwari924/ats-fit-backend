@@ -51,3 +51,40 @@ Include `next_cursor` or `page`/`page_size` consistently.
 ## Versioning
 
 - Breaking changes: new major version path or explicit deprecation window documented
+
+## Async Long-Running Operation Pattern (Queue + SSE)
+
+Use when an operation takes >5 seconds and the user should not be blocked.
+
+### Components
+
+1. **HTTP POST** — validates input, creates DB run + job rows in a transaction, enqueues Bull jobs, returns 202 with `{ id, totalItems }` in <500ms
+2. **Bull worker** — processes each job, emits stage events via the pub-sub gateway, persists results to DB
+3. **RxJS Subject gateway** (`*EventsGateway`) — in-process pub-sub bridge, filtered by run ID
+4. **SSE endpoint** — sends initial `snapshot`, forwards all gateway events, sends `heartbeat` every 20s, closes after terminal event
+5. **Polling fallback** — `GET /:id/status` returns the same snapshot shape for proxy/CDN environments that strip SSE
+
+### Event shape conventions
+
+- First event after connect: `snapshot` with full current state (enables reconnect without replay)
+- Granular progress events: `*_started`, `*_progress`, `*_completed`, `*_failed`
+- Terminal event: `*_completed` — client closes connection on receipt
+- Heartbeat: 20s interval, event name `heartbeat`, data `{ ts: number }`
+
+### Auth for SSE
+
+`EventSource` cannot send `Authorization` headers. Pass the JWT as `?access_token=<token>` query param. The guard must be configured to read from query params for SSE routes.
+
+### Anti-patterns to avoid
+
+- Holding the HTTP connection open for >30s (use 202 + SSE instead)
+- Storing event history in memory (use DB snapshot for reconnect)
+- Using WebSocket when one-way streaming is sufficient
+- Polling faster than 2s (unnecessary load; use SSE)
+
+### Example: v2 Batch Tailoring
+
+- Enqueue: `POST /resume-tailoring/batch/v2/generate` → `{ batchId, totalJobs }`
+- Stream: `GET /resume-tailoring/batch/v2/:batchId/events`
+- Fallback: `GET /resume-tailoring/batch/v2/:batchId/status`
+- Key files: `batch-tailoring-v2.service.ts`, `batch-tailoring-v2.processor.ts`, `batch-tailoring-v2.events.gateway.ts`, `batch-tailoring-v2.controller.ts`

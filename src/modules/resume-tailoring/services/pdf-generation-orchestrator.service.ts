@@ -12,6 +12,7 @@ import {
   BadRequestException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
+import { generateResumeFilename } from '../../../shared/utils/resume-filename.util';
 
 /**
  * PDF Generation Orchestrator Service V2
@@ -101,11 +102,7 @@ export class PdfGenerationOrchestratorService {
       const pdfContent = Buffer.from(pdfBuffer).toString('base64');
       const candidateName =
         optimizationResult.optimizedContent.contactInfo?.name ?? '';
-      const filename = this.generateOptimizedFilename(
-        candidateName,
-        jobPosition,
-        companyName,
-      );
+      const filename = generateResumeFilename(candidateName, jobPosition);
 
       const totalProcessingTime = Date.now() - startTime;
 
@@ -263,36 +260,6 @@ export class PdfGenerationOrchestratorService {
         missingKeywords: [], // Empty since content is already optimized
       },
     };
-  }
-
-  /**
-   * Generate a recruiter-friendly filename.
-   * Format: FirstName-LastName-Position-Company-Resume.pdf
-   * Example: John-Smith-Software-Engineer-Google-Resume.pdf
-   */
-  private generateOptimizedFilename(
-    candidateName: string,
-    jobPosition: string,
-    companyName: string,
-  ): string {
-    const sanitizedName = this.sanitizeForFilename(candidateName);
-    const sanitizedPosition = this.sanitizeForFilename(jobPosition);
-    const sanitizedCompany = this.sanitizeForFilename(companyName);
-
-    const parts = [sanitizedName, sanitizedPosition, sanitizedCompany].filter(
-      Boolean,
-    );
-    return `${parts.join('-')}-Resume.pdf`;
-  }
-
-  private sanitizeForFilename(input: string): string {
-    return input
-      .trim()
-      .replace(/[^a-zA-Z0-9\s]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 40);
   }
 
   /**

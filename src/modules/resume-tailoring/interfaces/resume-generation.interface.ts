@@ -47,6 +47,7 @@ export interface ResumeGenerationResult {
 
   // Optimization metrics
   keywordsAdded: number;
+  sectionsChanged: number;
   sectionsOptimized: number;
   achievementsQuantified: number;
   optimizationConfidence: number;
