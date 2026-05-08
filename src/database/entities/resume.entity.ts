@@ -29,6 +29,14 @@ export class Resume {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({
+    name: 'archived_at',
+    type: 'timestamptz',
+    nullable: true,
+    default: null,
+  })
+  archivedAt!: Date | null;
+
   @ManyToOne(() => User, (user) => user.uploadedResumes, {
     onDelete: 'CASCADE',
   })

@@ -40,6 +40,7 @@ async function bootstrap() {
       'Content-Type',
       'Authorization',
       'X-Requested-With',
+      'Idempotency-Key',
       'X-Resume-Generation-Id',
       'X-Filename',
       'X-Tailoring-Mode',

@@ -111,6 +111,12 @@ export class UserService {
       throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
     }
 
+    // Only the active resume is user-facing; archived (replaced) resumes
+    // are kept for restore-on-failure but must not appear in `uploadedResumes`.
+    user.uploadedResumes = (user.uploadedResumes ?? []).filter(
+      (r) => r.isActive,
+    );
+
     return user;
   }
 
@@ -165,6 +171,12 @@ export class UserService {
 
     const featureUsage = await this.getFeatureUsageForUser(user);
 
+    // Only the active resume is user-facing; archived (replaced) resumes
+    // are kept for restore-on-failure but must not appear in `uploadedResumes`.
+    const activeResumes = (user.uploadedResumes ?? []).filter(
+      (r) => r.isActive,
+    );
+
     return {
       id: user.id,
       full_name: user.full_name,
@@ -177,7 +189,7 @@ export class UserService {
       created_at: user.created_at,
       updated_at: user.updated_at,
       featureUsage,
-      uploadedResumes: user.uploadedResumes ?? [],
+      uploadedResumes: activeResumes,
     };
   }
 

@@ -128,7 +128,7 @@ export class ResumeSelectionService {
     userId: string,
   ): Promise<ExtractedResumeContent> {
     const resumes = await this.extractedResumeRepository.find({
-      where: { userId },
+      where: { userId, isActive: true },
       order: { createdAt: 'DESC' },
       take: 1,
     });
@@ -226,7 +226,7 @@ export class ResumeSelectionService {
     }>
   > {
     const resumes = await this.extractedResumeRepository.find({
-      where: { userId },
+      where: { userId, isActive: true },
       order: { createdAt: 'DESC' },
     });
 

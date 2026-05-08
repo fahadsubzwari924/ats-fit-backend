@@ -16,6 +16,8 @@ export function generateResumeFilename(
       .replace(/^_|_$/g, '')
       .slice(0, 60);
 
-  const parts = [sanitize(candidateName), sanitize(jobPosition)].filter(Boolean);
+  const parts = [sanitize(candidateName), sanitize(jobPosition)].filter(
+    Boolean,
+  );
   return parts.length ? `${parts.join('_')}.pdf` : 'Resume.pdf';
 }
