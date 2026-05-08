@@ -44,7 +44,6 @@ import {
 } from './constants/batch-tailoring-v2.constants';
 import type { SnapshotEvent } from './interfaces/batch-sse-event.interface';
 import type { UserContext } from '../interfaces/user-context.interface';
-import type { UserContext as AuthUserContext } from '../../auth/types/user-context.type';
 
 @ApiTags('Resume Tailoring (Batch v2)')
 @ApiBearerAuth()
@@ -83,10 +82,13 @@ export class BatchTailoringV2Controller {
     // limit. The processor increments RESUME_GENERATION per successful resume
     // (failed jobs do not consume quota).
     const tailoredResumeUsage = await this.rateLimitService.checkRateLimit(
-      req.userContext as AuthUserContext,
+      req.userContext,
       FeatureType.RESUME_GENERATION,
     );
-    if (tailoredResumeUsage.currentUsage + dto.jobs.length > tailoredResumeUsage.limit) {
+    if (
+      tailoredResumeUsage.currentUsage + dto.jobs.length >
+      tailoredResumeUsage.limit
+    ) {
       throw new ForbiddenException({
         message: `This batch would exceed your monthly tailored-resume limit. ${tailoredResumeUsage.remaining} of ${tailoredResumeUsage.limit} remaining; you requested ${dto.jobs.length}.`,
         errorCode: ERROR_CODES.RATE_LIMIT_EXCEEDED,

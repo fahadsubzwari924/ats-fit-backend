@@ -31,6 +31,7 @@ export class ResumeContentService implements IResumeContentProvider {
     const count = await this.extractedResumeRepository
       .createQueryBuilder('resume')
       .where('resume.userId = :userId', { userId })
+      .andWhere('resume.isActive = true')
       .andWhere('resume.extractedText IS NOT NULL')
       .andWhere("resume.extractedText != ''")
       .getCount();
@@ -47,6 +48,7 @@ export class ResumeContentService implements IResumeContentProvider {
     const resume = await this.extractedResumeRepository
       .createQueryBuilder('resume')
       .where('resume.userId = :userId', { userId })
+      .andWhere('resume.isActive = true')
       .andWhere('resume.extractedText IS NOT NULL')
       .andWhere("resume.extractedText != ''")
       .getOne();
@@ -91,6 +93,7 @@ export class ResumeContentService implements IResumeContentProvider {
         'resume.usageCount',
       ])
       .where('resume.userId = :userId', { userId })
+      .andWhere('resume.isActive = true')
       .andWhere('resume.extractedText IS NOT NULL')
       .andWhere("resume.extractedText != ''")
       .getOne();
@@ -113,7 +116,7 @@ export class ResumeContentService implements IResumeContentProvider {
     userId: string,
   ): Promise<ExtractedResumeContent[]> {
     return this.extractedResumeRepository.find({
-      where: { userId },
+      where: { userId, isActive: true },
       relations: ['queueMessage'],
       order: { createdAt: 'DESC' },
     });
@@ -128,7 +131,7 @@ export class ResumeContentService implements IResumeContentProvider {
     userId: string,
   ): Promise<ExtractedResumeContent | null> {
     const resume = await this.extractedResumeRepository.findOne({
-      where: { id: resumeId, userId },
+      where: { id: resumeId, userId, isActive: true },
       relations: ['queueMessage'],
     });
 
@@ -154,7 +157,7 @@ export class ResumeContentService implements IResumeContentProvider {
     userId: string,
   ): Promise<boolean> {
     const resume = await this.extractedResumeRepository.findOne({
-      where: { id: resumeId, userId },
+      where: { id: resumeId, userId, isActive: true },
       relations: ['queueMessage'],
     });
 
@@ -223,7 +226,16 @@ export class ResumeContentService implements IResumeContentProvider {
     fileHash: string,
   ): Promise<ExtractedResumeContent | null> {
     return this.extractedResumeRepository.findOne({
-      where: { fileHash, userId },
+      where: { fileHash, userId, isActive: true },
+    });
+  }
+
+  async getLastArchivedExtract(
+    userId: string,
+  ): Promise<ExtractedResumeContent | null> {
+    return this.extractedResumeRepository.findOne({
+      where: { userId, isActive: false },
+      order: { archivedAt: 'DESC' },
     });
   }
 }

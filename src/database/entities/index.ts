@@ -9,6 +9,7 @@ export * from './rate-limit-config.entity';
 export * from './resume.entity';
 export * from './resume-generations.entity';
 export * from './resume-generation-result.entity';
+export * from './resume-replacement-audit.entity';
 export * from './resume-templates.entity';
 export * from './usage-tracking.entity';
 export * from './user.entity';

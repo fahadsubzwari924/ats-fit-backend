@@ -30,7 +30,6 @@ import {
 import { FileValidationPipe } from '../../shared/pipes/file-validation.pipe';
 import { ResumeGenerationOrchestratorService } from './services/resume-generation-orchestrator.service';
 import type { UserContext as ResumeUserContext } from './interfaces/user-context.interface';
-import type { UserContext as AuthUserContext } from '../auth/types/user-context.type';
 import { ValidationLoggingInterceptor } from './interceptors/validation-logging.interceptor';
 import {
   NotFoundException,
@@ -370,12 +369,15 @@ export class ResumeTailoringController {
     // Shared-pool pre-check: every resume produced (single or batch) draws from
     // the same monthly RESUME_GENERATION pool. Reject before enqueueing if this
     // batch would push the user over their tailored-resume limit.
-    const authUserContext = request.userContext as AuthUserContext;
+    const authUserContext = request.userContext;
     const tailoredResumeUsage = await this.rateLimitService.checkRateLimit(
       authUserContext,
       FeatureType.RESUME_GENERATION,
     );
-    if (tailoredResumeUsage.currentUsage + dto.jobs.length > tailoredResumeUsage.limit) {
+    if (
+      tailoredResumeUsage.currentUsage + dto.jobs.length >
+      tailoredResumeUsage.limit
+    ) {
       throw new ForbiddenException({
         message: `This batch would exceed your monthly tailored-resume limit. ${tailoredResumeUsage.remaining} of ${tailoredResumeUsage.limit} remaining; you requested ${dto.jobs.length}.`,
         errorCode: ERROR_CODES.RATE_LIMIT_EXCEEDED,
