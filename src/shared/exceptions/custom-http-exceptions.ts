@@ -75,7 +75,7 @@ export class ForbiddenException<
 > extends CustomHttpException<TDetails> {
   constructor(
     message = 'Access forbidden',
-    errorCode: ErrorCode = ERROR_CODES.FORBIDDEN,
+    errorCode: string = ERROR_CODES.FORBIDDEN,
     errors?: ErrorDetailDto[],
     details?: TDetails | null,
   ) {
@@ -96,6 +96,23 @@ export class InternalServerErrorException<
     super(
       { message, errorCode, errors, details },
       HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+}
+
+// Too Many Requests Exception (HTTP 429)
+export class TooManyRequestsException<
+  TDetails = Record<string, unknown>,
+> extends CustomHttpException<TDetails> {
+  constructor(
+    message = 'Too many requests',
+    errorCode: string = ERROR_CODES.RATE_LIMIT_EXCEEDED,
+    errors?: ErrorDetailDto[],
+    details?: TDetails | null,
+  ) {
+    super(
+      { message, errorCode, errors, details },
+      HttpStatus.TOO_MANY_REQUESTS,
     );
   }
 }

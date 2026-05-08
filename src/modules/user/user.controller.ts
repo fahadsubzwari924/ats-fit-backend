@@ -1,8 +1,11 @@
 import {
+  Body,
+  ConflictException,
   Controller,
   Post,
   Patch,
   Get,
+  Headers,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -30,7 +33,10 @@ import { UserService } from './user.service';
 import { ResumeQueueService } from '../resume-tailoring/services/resume-queue.service';
 import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
 import { ResumeProfileEnrichmentService } from '../resume-tailoring/services/resume-profile-enrichment.service';
-import { ResumeProfileStatusResponse } from '../resume-tailoring/interfaces/resume-profile-enrichment.interface';
+import {
+  ProcessingStatusEnum,
+  ResumeProfileStatusResponse,
+} from '../resume-tailoring/interfaces/resume-profile-enrichment.interface';
 import { User } from '../../database/entities/user.entity';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { IFeatureUsage } from '../../shared/interfaces';
@@ -38,6 +44,14 @@ import {
   BadRequestException,
   NotFoundException,
 } from '../../shared/exceptions/custom-http-exceptions';
+import { ReplaceResumeService } from './services/replace-resume.service';
+import { RestoreArchivedResumeService } from './services/restore-archived-resume.service';
+import { ReplacementQuotaService } from './services/replacement-quota.service';
+import { RestoreArchivedResumeDto } from './dtos/restore-archived-resume.dto';
+import { ReplaceResumeResponseDto } from './dtos/replace-resume-response.dto';
+import { IReplacementQuota } from './interfaces/replacement-quota.interface';
+import { ResumeReplacementErrorCode } from '../../shared/enums/resume-replacement.enum';
+import { RESUME_REPLACEMENT } from '../../shared/constants/resume-replacement.constants';
 
 @ApiTags('Users')
 @Controller('users')
@@ -52,6 +66,9 @@ export class UserController {
     private readonly resumeQueueService: ResumeQueueService,
     private readonly resumeContentService: ResumeContentService,
     private readonly resumeProfileEnrichmentService: ResumeProfileEnrichmentService,
+    private readonly replaceResumeService: ReplaceResumeService,
+    private readonly restoreArchivedResumeService: RestoreArchivedResumeService,
+    private readonly replacementQuotaService: ReplacementQuotaService,
   ) {}
 
   @Get('me')
@@ -98,9 +115,13 @@ export class UserController {
       },
     },
   })
-  async getResumeProfileStatus(
-    @Req() request: RequestWithUserContext,
-  ): Promise<ResumeProfileStatusResponse> {
+  async getResumeProfileStatus(@Req() request: RequestWithUserContext): Promise<
+    ResumeProfileStatusResponse & {
+      replacementInProgress: boolean;
+      lastArchivedExtractId: string | null;
+      quota: IReplacementQuota | null;
+    }
+  > {
     const userId = request?.userContext?.userId;
     if (!userId) {
       throw new BadRequestException(
@@ -108,7 +129,27 @@ export class UserController {
         ERROR_CODES.AUTHENTICATION_REQUIRED,
       );
     }
-    return this.resumeProfileEnrichmentService.getResumeProfileStatus(userId);
+    const status =
+      await this.resumeProfileEnrichmentService.getResumeProfileStatus(userId);
+    const [lastArchived, quota]: [
+      ExtractedResumeContent | null,
+      IReplacementQuota | null,
+    ] = await Promise.all([
+      this.resumeContentService.getLastArchivedExtract(userId),
+      this.replacementQuotaService
+        .getCurrentQuota(userId)
+        .catch((): null => null),
+    ]);
+    const replacementInProgress =
+      (status.processingStatus === ProcessingStatusEnum.QUEUED ||
+        status.processingStatus === ProcessingStatusEnum.PROCESSING) &&
+      !!lastArchived;
+    return {
+      ...status,
+      replacementInProgress,
+      lastArchivedExtractId: lastArchived?.id ?? null,
+      quota,
+    };
   }
 
   @Get('feature-usage')
@@ -303,6 +344,53 @@ export class UserController {
     return result;
   }
 
+  @Post('replace-resume')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({
+    summary: 'Replace active resume (premium only)',
+    description:
+      'Atomically archives current resume and enqueues new file for extraction. Max 3 replacements per billing period.',
+  })
+  @ApiResponse({ status: 201, description: 'Replacement queued' })
+  async replaceResume(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() request: RequestWithUserContext,
+    @Headers(RESUME_REPLACEMENT.IDEMPOTENCY_HEADER) idempotencyKey?: string,
+  ): Promise<ReplaceResumeResponseDto> {
+    const userId = request?.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'User authentication required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+    return this.replaceResumeService.execute({ userId, file, idempotencyKey });
+  }
+
+  @Post('restore-archived-resume')
+  @ApiOperation({
+    summary: 'Restore a previously archived resume',
+    description:
+      'Atomically swaps the archived extract back to active. Only allowed within 7-day restore window.',
+  })
+  @ApiResponse({ status: 201, description: 'Resume restored' })
+  async restoreArchivedResume(
+    @Body() dto: RestoreArchivedResumeDto,
+    @Req() request: RequestWithUserContext,
+  ): Promise<{ restoredAt: Date }> {
+    const userId = request?.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'User authentication required',
+        ERROR_CODES.AUTHENTICATION_REQUIRED,
+      );
+    }
+    return this.restoreArchivedResumeService.execute(
+      userId,
+      dto.archivedExtractId,
+    );
+  }
+
   @Get('processed-resumes')
   @ApiOperation({
     summary: 'Get all async processed resumes for the current user',
@@ -440,6 +528,13 @@ export class UserController {
         'Resume not found or does not belong to the user',
         ERROR_CODES.RESUME_NOT_FOUND,
       );
+    }
+
+    if (resume.isActive) {
+      throw new ConflictException({
+        code: ResumeReplacementErrorCode.CANNOT_DELETE_ACTIVE_RESUME,
+        message: 'Cannot delete the active resume. Use replace-resume instead.',
+      });
     }
 
     await this.resumeService.deleteResume(resumeId);

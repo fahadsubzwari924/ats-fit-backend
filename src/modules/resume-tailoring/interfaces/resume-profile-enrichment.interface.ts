@@ -42,3 +42,18 @@ export interface AnswerProfileQuestionPayload {
   questionId: string;
   response: string | null;
 }
+
+export const ProcessingStatusEnum = {
+  NONE: 'none',
+  QUEUED: 'queued',
+  PROCESSING: 'processing',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+} as const satisfies Record<string, ProcessingStatus>;
+
+export const TailoringModeEnum = {
+  NONE: 'none',
+  STANDARD: 'standard',
+  ENHANCED: 'enhanced',
+  PRECISION: 'precision',
+} as const satisfies Record<string, TailoringMode>;

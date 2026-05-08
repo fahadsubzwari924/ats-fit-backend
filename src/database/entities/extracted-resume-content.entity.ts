@@ -35,7 +35,7 @@ export class ExtractedResumeContent {
   @Column({ name: 'file_size', type: 'integer' })
   fileSize: number;
 
-  @Column({ name: 'file_hash', type: 'varchar', length: 64, unique: true })
+  @Column({ name: 'file_hash', type: 'varchar', length: 64 })
   fileHash: string;
 
   @Column({ name: 'extracted_text', type: 'text' })
@@ -52,6 +52,17 @@ export class ExtractedResumeContent {
 
   @Column({ name: 'business_metadata', type: 'jsonb', default: {} })
   businessMetadata: Record<string, any>;
+
+  @Column({ name: 'is_active', type: 'boolean', default: true })
+  isActive!: boolean;
+
+  @Column({
+    name: 'archived_at',
+    type: 'timestamptz',
+    nullable: true,
+    default: null,
+  })
+  archivedAt!: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

@@ -110,7 +110,7 @@ export class ResumeProfileEnrichmentService {
     }
 
     const extracted = await this.extractedResumeRepository.findOne({
-      where: { id: extractedResumeContentId, userId },
+      where: { id: extractedResumeContentId, userId, isActive: true },
     });
     if (!extracted) {
       throw new NotFoundException(
@@ -418,7 +418,7 @@ export class ResumeProfileEnrichmentService {
       );
     }
     const latestExtracted = await this.extractedResumeRepository.findOne({
-      where: { userId },
+      where: { userId, isActive: true },
       relations: ['queueMessage'],
       order: { createdAt: 'DESC' },
     });

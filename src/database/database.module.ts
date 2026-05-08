@@ -22,6 +22,7 @@ import {
   BetaInvite,
   BatchTailoringRun,
   BatchTailoringJob,
+  ResumeReplacementAudit,
 } from './entities';
 
 @Module({
@@ -63,6 +64,7 @@ import {
             BetaInvite,
             BatchTailoringRun,
             BatchTailoringJob,
+            ResumeReplacementAudit,
           ],
           synchronize: false,
           logging: process.env.NODE_ENV !== 'production',

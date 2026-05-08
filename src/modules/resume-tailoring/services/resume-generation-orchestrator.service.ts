@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JobAnalysisService } from './job-analysis.service';
@@ -25,6 +25,8 @@ import {
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { MATCH_SCORE_MAX_PERCENTAGE } from '../../../shared/constants/resume-tailoring.constants';
 import { OPTIMIZATION_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
+import { ResumeContentService } from './resume-content.service';
+import { ResumeReplacementErrorCode } from '../../../shared/enums/resume-replacement.enum';
 
 /**
  * Resume Generation Orchestrator Service
@@ -52,6 +54,7 @@ export class ResumeGenerationOrchestratorService {
     private readonly atsChecksComputationService: AtsChecksComputationService,
     private readonly bulletsQuantifiedComputationService: BulletsQuantifiedComputationService,
     private readonly changesDiffComputationService: ChangesDiffComputationService,
+    private readonly resumeContentService: ResumeContentService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
   ) {}
@@ -68,6 +71,10 @@ export class ResumeGenerationOrchestratorService {
       this.logger.log(
         `Starting resume generation for ${input.jobPosition} at ${input.companyName}`,
       );
+
+      if (!input.resumeFile) {
+        await this.assertProfileReady(input.userContext.userId);
+      }
 
       const validationTime = await this.runValidation(input);
       const { jobAnalysis, resumeContent, parallelOperationsTime } =
@@ -459,7 +466,8 @@ export class ResumeGenerationOrchestratorService {
 
     if (
       error instanceof BadRequestException ||
-      error instanceof NotFoundException
+      error instanceof NotFoundException ||
+      error instanceof ConflictException
     ) {
       throw error;
     }
@@ -492,6 +500,16 @@ export class ResumeGenerationOrchestratorService {
       'Resume generation failed due to an internal error. Please try again or contact support if the issue persists.',
       ERROR_CODES.INTERNAL_SERVER,
     );
+  }
+
+  private async assertProfileReady(userId: string): Promise<void> {
+    const ready = await this.resumeContentService.hasProcessedResume(userId);
+    if (!ready) {
+      throw new ConflictException({
+        code: ResumeReplacementErrorCode.RESUME_PROFILE_NOT_READY,
+        message: 'Your resume is still processing. Please wait and try again.',
+      });
+    }
   }
 
   /**

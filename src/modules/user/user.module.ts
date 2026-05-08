@@ -5,6 +5,7 @@ import { Resume } from '../../database/entities/resume.entity';
 import { QueueMessage } from '../../database/entities/queue-message.entity';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
 import { UserSubscription } from '../../database/entities/user-subscription.entity';
+import { ResumeReplacementAudit } from '../../database/entities/resume-replacement-audit.entity';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { ResumeContentService } from '../resume-tailoring/services/resume-content.service';
@@ -13,6 +14,12 @@ import { AuthModule } from '../auth/auth.module';
 import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { QueueModule } from '../queue/queue.module';
 import { BetaAccessModule } from '../beta-access/beta-access.module';
+import { ExternalModule } from '../../shared/modules/external/external.module';
+import { ResumeReplacementAuditRepository } from './repositories/resume-replacement-audit.repository';
+import { ReplacementQuotaService } from './services/replacement-quota.service';
+import { ReplaceResumeService } from './services/replace-resume.service';
+import { RestoreArchivedResumeService } from './services/restore-archived-resume.service';
+import { ArchivePurgeService } from '../../shared/services/archive-purge.service';
 
 @Module({
   imports: [
@@ -22,15 +29,25 @@ import { BetaAccessModule } from '../beta-access/beta-access.module';
       QueueMessage,
       ExtractedResumeContent,
       UserSubscription,
+      ResumeReplacementAudit,
     ]),
     forwardRef(() => ResumeTailoringModule),
     forwardRef(() => AuthModule),
     forwardRef(() => RateLimitModule),
     QueueModule,
     BetaAccessModule,
+    ExternalModule,
   ],
   controllers: [UserController],
-  providers: [UserService, ResumeContentService],
+  providers: [
+    UserService,
+    ResumeContentService,
+    ResumeReplacementAuditRepository,
+    ReplacementQuotaService,
+    ReplaceResumeService,
+    RestoreArchivedResumeService,
+    ArchivePurgeService,
+  ],
   exports: [UserService],
 })
 export class UserModule {}
