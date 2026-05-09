@@ -50,7 +50,7 @@ export class BetaInviteEmailProcessor {
           name: name ?? email,
           code,
           expires_at: new Date(expiresAt).toDateString(),
-          redeem_url: `${frontendUrl}/beta/redeem?code=${encodeURIComponent(code)}&email=${encodeURIComponent(email)}`,
+          redeem_url: `${frontendUrl}/signup?code=${encodeURIComponent(code)}&email=${encodeURIComponent(email)}`,
         },
       });
 
