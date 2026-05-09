@@ -50,14 +50,13 @@ export class UserService {
       throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
     }
 
-    const isPremium =
-      user.plan === UserPlan.PREMIUM ||
-      (await this.betaEntitlementService.hasActiveBetaAccess(user.id));
+    const effectivePlan = this.resolveEffectivePlan(user);
+    const isPremium = effectivePlan === UserPlan.PREMIUM;
 
     return {
       userId: user.id,
       userType: UserType.REGISTERED,
-      plan: isPremium ? UserPlan.PREMIUM : user.plan,
+      plan: effectivePlan,
       isPremium,
       ipAddress: user.ip_address || '',
       userAgent: user.user_agent || '',
@@ -169,6 +168,7 @@ export class UserService {
       throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
     }
 
+    const effectivePlan = this.resolveEffectivePlan(user);
     const featureUsage = await this.getFeatureUsageForUser(user);
 
     // Only the active resume is user-facing; archived (replaced) resumes
@@ -181,8 +181,8 @@ export class UserService {
       id: user.id,
       full_name: user.full_name,
       email: user.email,
-      plan: user.plan,
-      isPremium: user.plan === UserPlan.PREMIUM,
+      plan: effectivePlan,
+      isPremium: effectivePlan === UserPlan.PREMIUM,
       user_type: user.user_type,
       is_active: user.is_active,
       onboarding_completed: user.onboarding_completed,
@@ -191,6 +191,18 @@ export class UserService {
       featureUsage,
       uploadedResumes: activeResumes,
     };
+  }
+
+  /**
+   * Resolve the effective plan for a user, treating active beta users as PREMIUM.
+   * The `user.plan` column itself is unchanged; this is a runtime override
+   * for entitlement checks during the beta access window.
+   */
+  private resolveEffectivePlan(user: User): UserPlan {
+    if (user.plan === UserPlan.PREMIUM) return UserPlan.PREMIUM;
+    return this.betaEntitlementService.hasActiveBetaAccessFor(user)
+      ? UserPlan.PREMIUM
+      : user.plan;
   }
 
   /**
@@ -205,17 +217,19 @@ export class UserService {
    * @returns Formatted feature usage array
    */
   async getFeatureUsageForUser(user: User): Promise<Array<IFeatureUsage>> {
+    const effectivePlan = this.resolveEffectivePlan(user);
+
     const userContext: UserContext = {
       userId: user.id,
       userType: user.user_type,
-      plan: user.plan,
+      plan: effectivePlan,
       ipAddress: user.ip_address || '127.0.0.1',
       userAgent: user.user_agent || 'UserService',
     };
 
     const subscriptionPeriod =
-      user.plan === UserPlan.PREMIUM
-        ? await this.getActivePremiumPeriod(user.id)
+      effectivePlan === UserPlan.PREMIUM
+        ? await this.getBillingPeriodForUser(user)
         : null;
 
     return this.rateLimitService.getFormattedFeatureUsage(
@@ -225,22 +239,44 @@ export class UserService {
   }
 
   /**
-   * Retrieve the billing period boundaries for the user's active premium subscription.
-   * Returns `null` when no active subscription is found (graceful fallback to calendar month).
+   * Resolve the billing-period boundaries for premium-equivalent users.
+   *
+   * Priority:
+   *  1. Active paid subscription (UserSubscription) — anchors to real payment date.
+   *  2. Beta access window — `created_at`-style start ≈ `beta_access_until - 30d`,
+   *     end = `beta_access_until`. Lets the dashboard surface the actual beta
+   *     window rather than the calendar-month fallback.
+   *  3. null — RateLimitService falls back to calendar-month boundaries.
    */
-  private async getActivePremiumPeriod(
-    userId: string,
+  private async getBillingPeriodForUser(
+    user: User,
   ): Promise<SubscriptionPeriod | null> {
+    // Real paid subscription wins
     const subscription = await this.userSubscriptionRepository.findOne({
-      where: { user_id: userId, is_active: true, is_cancelled: false },
+      where: { user_id: user.id, is_active: true, is_cancelled: false },
       order: { created_at: 'DESC' },
       select: ['starts_at', 'ends_at'],
     });
-
-    if (!subscription?.starts_at || !subscription?.ends_at) {
-      return null;
+    if (subscription?.starts_at && subscription?.ends_at) {
+      return {
+        starts_at: subscription.starts_at,
+        ends_at: subscription.ends_at,
+      };
     }
 
-    return { starts_at: subscription.starts_at, ends_at: subscription.ends_at };
+    // Beta window — only when access is still active
+    if (this.betaEntitlementService.hasActiveBetaAccessFor(user)) {
+      // The beta window length is stored on the BetaInvite row (access_days),
+      // but for display we approximate the start as `beta_access_until - 30d`
+      // (default access_days). This is a UX-only field — quota counters still
+      // use calendar-month aggregation in usage_tracking.
+      const ends_at = user.beta_access_until; // narrowed by the helper
+      // TODO(beta): when cohorts diverge from the default 30-day window, look up
+      // the BetaInvite's access_days for the redemption row instead of hardcoding 30.
+      const starts_at = new Date(ends_at.getTime() - 30 * 24 * 60 * 60 * 1000);
+      return { starts_at, ends_at };
+    }
+
+    return null;
   }
 }
