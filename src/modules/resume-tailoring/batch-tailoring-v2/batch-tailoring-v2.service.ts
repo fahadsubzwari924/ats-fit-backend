@@ -6,11 +6,13 @@ import { DataSource, Repository } from 'typeorm';
 import { BatchTailoringRun } from '../../../database/entities/batch-tailoring-run.entity';
 import { BatchTailoringJob } from '../../../database/entities/batch-tailoring-job.entity';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
+import { User } from '../../../database/entities/user.entity';
 import {
   BadRequestException,
   NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
+import { generateResumeFilename } from '../../../shared/utils/resume-filename.util';
 import {
   BATCH_V2_MAX_JOBS,
   BATCH_TAILORING_V2_JOB_NAME,
@@ -34,6 +36,8 @@ export class BatchTailoringV2Service {
     private readonly runRepo: Repository<BatchTailoringRun>,
     @InjectRepository(BatchTailoringJob)
     private readonly jobRepo: Repository<BatchTailoringJob>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -165,6 +169,17 @@ export class BatchTailoringV2Service {
       order: { job_index: 'ASC' },
     });
 
+    // Resolve account fullName once so toResult can produce a stable, server-
+    // generated filename identical to the one the live SSE job_completed event
+    // emits. Without this, snapshot/replay paths return a result without
+    // `filename`, forcing the client to regenerate and creating a divergence
+    // between live vs. replayed downloads.
+    const user = await this.userRepo.findOne({
+      where: { id: run.user_id },
+      select: ['full_name'],
+    });
+    const candidateName = user?.full_name ?? '';
+
     return {
       batchId: run.id,
       totalJobs: run.total_jobs,
@@ -174,19 +189,24 @@ export class BatchTailoringV2Service {
         jobPosition: j.job_position,
         companyName: j.company_name,
         state: j.state,
-        result: j.state === 'completed' ? this.toResult(j) : undefined,
+        result:
+          j.state === 'completed' ? this.toResult(j, candidateName) : undefined,
         error: j.error_message ?? undefined,
       })),
     };
   }
 
-  private toResult(job: BatchTailoringJob): BatchJobResult {
+  private toResult(
+    job: BatchTailoringJob,
+    candidateName: string,
+  ): BatchJobResult {
     const rg = job.resume_generation;
     return {
       jobPosition: job.job_position,
       companyName: job.company_name,
       status: 'success',
       resumeGenerationId: rg?.id,
+      filename: generateResumeFilename(candidateName, job.job_position),
       keywordsAdded: rg?.keywords_added ?? 0,
       sectionsChanged: this.extractSectionsChanged(rg ?? null),
       matchScoreBefore: rg?.matchScoreBefore ?? undefined,

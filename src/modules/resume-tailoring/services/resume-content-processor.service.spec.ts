@@ -4,6 +4,7 @@ import { ResumeSelectionService } from '../../ats-match/services/resume-selectio
 import { AIContentService } from '../../../shared/services/ai-content.service';
 import { ResumeService } from './resume.service';
 import { ResumeProfileEnrichmentService } from './resume-profile-enrichment.service';
+import { UserType } from '../../../database/entities/user.entity';
 
 // pdf-parse is used internally; mock it so tests don't need a real PDF buffer
 jest.mock('pdf-parse', () =>
@@ -88,7 +89,7 @@ describe('ResumeContentProcessorService', () => {
       };
 
       const result = await service.processResumeContent(
-        { userId: 'u1', userType: 'premium' },
+        { userId: 'u1', userType: UserType.REGISTERED, plan: 'premium' },
         mockFile,
       );
 
@@ -118,7 +119,8 @@ describe('ResumeContentProcessorService', () => {
 
       const result = await service.processResumeContent({
         userId: 'u1',
-        userType: 'premium',
+        userType: UserType.REGISTERED,
+        plan: 'premium',
       });
 
       expect(result.rawContent).toEqual({ summary: 'original' });
@@ -146,7 +148,8 @@ describe('ResumeContentProcessorService', () => {
 
       const result = await service.processResumeContent({
         userId: 'u1',
-        userType: 'premium',
+        userType: UserType.REGISTERED,
+        plan: 'premium',
       });
 
       expect(result.rawContent).toEqual({ summary: 'structured' });

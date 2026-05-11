@@ -157,6 +157,7 @@ export class ResumeTailoringController {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,
       'Content-Length': pdfBuffer.length.toString(),
+      'X-Filename': filename,
     });
     res.end(pdfBuffer);
   }

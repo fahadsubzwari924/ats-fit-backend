@@ -52,6 +52,11 @@ export class PdfGenerationOrchestratorService {
    * @param templateId - Resume template ID to use for formatting
    * @param companyName - Target company name for filename generation
    * @param jobPosition - Target job position for filename generation
+   * @param candidateName - Account holder's full name to brand the file with.
+   *   Used as the candidate token in the filename so live-tailoring downloads
+   *   match the cover letter and history-download paths (both keyed off
+   *   `users.full_name`). Falls back to `optimizedContent.contactInfo.name`
+   *   only when the caller cannot supply it.
    * @returns Promise<PdfGenerationResult> - Generated PDF with metadata
    */
   async generateOptimizedResumePdf(
@@ -59,6 +64,7 @@ export class PdfGenerationOrchestratorService {
     templateId: string,
     companyName: string,
     jobPosition: string,
+    candidateName?: string,
   ): Promise<PdfGenerationResult> {
     const startTime = Date.now();
 
@@ -100,9 +106,11 @@ export class PdfGenerationOrchestratorService {
 
       // Step 4: Prepare result with metadata
       const pdfContent = Buffer.from(pdfBuffer).toString('base64');
-      const candidateName =
-        optimizationResult.optimizedContent.contactInfo?.name ?? '';
-      const filename = generateResumeFilename(candidateName, jobPosition);
+      const filenameCandidate =
+        candidateName?.trim() ||
+        optimizationResult.optimizedContent.contactInfo?.name ||
+        '';
+      const filename = generateResumeFilename(filenameCandidate, jobPosition);
 
       const totalProcessingTime = Date.now() - startTime;
 

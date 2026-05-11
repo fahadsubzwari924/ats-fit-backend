@@ -66,11 +66,7 @@ export class ResumeRequirementsValidationRule extends BaseValidationRule<ResumeV
     }
 
     // BUSINESS RULE: Premium users cannot upload files if they have existing processed resumes
-    if (
-      userContext.userType === 'premium' &&
-      hasExistingResumes &&
-      resumeFile
-    ) {
+    if (userContext.plan === 'premium' && hasExistingResumes && resumeFile) {
       this.logger.warn(
         `Premium user ${userContext.userId} attempted to upload file while having existing processed resumes`,
       );
@@ -98,7 +94,7 @@ export class ResumeRequirementsValidationRule extends BaseValidationRule<ResumeV
       warnings.push(
         'No existing resumes found in account - using uploaded file',
       );
-    } else if (resumeFile && userContext.userType !== 'premium') {
+    } else if (resumeFile && userContext.plan !== 'premium') {
       // Only warn for non-premium users (premium users get error above)
       warnings.push('Both existing resumes and uploaded file available');
     }
@@ -158,8 +154,9 @@ export class ResumeRequirementsValidationRule extends BaseValidationRule<ResumeV
     try {
       const convertedUserContext = this.convertToResumeSelectionUserContext({
         userId,
-        userType: 'freemium', // We'll determine actual type later
-      } as UserContext);
+        userType: UserType.REGISTERED,
+        plan: 'freemium', // We'll determine actual plan later
+      });
 
       await this.resumeSelectionService.selectResume(convertedUserContext, {
         resumeId,
@@ -197,9 +194,7 @@ export class ResumeRequirementsValidationRule extends BaseValidationRule<ResumeV
       userId: userContext.userId,
       userType: UserType.REGISTERED,
       plan:
-        userContext.userType === 'freemium'
-          ? UserPlan.FREEMIUM
-          : UserPlan.PREMIUM,
+        userContext.plan === 'freemium' ? UserPlan.FREEMIUM : UserPlan.PREMIUM,
     };
   }
 }

@@ -1,13 +1,18 @@
+import { UserType } from '../../../database/entities/user.entity';
+
 /**
  * User context for resume processing operations
  *
- * Defines user identification information used throughout
- * the resume generation pipeline for both authenticated
- * and guest users.
+ * - `userType` is the persistence-layer enum value (`'registered'`). DB columns
+ *   of type `user_type_enum` only accept this value.
+ * - `plan` is the domain plan tier (`'freemium' | 'premium'`). All plan-tier
+ *   branching MUST use this field, never `userType`.
  */
 export interface UserContext {
   userId?: string;
-  userType: 'freemium' | 'premium';
+  userType: UserType;
+  plan: 'freemium' | 'premium';
+  isPremium?: boolean;
 }
 
 /**

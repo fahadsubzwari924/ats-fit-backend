@@ -4,6 +4,7 @@ import {
   ValidationRuleResult,
 } from '../../../shared/modules/validation';
 import { ResumeValidationContext } from '../interfaces/resume-validation-context.interface';
+import { UserType } from '../../../database/entities/user.entity';
 
 @Injectable()
 export class UserContextValidationRule extends BaseValidationRule<ResumeValidationContext> {
@@ -32,10 +33,17 @@ export class UserContextValidationRule extends BaseValidationRule<ResumeValidati
       return Promise.resolve(this.createFailureResult(errors));
     }
 
-    const validUserTypes = ['freemium', 'premium'];
+    const validUserTypes: string[] = [UserType.REGISTERED];
     if (!validUserTypes.includes(userContext.userType)) {
       errors.push(
         `Invalid user type: ${userContext.userType}. Must be one of: ${validUserTypes.join(', ')}`,
+      );
+    }
+
+    const validPlans = ['freemium', 'premium'];
+    if (!validPlans.includes(userContext.plan)) {
+      errors.push(
+        `Invalid plan: ${userContext.plan}. Must be one of: ${validPlans.join(', ')}`,
       );
     }
 

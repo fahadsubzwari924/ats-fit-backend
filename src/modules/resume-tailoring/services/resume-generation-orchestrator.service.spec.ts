@@ -11,6 +11,8 @@ import { AtsChecksComputationService } from './ats-checks-computation.service';
 import { BulletsQuantifiedComputationService } from './bullets-quantified-computation.service';
 import { ChangesDiffComputationService } from './changes-diff-computation.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
+import { User } from '../../../database/entities/user.entity';
+import { ResumeContentService } from './resume-content.service';
 
 describe('ResumeGenerationOrchestratorService', () => {
   let service: ResumeGenerationOrchestratorService;
@@ -99,6 +101,14 @@ describe('ResumeGenerationOrchestratorService', () => {
         {
           provide: getRepositoryToken(ResumeGeneration),
           useValue: mockResumeGenerationRepository,
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: ResumeContentService,
+          useValue: {},
         },
       ],
     }).compile();
