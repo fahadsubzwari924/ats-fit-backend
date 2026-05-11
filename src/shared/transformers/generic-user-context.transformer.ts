@@ -1,39 +1,39 @@
 import { Injectable } from '@nestjs/common';
 import { UserContext as AuthUserContext } from '../../modules/auth/types/user-context.type';
+import { UserPlan, UserType } from '../../database/entities/user.entity';
+
+export type DomainUserPlan = 'freemium' | 'premium';
+
+export interface DomainUserContext extends AuthUserContext {
+  userType: UserType;
+  plan: DomainUserPlan;
+  isPremium: boolean;
+}
 
 /**
- * Maps auth middleware context (registered user + plan) to domain plan tier
- * used by resume tailoring: `freemium` | `premium`.
+ * Normalizes the auth-middleware user context for downstream domain code.
+ *
+ * - `userType` stays the persistence-layer `UserType` enum value (`'registered'`).
+ *   It must not be conflated with plan tier — DB columns of type `user_type_enum`
+ *   only accept `'registered'`, so passing `'premium'` here causes PostgreSQL to
+ *   reject the query.
+ * - `plan` is normalized to `'freemium' | 'premium'`. All plan-tier branching in
+ *   downstream code MUST use `plan` (or `isPremium`), never `userType`.
  */
 @Injectable()
 export class GenericUserContextTransformer {
-  transform(authContext: AuthUserContext): {
-    userId?: string;
-    userType: 'freemium' | 'premium';
-    [key: string]: unknown;
-  } {
-    if (authContext.userType === 'registered') {
-      const userType: 'freemium' | 'premium' =
-        authContext.plan === 'premium' || authContext.isPremium === true
-          ? 'premium'
-          : 'freemium';
-
-      return {
-        ...authContext,
-        userType,
-      };
-    }
-
-    if (['freemium', 'premium'].includes(String(authContext.userType))) {
-      return {
-        ...authContext,
-        userType: authContext.userType as 'freemium' | 'premium',
-      };
-    }
+  transform(authContext: AuthUserContext): DomainUserContext {
+    const plan: DomainUserPlan =
+      (authContext.plan as UserPlan) === UserPlan.PREMIUM ||
+      authContext.isPremium === true
+        ? 'premium'
+        : 'freemium';
 
     return {
       ...authContext,
-      userType: 'freemium',
+      userType: UserType.REGISTERED,
+      plan,
+      isPremium: plan === 'premium',
     };
   }
 

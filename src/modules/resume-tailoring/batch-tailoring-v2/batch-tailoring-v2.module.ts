@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bull';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BatchTailoringRun } from '../../../database/entities/batch-tailoring-run.entity';
 import { BatchTailoringJob } from '../../../database/entities/batch-tailoring-job.entity';
+import { User } from '../../../database/entities/user.entity';
 import { BatchTailoringV2EventsGateway } from './batch-tailoring-v2.events.gateway';
 import { BatchTailoringV2Processor } from './batch-tailoring-v2.processor';
 import { BatchTailoringV2Service } from './batch-tailoring-v2.service';
@@ -31,7 +32,7 @@ import { RateLimitModule } from '../../rate-limit/rate-limit.module';
 @Module({
   imports: [
     BullModule.registerQueue({ name: BATCH_TAILORING_V2_QUEUE }),
-    TypeOrmModule.forFeature([BatchTailoringRun, BatchTailoringJob]),
+    TypeOrmModule.forFeature([BatchTailoringRun, BatchTailoringJob, User]),
     ResumeTailoringModule,
     forwardRef(() => AuthModule),
     forwardRef(() => RateLimitModule),

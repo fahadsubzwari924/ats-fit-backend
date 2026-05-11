@@ -1,4 +1,5 @@
 import { CommonValidationContext } from '../../../shared/modules/validation';
+import { UserContext } from './user-context.interface';
 
 /**
  * Resume Generation Validation Context
@@ -23,10 +24,7 @@ export interface ResumeValidationContext extends CommonValidationContext {
   /**
    * User context for resume operations
    */
-  userContext: {
-    userId?: string;
-    userType: 'freemium' | 'premium';
-  };
+  userContext: UserContext;
 
   /**
    * Available services for validation rules

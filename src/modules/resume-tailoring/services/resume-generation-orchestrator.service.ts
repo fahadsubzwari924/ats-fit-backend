@@ -11,6 +11,7 @@ import { AtsChecksComputationService } from './ats-checks-computation.service';
 import { BulletsQuantifiedComputationService } from './bullets-quantified-computation.service';
 import { ChangesDiffComputationService } from './changes-diff-computation.service';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
+import { User } from '../../../database/entities/user.entity';
 import { TailoredContent } from '../interfaces/resume-extracted-keywords.interface';
 import { EnhancedResumeDiff } from '../interfaces/enhanced-resume-diff.interface';
 import {
@@ -57,6 +58,8 @@ export class ResumeGenerationOrchestratorService {
     private readonly resumeContentService: ResumeContentService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   /**
@@ -144,6 +147,23 @@ export class ResumeGenerationOrchestratorService {
   // ---------------------------------------------------------------------------
   // Pipeline steps
   // ---------------------------------------------------------------------------
+
+  /**
+   * Look up the account holder's full name so we can brand the generated PDF
+   * with the user's identity rather than whatever name the AI extracted from
+   * the uploaded resume content. Empty string is returned (not an error) when
+   * the user record cannot be found — the PDF orchestrator falls back to the
+   * resume's contactInfo.name in that case so the file still has a sensible
+   * filename.
+   */
+  private async resolveAccountFullName(userId?: string): Promise<string> {
+    if (!userId) return '';
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['full_name'],
+    });
+    return user?.full_name ?? '';
+  }
 
   private async runValidation(input: ResumeGenerationInput): Promise<number> {
     const start = Date.now();
@@ -289,12 +309,16 @@ export class ResumeGenerationOrchestratorService {
     >,
   ) {
     const start = Date.now();
+    const candidateName = await this.resolveAccountFullName(
+      input.userContext.userId,
+    );
     const pdfResult =
       await this.pdfGenerationOrchestratorService.generateOptimizedResumePdf(
         optimizationResult,
         input.templateId,
         input.companyName,
         input.jobPosition,
+        candidateName,
       );
     const pdfGenerationTime = Date.now() - start;
 

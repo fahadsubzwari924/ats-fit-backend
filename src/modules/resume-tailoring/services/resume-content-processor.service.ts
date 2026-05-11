@@ -60,7 +60,7 @@ export class ResumeContentProcessorService {
 
     try {
       this.logger.log(
-        `Processing resume content for ${userContext.userType} user${userContext.userId ? ` (ID: ${userContext.userId})` : ''}`,
+        `Processing resume content for ${userContext.plan} plan${userContext.userId ? ` (user: ${userContext.userId})` : ''}`,
       );
 
       return await this.processRegisteredUserResumeContent(
@@ -391,9 +391,7 @@ export class ResumeContentProcessorService {
       userId: userContext.userId,
       userType: UserType.REGISTERED,
       plan:
-        userContext.userType === 'freemium'
-          ? UserPlan.FREEMIUM
-          : UserPlan.PREMIUM,
+        userContext.plan === 'freemium' ? UserPlan.FREEMIUM : UserPlan.PREMIUM,
     };
   }
 }
