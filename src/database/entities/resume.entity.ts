@@ -20,7 +20,7 @@ export class Resume {
   @Column({ type: 'int' })
   fileSize: number;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: 'varchar', length: 255 })
   mimeType: string;
 
   @Column({ type: 'varchar', length: 512 })
