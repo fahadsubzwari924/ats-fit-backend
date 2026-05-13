@@ -64,6 +64,9 @@ export class BatchTailoringJob {
   @Column({ type: 'timestamp', nullable: true })
   completed_at: Date | null;
 
+  @Column({ name: 'retry_count', type: 'int', default: 0 })
+  retry_count: number;
+
   @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 }

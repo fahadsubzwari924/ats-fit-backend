@@ -96,12 +96,12 @@ export const MAX_TOTAL_MINUTES = 7;
 // ---------------------------------------------------------------------------
 
 /** Max output tokens for resume optimization LLM calls. */
-export const MAX_TOKENS_OPTIMIZATION = 8000;
+export const MAX_TOKENS_OPTIMIZATION = 12000;
 
 // Extended thinking budget. When enabled, max_tokens must cover budget + expected output.
 export const EXTENDED_THINKING_BUDGET_TOKENS = 4000;
 export const MAX_TOKENS_OPTIMIZATION_WITH_THINKING =
-  MAX_TOKENS_OPTIMIZATION + EXTENDED_THINKING_BUDGET_TOKENS; // 12 000
+  MAX_TOKENS_OPTIMIZATION + EXTENDED_THINKING_BUDGET_TOKENS; // 16 000
 
 // ---------------------------------------------------------------------------
 // AI Models

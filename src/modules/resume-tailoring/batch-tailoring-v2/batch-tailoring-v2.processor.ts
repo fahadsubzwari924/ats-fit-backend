@@ -7,6 +7,7 @@ import { BatchTailoringJob } from '../../../database/entities/batch-tailoring-jo
 import { BatchTailoringRun } from '../../../database/entities/batch-tailoring-run.entity';
 import { BatchTailoringV2EventsGateway } from './batch-tailoring-v2.events.gateway';
 import { ResumeGenerationOrchestratorService } from '../services/resume-generation-orchestrator.service';
+import { BatchJobErrorClassifierService } from '../services/batch-job-error-classifier.service';
 import { RateLimitService } from '../../rate-limit/rate-limit.service';
 import { FeatureType } from '../../../database/entities/usage-tracking.entity';
 import type { UserContext as AuthUserContext } from '../../auth/types/user-context.type';
@@ -48,6 +49,7 @@ export class BatchTailoringV2Processor {
     private readonly orchestrator: ResumeGenerationOrchestratorService,
     private readonly events: BatchTailoringV2EventsGateway,
     private readonly rateLimitService: RateLimitService,
+    private readonly errorClassifier: BatchJobErrorClassifierService,
   ) {}
 
   @Process({
@@ -73,6 +75,11 @@ export class BatchTailoringV2Processor {
       );
       await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_STARTED, {
         batchId,
+        // DB UUID is emitted alongside `jobIndex` (additive — both stay) so
+        // the FE can match SSE updates to snapshot rows even when a retry
+        // re-emits the same index. Retried jobs reuse the same row, so
+        // `jobId` is naturally stable across attempts.
+        jobId: batchJobId,
         jobIndex,
         stage: 'analyzing',
       });
@@ -81,6 +88,7 @@ export class BatchTailoringV2Processor {
       await this.transition(batchJobId, 'optimizing');
       await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_PROGRESS, {
         batchId,
+        jobId: batchJobId,
         jobIndex,
         stage: 'optimizing',
       });
@@ -99,6 +107,7 @@ export class BatchTailoringV2Processor {
       await this.transition(batchJobId, 'finalizing');
       await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_PROGRESS, {
         batchId,
+        jobId: batchJobId,
         jobIndex,
         stage: 'finalizing',
       });
@@ -139,6 +148,7 @@ export class BatchTailoringV2Processor {
       // `GET /resume-tailoring/download/:resumeGenerationId`.
       await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_COMPLETED, {
         batchId,
+        jobId: batchJobId,
         jobIndex,
         result: {
           jobPosition: job.data.jobPosition,
@@ -165,21 +175,41 @@ export class BatchTailoringV2Processor {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
 
+      // Build the typed envelope BEFORE writing/emitting. The classifier
+      // never throws — it returns `UNKNOWN` if it can't categorize — so this
+      // path is safe to call unconditionally inside the catch block.
+      const envelope = this.errorClassifier.classify(error);
+      const envelopeJson = JSON.stringify(envelope);
+
+      // Keep the raw cause loggable for ops without leaking it to the user-
+      // facing envelope. `technicalDetail` is a short structured string
+      // (e.g. `code=ERR_AI_OUTPUT_TRUNCATED inputCount=9 outputCount=4`).
       this.logger.error(
-        `Batch v2 job ${batchJobId} (index ${jobIndex}) failed: ${message}`,
+        `Batch v2 job ${batchJobId} (index ${jobIndex}) failed: ${message} | category=${envelope.category} technicalDetail=${envelope.technicalDetail}`,
         error instanceof Error ? error.stack : undefined,
       );
 
       await this.jobRepo.update(
         { id: batchJobId },
-        { state: 'failed', error_message: message, completed_at: new Date() },
+        {
+          state: 'failed',
+          // The column stays `text` — we JSON-encode the envelope so legacy
+          // plain-string rows and new JSON rows coexist without a migration.
+          // The service-layer mapper detects shape at read time.
+          error_message: envelopeJson,
+          completed_at: new Date(),
+        },
       );
       await this.bumpRunCounters(batchId, { failed: 1 });
 
       await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_FAILED, {
         batchId,
+        // DB UUID is the stable cross-attempt identifier — the FE keys its
+        // retry button off this value. `jobIndex` stays alongside for legacy
+        // index-based matching.
+        jobId: batchJobId,
         jobIndex,
-        error: message,
+        error: envelope,
       });
 
       await this.maybeFinishBatch(batchId, startedAt);

@@ -8,6 +8,7 @@ import { BatchTailoringV2EventsGateway } from './batch-tailoring-v2.events.gatew
 import { BatchTailoringV2Processor } from './batch-tailoring-v2.processor';
 import { BatchTailoringV2Service } from './batch-tailoring-v2.service';
 import { BatchTailoringV2Controller } from './batch-tailoring-v2.controller';
+import { BatchJobErrorClassifierService } from '../services/batch-job-error-classifier.service';
 import { BATCH_TAILORING_V2_QUEUE } from './constants/batch-tailoring-v2.constants';
 import { ResumeTailoringModule } from '../resume-tailoring.module';
 import { AuthModule } from '../../auth/auth.module';
@@ -42,6 +43,7 @@ import { RateLimitModule } from '../../rate-limit/rate-limit.module';
     BatchTailoringV2EventsGateway,
     BatchTailoringV2Processor,
     BatchTailoringV2Service,
+    BatchJobErrorClassifierService,
   ],
   exports: [BatchTailoringV2EventsGateway, BatchTailoringV2Service],
 })
