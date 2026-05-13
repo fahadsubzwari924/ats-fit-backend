@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../auth/jwt.guard';
 import { ResumeTemplateService } from './services/resume-templates.service';
 import { ResumeService } from './services/resume.service';
 import { CoverLetterGenerationService } from './services/cover-letter-generation.service';
+import { CoverLetterPdfService } from './services/cover-letter-pdf.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { GenerateTailoredResumeDto } from './dtos/generate-tailored-resume.dto';
 import { GenerateCoverLetterDto } from './dtos/generate-cover-letter.dto';
@@ -67,6 +68,7 @@ export class ResumeTailoringController {
     private readonly resumeGenerationOrchestratorService: ResumeGenerationOrchestratorService,
     private readonly resumeService: ResumeService,
     private readonly coverLetterGenerationService: CoverLetterGenerationService,
+    private readonly coverLetterPdfService: CoverLetterPdfService,
     private readonly rateLimitService: RateLimitService,
   ) {}
 
@@ -338,6 +340,55 @@ export class ResumeTailoringController {
   }
 
   /**
+   * GET /resume-tailoring/cover-letter/:generationId/download
+   * Stream the persisted cover letter as a PDF. The structured cover-letter
+   * JSON was generated and saved at the time the resume was tailored (or
+   * later, via the POST endpoint above). This endpoint is download-only —
+   * it does not generate content and does not consume cover-letter quota.
+   * Mirrors the resume download endpoint's contract (Content-Type + X-Filename).
+   */
+  @Get('cover-letter/:generationId/download')
+  @TransformUserContext()
+  async downloadCoverLetterPdf(
+    @Param('generationId') generationId: string,
+    @Req() req: RequestWithUserContext,
+    @Res({ passthrough: false }) res: Response,
+  ): Promise<void> {
+    const userId = req.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+
+    const coverLetter =
+      await this.coverLetterGenerationService.getByResumeGenerationId(
+        generationId,
+        userId,
+      );
+
+    const generationRecord = await this.resumeService.getResumeGenerationDetail(
+      generationId,
+      userId,
+    );
+
+    const { buffer, filename } = await this.coverLetterPdfService.renderPdf({
+      coverLetter,
+      jobPosition: generationRecord?.jobPosition ?? null,
+      companyName: generationRecord?.companyName ?? null,
+    });
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length.toString(),
+      'X-Filename': filename,
+    });
+    res.end(buffer);
+  }
+
+  /**
    * POST /resume-tailoring/batch-generate
    * Sequentially generates tailored resumes for multiple jobs in one request.
    * Premium-only feature.
@@ -425,6 +476,9 @@ export class ResumeTailoringController {
           optimizationConfidence: result.optimizationConfidence,
           keywordsAdded: result.keywordsAdded,
           sectionsChanged: result.sectionsChanged,
+          // Canonical MatchScoreBlock — single source of truth on every API.
+          matchScore: result.matchScore,
+          // TODO: remove after FE migration lands
           matchScoreBefore: result.matchScoreBefore,
           matchScoreAfter: result.matchScoreAfter,
         });

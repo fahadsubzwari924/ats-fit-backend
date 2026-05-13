@@ -65,6 +65,7 @@ const TailoredContentSchema = z
             startDate: z.string().default(''),
             endDate: z.string().default(''),
             technologies: z.string().default(''),
+            allowedTech: z.array(z.string()).optional(),
           })
           .strict(),
       )
@@ -105,6 +106,14 @@ const TailoredContentSchema = z
           .strict(),
       )
       .default([]),
+    skillAliases: z
+      .array(
+        z.object({
+          skill: z.string(),
+          alternatives: z.array(z.string()),
+        }),
+      )
+      .optional(),
   })
   .strict();
 

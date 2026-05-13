@@ -316,6 +316,13 @@ export class ResumeService {
         'template_id',
         'created_at',
         'pdf_s3_key',
+        'matchScoreBefore',
+        'matchScoreAfter',
+        'atsChecksPassed',
+        'atsChecksTotal',
+        'bulletsQuantifiedBefore',
+        'bulletsQuantifiedAfter',
+        'cover_letter',
       ],
     });
 

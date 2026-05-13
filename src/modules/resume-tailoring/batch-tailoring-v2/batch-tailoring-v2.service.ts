@@ -25,6 +25,8 @@ import type {
   BatchJobItemDto,
   BatchJobResult,
 } from '../dtos/batch-generate.dto';
+import { classifyMatchScore } from '../services/match-score-classifier.service';
+import type { MatchScoreBlock } from '../interfaces/match-score-block.interface';
 
 @Injectable()
 export class BatchTailoringV2Service {
@@ -201,6 +203,13 @@ export class BatchTailoringV2Service {
     candidateName: string,
   ): BatchJobResult {
     const rg = job.resume_generation;
+    // Build the canonical block when both columns are populated. Otherwise
+    // emit `null` — the legacy fallback (substituting changes_diff coverage
+    // values) has been removed; absence is rendered explicitly on the FE.
+    const matchScore: MatchScoreBlock | null =
+      rg?.matchScoreBefore != null && rg?.matchScoreAfter != null
+        ? classifyMatchScore(rg.matchScoreBefore, rg.matchScoreAfter)
+        : null;
     return {
       jobPosition: job.job_position,
       companyName: job.company_name,
@@ -209,6 +218,8 @@ export class BatchTailoringV2Service {
       filename: generateResumeFilename(candidateName, job.job_position),
       keywordsAdded: rg?.keywords_added ?? 0,
       sectionsChanged: this.extractSectionsChanged(rg ?? null),
+      matchScore,
+      // TODO: remove after FE migration lands
       matchScoreBefore: rg?.matchScoreBefore ?? undefined,
       matchScoreAfter: rg?.matchScoreAfter ?? undefined,
     };

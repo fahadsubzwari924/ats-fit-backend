@@ -1,4 +1,5 @@
 import type { UserContext } from './user-context.interface';
+import type { MatchScoreBlock } from './match-score-block.interface';
 
 /**
  * Input parameters for resume generation orchestration
@@ -66,9 +67,17 @@ export interface ResumeGenerationResult {
   primaryKeywordsFound: number;
   mandatorySkillsAligned: number;
 
-  // Keyword match scores (synchronous, available immediately in the response)
+  /**
+   * Canonical match-score block — the single source of truth FE renders from.
+   * Replaces the flat `matchScoreBefore`/`matchScoreAfter`/`matchScoreDelta`
+   * fields below, which are kept populated for one transition cycle.
+   */
+  matchScore: MatchScoreBlock;
+  /** @deprecated use `matchScore.before`; removed after FE migration lands */
   matchScoreBefore: number;
+  /** @deprecated use `matchScore.after`; removed after FE migration lands */
   matchScoreAfter: number;
+  /** @deprecated use `matchScore.delta`; removed after FE migration lands */
   matchScoreDelta: number;
 
   // ATS compliance checks (synchronous)

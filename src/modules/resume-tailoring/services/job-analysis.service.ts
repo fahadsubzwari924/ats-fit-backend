@@ -119,8 +119,25 @@ export class JobAnalysisService {
         `Job description analysis response parsed successfully: ${JSON.stringify(result)}`,
       );
 
+      // Normalize whichever shape/key the LLM emitted (`aliases` or legacy
+      // `synonyms`; canonical array or legacy map) into the canonical
+      // `[{term, alternatives}]` form. Persist under BOTH `keywords.aliases`
+      // (new canonical) and `keywords.synonyms` (legacy mirror) so existing
+      // downstream readers keep working for one prompt-version cycle.
+      const rawKeywords = (result.keywords ?? {}) as Record<string, unknown>;
+      const aliasSource =
+        rawKeywords.aliases !== undefined
+          ? rawKeywords.aliases
+          : rawKeywords.synonyms;
+      const canonicalAliases = this.normalizeAliases(aliasSource);
+
       const finalResult = {
         ...result,
+        keywords: {
+          ...result.keywords,
+          aliases: canonicalAliases,
+          synonyms: canonicalAliases,
+        },
         metadata: {
           ...result.metadata,
           processedAt: new Date(),
@@ -206,6 +223,64 @@ export class JobAnalysisService {
         ERROR_CODES.INTERNAL_SERVER,
       );
     }
+  }
+
+  /**
+   * Normalize the LLM's `keywords.aliases` (or legacy `keywords.synonyms`)
+   * payload into the canonical shape used by downstream consumers.
+   *
+   * Accepts:
+   *  - Canonical array `[{term, alternatives}]` (current contract) → returned
+   *    as-is after per-entry type-checking.
+   *  - Legacy map `{ keyword: ["syn1", "syn2"] }` → converted to the canonical
+   *    array (one entry per key).
+   *  - `undefined` / `null` / malformed input → returns `[]`.
+   *
+   * Always returns the canonical `Array<{ term: string; alternatives: string[] }>` shape.
+   */
+  private normalizeAliases(
+    raw: unknown,
+  ): Array<{ term: string; alternatives: string[] }> {
+    if (!raw) return [];
+
+    const cleanAlternatives = (alternatives: unknown): string[] => {
+      if (!Array.isArray(alternatives)) return [];
+      return alternatives
+        .filter((a): a is string => typeof a === 'string')
+        .map((a) => a.trim())
+        .filter((a) => a.length > 0);
+    };
+
+    if (Array.isArray(raw)) {
+      const out: Array<{ term: string; alternatives: string[] }> = [];
+      for (const entry of raw) {
+        if (!entry || typeof entry !== 'object') continue;
+        const e = entry as { term?: unknown; alternatives?: unknown };
+        if (typeof e.term !== 'string') continue;
+        const term = e.term.trim();
+        if (!term) continue;
+        const alternatives = cleanAlternatives(e.alternatives);
+        out.push({ term, alternatives });
+      }
+      return out;
+    }
+
+    if (typeof raw === 'object') {
+      const out: Array<{ term: string; alternatives: string[] }> = [];
+      for (const [term, alternatives] of Object.entries(
+        raw as Record<string, unknown>,
+      )) {
+        const trimmedTerm = term.trim();
+        if (!trimmedTerm) continue;
+        out.push({
+          term: trimmedTerm,
+          alternatives: cleanAlternatives(alternatives),
+        });
+      }
+      return out;
+    }
+
+    return [];
   }
 
   /**

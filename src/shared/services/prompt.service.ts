@@ -36,6 +36,33 @@ export class PromptService {
   constructor() {}
 
   /**
+   * Render the per-experience EXPERIENCE_TECH_LOCK list rendered into the
+   * optimizer user prompt. Reads each experience's runtime `allowedTech`
+   * annotation (populated by ResumeOptimizerService).
+   */
+  private buildExperienceTechLockLines(
+    candidateContent: Record<string, unknown>,
+  ): string {
+    const experiences =
+      (candidateContent.experience as Array<Record<string, unknown>>) ?? [];
+
+    if (experiences.length === 0) return '  (no experiences provided)';
+
+    return experiences
+      .map((exp, idx) => {
+        const company =
+          typeof exp.company === 'string' ? exp.company : `experience ${idx}`;
+        const lock = Array.isArray(
+          (exp as { allowedTech?: string[] }).allowedTech,
+        )
+          ? ((exp as { allowedTech: string[] }).allowedTech ?? [])
+          : [];
+        return `  [${idx}] ${company}: ${lock.length > 0 ? lock.join(', ') : '(no technologies recorded — keep bullets technology-free unless source bullet names one)'}`;
+      })
+      .join('\n');
+  }
+
+  /**
    * System-level instructions for extracting structured content from resume text.
    * This string is static and ideal for OpenAI prompt caching.
    */
@@ -72,6 +99,9 @@ You are an expert resume parser. Extract and structure the following resume text
     "databases": ["Database technologies"],
     "concepts": ["Technical concepts and methodologies"]
   },
+  "skillAliases": [
+    { "skill": "string (must exactly match one of skills.languages | frameworks | tools | databases | concepts)", "alternatives": ["string", "string"] }
+  ],
   "experience": [
     {
       "company": "Company name",
@@ -119,6 +149,19 @@ You are an expert resume parser. Extract and structure the following resume text
 - For each work experience, put ALL bullet points into the "responsibilities" array in the exact order they appear in the resume. Leave "achievements" as an empty array.
 - Maintain the exact chronological order of work experiences as they appear in the resume (most recent first)
 - Each bullet point must belong to the company it appears under in the resume — do not move bullets between companies, even across page breaks
+- **Skill aliases (REQUIRED — minimum 2 alternatives per skill):**
+  For every entry in \`skills.languages | skills.frameworks | skills.tools | skills.databases | skills.concepts\`, emit a corresponding \`skillAliases\` entry capturing how a recruiter / JD might phrase the same concept differently. Cover all of these alias classes:
+    - Abbreviations and expansions (k8s ↔ kubernetes, ml ↔ machine learning, ci/cd ↔ continuous integration)
+    - Morphological variants (lead ↔ leader ↔ leadership ↔ led; optimize ↔ optimization)
+    - Modifier-added or stripped variants (architecture ↔ system architecture ↔ microservices architecture; performance ↔ performance optimization ↔ performance tuning)
+    - Hyphenation and spacing variants (full-stack ↔ fullstack ↔ full stack)
+    - Common recruiter substitutes (team leadership ↔ technical leadership ↔ engineering leadership ↔ led a team)
+  Use the canonical \`skills.*\` entry as the \`skill\` field verbatim — do NOT invent new skills here. This list expands the matchable surface for scoring; it does NOT add new claimed skills.
+  Worked examples:
+    { "skill": "Team Leadership",          "alternatives": ["technical leadership", "engineering leadership", "led a team", "managing engineers"] }
+    { "skill": "Microservices Architecture","alternatives": ["system architecture", "service-oriented architecture", "distributed architecture"] }
+    { "skill": "Node.js",                  "alternatives": ["node", "nodejs", "node.js backend"] }
+    { "skill": "Performance Optimization", "alternatives": ["performance tuning", "performance improvements", "perf optimization", "performance gains"] }
 `;
   }
 
@@ -164,7 +207,21 @@ ${jobDescription}
      - It appears under an explicit "Requirements", "Must Have", or "Required Skills" section header
      - It appears 3 or more times across the full job description body
    - **Secondary keywords**: Terms that appear 1-2 times in the body OR appear only in a "Preferred", "Nice to Have", or "Bonus" section
-   - **Synonyms**: Group canonical forms of the same concept together (e.g. K8s ↔ Kubernetes, JS ↔ JavaScript, ML ↔ Machine Learning). List the canonical form as the key; list alternate forms as values.
+   - **Aliases (REQUIRED for EVERY primary keyword and EVERY mandatory skill — minimum 2 alternatives each):**
+     For every term in \`keywords.primary\` AND every term in \`technical.mandatorySkills\`, emit a corresponding entry in \`keywords.aliases\` capturing common alternative phrasings a candidate might genuinely use to describe the same concept. Cover all of these alias classes:
+       - Abbreviations and expansions (k8s ↔ kubernetes, ml ↔ machine learning, ci/cd ↔ continuous integration)
+       - Morphological variants (lead ↔ leader ↔ leadership ↔ led; optimize ↔ optimization ↔ optimized)
+       - Modifier-stripped variants (system architecture ↔ architecture; performance optimization ↔ optimization; full-stack development ↔ full-stack)
+       - Hyphenation and spacing variants (full-stack ↔ fullstack ↔ full stack)
+       - Reorderings and substitutes (code reviews ↔ code review ↔ peer review; team lead ↔ tech lead ↔ engineering lead)
+     Output canonical shape: an array of \`{ term, alternatives }\` objects. Do NOT use the legacy \`{ "keyword": ["syn", "syn"] }\` map shape — emit the array.
+     Worked examples (use these as the bar for richness, not the floor):
+       { "term": "Technical Lead",                  "alternatives": ["tech lead", "team lead", "engineering lead", "lead software engineer"] }
+       { "term": "Technical Leadership",            "alternatives": ["team leadership", "engineering leadership", "led a team", "leading engineers"] }
+       { "term": "Performance Optimization",        "alternatives": ["performance tuning", "performance improvements", "performance gains", "optimization"] }
+       { "term": "System Architecture",             "alternatives": ["software architecture", "microservices architecture", "system design", "architectural design"] }
+       { "term": "Full-Stack Development",          "alternatives": ["fullstack development", "full stack engineering", "full-stack engineering", "full-stack"] }
+       { "term": "Best Practices & Code Reviews",   "alternatives": ["code reviews", "peer review", "engineering best practices", "code quality"] }
    - If the job description is vague and fewer than 3 terms qualify as primary, include the most prominent terms up to the cap of 8.
 
 **Important Guidelines:**
@@ -218,9 +275,9 @@ ${jobDescription}
   "keywords": {
     "primary": ["string"],
     "secondary": ["string"],
-    "synonyms": {
-      "keyword": ["synonym1", "synonym2"]
-    }
+    "aliases": [
+      { "term": "string", "alternatives": ["string", "string"] }
+    ]
   },
   "metadata": {
     "complexity": "low|medium|high",
@@ -261,7 +318,21 @@ ${jobDescription}
      - It appears under an explicit "Requirements", "Must Have", or "Required Skills" section header
      - It appears 3 or more times across the full job description body
    - **Secondary keywords**: Terms that appear 1-2 times in the body OR appear only in a "Preferred", "Nice to Have", or "Bonus" section
-   - **Synonyms**: Group canonical forms of the same concept together (e.g. K8s ↔ Kubernetes, JS ↔ JavaScript, ML ↔ Machine Learning). Return each group as an object with "term" (canonical form) and "alternatives" (list of alternate forms).
+   - **Aliases (REQUIRED for EVERY primary keyword and EVERY mandatory skill — minimum 2 alternatives each):**
+     For every term in \`keywords.primary\` AND every term in \`technical.mandatorySkills\`, emit a corresponding entry in \`keywords.aliases\` capturing common alternative phrasings a candidate might genuinely use to describe the same concept. Cover all of these alias classes:
+       - Abbreviations and expansions (k8s ↔ kubernetes, ml ↔ machine learning, ci/cd ↔ continuous integration)
+       - Morphological variants (lead ↔ leader ↔ leadership ↔ led; optimize ↔ optimization ↔ optimized)
+       - Modifier-stripped variants (system architecture ↔ architecture; performance optimization ↔ optimization; full-stack development ↔ full-stack)
+       - Hyphenation and spacing variants (full-stack ↔ fullstack ↔ full stack)
+       - Reorderings and substitutes (code reviews ↔ code review ↔ peer review; team lead ↔ tech lead ↔ engineering lead)
+     Output canonical shape: an array of \`{ term, alternatives }\` objects. Do NOT use the legacy \`{ "keyword": ["syn", "syn"] }\` map shape — emit the array.
+     Worked examples (use these as the bar for richness, not the floor):
+       { "term": "Technical Lead",                  "alternatives": ["tech lead", "team lead", "engineering lead", "lead software engineer"] }
+       { "term": "Technical Leadership",            "alternatives": ["team leadership", "engineering leadership", "led a team", "leading engineers"] }
+       { "term": "Performance Optimization",        "alternatives": ["performance tuning", "performance improvements", "performance gains", "optimization"] }
+       { "term": "System Architecture",             "alternatives": ["software architecture", "microservices architecture", "system design", "architectural design"] }
+       { "term": "Full-Stack Development",          "alternatives": ["fullstack development", "full stack engineering", "full-stack engineering", "full-stack"] }
+       { "term": "Best Practices & Code Reviews",   "alternatives": ["code reviews", "peer review", "engineering best practices", "code quality"] }
    - If the job description is vague and fewer than 3 terms qualify as primary, include the most prominent terms up to the cap of 8.
 
 **Important Guidelines:**
@@ -315,7 +386,9 @@ ${jobDescription}
   "keywords": {
     "primary": ["string"],
     "secondary": ["string"],
-    "synonyms": [{"term": "string", "alternatives": ["string"]}]
+    "aliases": [
+      { "term": "string", "alternatives": ["string", "string"] }
+    ]
   },
   "metadata": {
     "complexity": "low|medium|high",
@@ -368,15 +441,42 @@ ${jobDescription}`;
             .join('\n\n')
         : '(No separate Q&A entries with text responses. Use only numbers and metrics explicitly present in the candidate JSON below.)';
 
+    const experienceTechLockLines =
+      this.buildExperienceTechLockLines(candidateContent);
+
+    const sanitizedCandidateContent = {
+      ...candidateContent,
+      experience: (
+        (candidateContent.experience as Array<Record<string, unknown>>) ?? []
+      ).map((exp) => {
+        const { allowedTech: _allowedTech, ...rest } = exp as {
+          allowedTech?: unknown;
+        } & Record<string, unknown>;
+        return rest;
+      }),
+    };
+
     return `
 You are an expert resume optimization specialist. Your task is to tailor a candidate's resume to the target job while preserving factual integrity. Your output MUST be valid JSON matching the specified structure.
 
 **CRITICAL RULE: ZERO HALLUCINATION POLICY**
-- Use ONLY facts, numbers, and metrics that appear in the candidate resume JSON below OR in the USER-VERIFIED FACTS section
-- NEVER invent, estimate, round up, or assume quantifiable data (percentages, dollar amounts, counts, team sizes, timelines with numbers)
-- If a bullet has no numbers in the source material, write a strong qualitative achievement — do NOT fabricate metrics
-- Prefer a factual bullet without numbers over one with invented metrics
+
+TWO classes of facts are off-limits unless they appear in the source material:
+
+**CLASS A — Quantitative facts** (numbers, percentages, dollar amounts, counts, team sizes, durations with numbers):
+- Use ONLY metrics that appear in the candidate resume JSON OR in the USER-VERIFIED FACTS
+- NEVER invent, estimate, or round
 - Preserve approximate user phrasing (e.g. "about 30%") when given in USER-VERIFIED FACTS
+- Every USER-VERIFIED FACT number is candidate-provided — keep it exactly as stated, integrate it into the relevant bullet, and never add metrics beyond it
+
+**CLASS B — Technology facts** (programming languages, frameworks, libraries, tools, platforms, cloud services, databases):
+- For EACH work experience, the EXPERIENCE_TECH_LOCK section is the EXCLUSIVE list of technologies you may name in that experience's bullets
+- NEVER substitute a technology mentioned in the source bullet with a different technology — not even a "similar" one (Angular → React, MySQL → PostgreSQL, Vue → React, Django → Flask are all FORBIDDEN swaps)
+- NEVER add a new technology to an experience just because the JD asks for it. The fact that the candidate lists a technology in the global skills section does NOT mean they used it in every job
+- If the JD requires a technology the candidate did not use in a given experience, leave that experience's bullets honest and rely on the global skills section + other experiences (or the cover letter) to surface the JD-requested skill
+- The candidate's SKILLS section is locked. You may NOT add a skill that is not in the source resume's skills, and you may NOT remove any skill that IS in the source resume. The output skills field will be deterministically replaced with the source candidate's skills after generation — wasting effort here is pointless and any divergence will be reverted.
+
+Both classes share the same rule: prefer a strong qualitative or truthful bullet over an embellished one.
 
 **USER-VERIFIED FACTS (source of truth — preserve these exactly):**
 ${factsBlock}
@@ -385,15 +485,15 @@ ${factsBlock}
 The candidate resume below already contains pre-selected, relevance-ranked bullets per experience.
 The number of bullets per experience has been sized by our system based on recency and JD relevance.
 You MUST:
-- REWRITE every bullet you receive for clarity, CAR framing, and JD keyword alignment
+- REWRITE every bullet you receive for clarity, CAR framing, and stronger action verbs. Mirror a JD keyword in a bullet ONLY when that bullet's experience genuinely involved that technology — verify against EXPERIENCE_TECH_LOCK.
 - For bullets that have a matching USER-VERIFIED FACT (matched by bullet text): inject the metric exactly as stated
-- For bullets WITHOUT a matching fact: rewrite honestly using ONLY existing resume content + JD keywords that truthfully reflect the original bullet — do NOT fabricate metrics
+- For bullets WITHOUT a matching fact: rewrite honestly using ONLY existing resume content. Do NOT swap, replace, or 'modernize' the technologies mentioned in the original bullet — no JD-driven tech additions.
 - NEVER drop a bullet that appears in the input experience array
 - NEVER add extra bullet points not present in the input
 - Output MUST contain exactly the same number of experience entries as the input, and each entry MUST contain exactly the same number of bullets (responsibilities) as given
 - **MANDATORY DATE FIELDS:** Every experience entry MUST have valid startDate and endDate fields
 
-**TARGET JOB INFORMATION:**
+**JD REQUIREMENTS (what the target role asks for — do NOT treat these as facts the candidate has):**
 - Position: ${jobPosition}
 - Company: ${companyName}
 - Mandatory Skills: ${Array.isArray(technical.mandatorySkills) ? (technical.mandatorySkills as string[]).join(', ') : 'None specified'}
@@ -401,8 +501,11 @@ You MUST:
 - Frameworks: ${Array.isArray(technical.frameworks) ? (technical.frameworks as string[]).join(', ') : 'None specified'}
 - Primary Keywords: ${Array.isArray(keywords.primary) ? (keywords.primary as string[]).join(', ') : 'None specified'}
 
+**EXPERIENCE_TECH_LOCK (per-experience exclusive technology allowlist):**
+${experienceTechLockLines}
+
 **CURRENT CANDIDATE RESUME (bullets already pre-ranked and sized; may already include merged user facts):**
-${JSON.stringify(candidateContent)}
+${JSON.stringify(sanitizedCandidateContent)}
 
 **OPTIMIZATION INSTRUCTIONS:**
 1. **Achievements and responsibilities:**
@@ -422,7 +525,7 @@ ${JSON.stringify(candidateContent)}
 4. **Skills and summary:**
    - Summary MUST be written as a single flowing paragraph of 2-3 sentences maximum. Do NOT use bullet points, dashes, asterisks, numbered lists, or line breaks inside the summary. Pack job title, years of experience, domain expertise, and core value proposition into one cohesive paragraph.
    - Summary should reflect real experience from the resume; no invented metrics
-   - Align skill categories with the job when those skills appear in the resume
+   - Skills section: DO NOT modify it. The candidate's skills are locked and will be restored verbatim from the source resume post-generation. Echo the source skills unchanged. Focus optimization effort on summary and experience bullets only.
 
 **OUTPUT REQUIREMENTS:**
 Return valid JSON with the EXACT structure below. Metrics in optimizationMetrics are estimates of what you changed — use 0 for achievementsQuantified if you did not add new numbers.
@@ -516,19 +619,25 @@ ${includeRubric ? CONSTITUTIONAL_RUBRIC : ''}
     const technical = (jobAnalysis.technical as Record<string, any>) || {};
     const keywords = (jobAnalysis.keywords as Record<string, any>) || {};
 
-    const system = `You are a senior resume strategist with 12+ years coaching mid-to-senior engineers (L4–L7) into FAANG, late-stage startups, and Fortune 500 roles. You write for a 6-second recruiter skim. Every bullet is past-tense, action-led, and every metric is defensible in an interview. You never use filler phrases or invented numbers. Your output MUST be valid JSON matching the specified structure.
+    const system = `You are a senior resume strategist with 12+ years coaching mid-to-senior engineers (L4–L7) into FAANG, late-stage startups, and Fortune 500 roles. You write for a 6-second recruiter skim. Every bullet is past-tense, action-led, and every metric is defensible in an interview. You never use filler phrases, invented numbers, or substitute technologies. Your output MUST be valid JSON matching the specified structure.
 
 <zero_hallucination>
-- Use ONLY facts, numbers, and metrics that appear in the candidate resume JSON OR in the USER-VERIFIED FACTS provided in the user message
-- NEVER invent, estimate, round up, or assume quantifiable data (percentages, dollar amounts, counts, team sizes, timelines with numbers)
-- If a bullet has no numbers in the source material, write a strong qualitative achievement — do NOT fabricate metrics
-- Prefer a factual bullet without numbers over one with invented metrics
-- Preserve approximate user phrasing (e.g. "about 30%") when given in USER-VERIFIED FACTS
+TWO classes of facts are off-limits unless they appear in the source material:
 
-Every number or metric listed under USER-VERIFIED FACTS (provided in the user message) was provided by the candidate. You MUST:
-- Keep those figures exactly as stated (do not round, inflate, or rephrase numbers)
-- Integrate them naturally into the relevant work experience bullets
-- Not add additional metrics beyond what appears in the candidate content or USER-VERIFIED FACTS
+CLASS A — Quantitative facts (numbers, percentages, dollar amounts, counts, team sizes, durations with numbers):
+- Use ONLY metrics that appear in the candidate resume JSON OR in the USER-VERIFIED FACTS
+- NEVER invent, estimate, or round
+- Preserve approximate user phrasing (e.g. "about 30%") when given in USER-VERIFIED FACTS
+- Every USER-VERIFIED FACT number is candidate-provided — keep it exactly as stated, integrate it into the relevant bullet, and never add metrics beyond it
+
+CLASS B — Technology facts (programming languages, frameworks, libraries, tools, platforms, cloud services, databases):
+- For EACH work experience, the EXPERIENCE_TECH_LOCK section (in the user message) is the EXCLUSIVE list of technologies you may name in that experience's bullets
+- NEVER substitute a technology mentioned in the source bullet with a different technology — not even a "similar" one (Angular → React, MySQL → PostgreSQL, Vue → React, Django → Flask are all FORBIDDEN swaps)
+- NEVER add a new technology to an experience just because the JD asks for it. The fact that the candidate lists a technology in the global skills section does NOT mean they used it in every job
+- If the JD requires a technology the candidate did not use in a given experience, leave that experience's bullets honest and rely on the global skills section + other experiences (or the cover letter) to surface the JD-requested skill
+- The candidate's SKILLS section is locked. You may NOT add a skill that is not in the source resume's skills, and you may NOT remove any skill that IS in the source resume. The output skills field will be deterministically replaced with the source candidate's skills after generation — wasting effort here is pointless and any divergence will be reverted.
+
+Both classes share the same rule: prefer a strong qualitative or truthful bullet over an embellished one.
 </zero_hallucination>
 
 ${NO_METRIC_FALLBACKS}
@@ -537,9 +646,10 @@ ${NO_METRIC_FALLBACKS}
 The candidate resume below already contains pre-selected, relevance-ranked bullets per experience.
 The number of bullets per experience has been sized by our system based on recency and JD relevance.
 You MUST:
-- REWRITE every bullet you receive for clarity, CAR framing, and JD keyword alignment
+- REWRITE every bullet you receive for clarity, CAR framing, and stronger action verbs
+- Mirror a JD keyword in a bullet ONLY when that bullet's experience genuinely involved that technology — verify against EXPERIENCE_TECH_LOCK for that experience before adding any tech term
 - For bullets that have a matching USER-VERIFIED FACT (matched by bullet text): inject the metric exactly as stated
-- For bullets WITHOUT a matching fact: rewrite honestly using ONLY existing resume content + JD keywords that truthfully reflect the original bullet — do NOT fabricate metrics
+- For bullets WITHOUT a matching fact: rewrite honestly using ONLY existing resume content. Do NOT swap, replace, or "modernize" the technologies mentioned in the original bullet
 - NEVER drop a bullet that appears in the input experience array
 - NEVER add extra bullet points not present in the input
 - Output MUST contain exactly the same number of experience entries as the input, and each entry MUST contain exactly the same number of bullets (responsibilities) as given
@@ -562,7 +672,7 @@ You MUST:
    - Never use "N/A" or invalid dates; infer only from explicit resume content
 
 4. Skills and summary:
-   - Align skill categories with the job when those skills appear in the resume
+   - Skills section: DO NOT modify it. The candidate's skills are locked and will be restored verbatim from the source resume post-generation. Echo the source skills unchanged. Focus optimization effort on summary and experience bullets only.
    - No invented metrics in the summary
 </optimization_instructions>
 
@@ -589,11 +699,12 @@ ${BANNED_PHRASES}
 Self-revise any bullet that fails one of these criteria before emitting:
 1. Action verb is tier-appropriate (see verb_tiers above) and in past tense for past roles
 2. Has at least one of: scope (team size, user count, codebase scale) OR outcome (result, impact, improvement)
-3. Mirrors at least one JD keyword if that keyword truthfully reflects the bullet's content
+3. Mirrors at least one JD keyword ONLY when the bullet's experience genuinely involved that technology (cross-checked against EXPERIENCE_TECH_LOCK); never substitute a real technology for a JD-requested one
 4. ≤22 words
 5. Zero banned phrases (see banned_phrases above)
 6. Every number traces to the source resume or the user-verified facts — no invented metrics
-If a bullet fails criteria 4–6, rewrite it until it passes before including it in the output.
+7. Every technology, framework, library, language, platform, or database named in the bullet appears in that experience's EXPERIENCE_TECH_LOCK and was already present in the source bullet — no substitutions, no JD-driven additions
+If a bullet fails any criterion above, rewrite it until it passes before including it in the output.
 </bullet_rubric>
 
 <failure_modes>
@@ -603,6 +714,19 @@ Handle these edge cases explicitly before emitting output:
 - User-verified fact contradicts source bullet → use the user-verified fact; preserve original user phrasing
 - Truncated or incomplete candidate resume input → set confidenceScore ≤ 30; do not silently complete or fabricate missing sections
 </failure_modes>
+
+<experience_tech_lock_protocol>
+The user message contains an EXPERIENCE_TECH_LOCK section listing, per experience index, the ONLY technologies you may name in that experience's bullets.
+
+For every bullet you output:
+1. Identify the experience index it belongs to.
+2. Scan your draft bullet for any technology token (language, framework, library, tool, platform, cloud service, database).
+3. If any technology token in your draft is NOT in that experience's lock list AND was NOT in the corresponding source bullet, REMOVE or REPLACE it with a technology that IS in the lock list and was actually used in that source bullet.
+4. Never add a technology that came only from the JD requirements.
+5. If the lock list for an experience is empty, keep that experience's bullets technology-free unless the source bullet itself names one (then preserve it verbatim).
+
+This is a hard requirement, not a guideline. Output bullets that violate the lock will be rejected by downstream validation and the user will see the original bullet, undoing your edit.
+</experience_tech_lock_protocol>
 
 <output_schema>
 Return valid JSON with the EXACT structure below. Metrics in optimizationMetrics are estimates of what you changed — use 0 for achievementsQuantified if you did not add new numbers.
@@ -683,6 +807,7 @@ Before calling the tool, reason through these steps in your response content:
 2. Confirm bullet count per experience matches the input exactly (no additions, no drops)
 3. Scan every bullet for banned phrases (see banned_phrases) — revise any that contain them
 4. Verify the summary follows the summary_pattern and cites only real resume data
+5. For each experience, list the technologies you used in your draft bullets and confirm every one of them is in that experience's EXPERIENCE_TECH_LOCK; if a JD-requested tech is missing from the lock, do NOT add it
 Only the tool input is the final output; this reasoning block is for self-verification only.
 </thinking>`;
 
@@ -697,10 +822,22 @@ Only the tool input is the final output; this reasoning block is for self-verifi
             .join('\n\n')
         : '(No separate Q&A entries with text responses. Use only numbers and metrics explicitly present in the candidate JSON below.)';
 
-    const user = `**USER-VERIFIED FACTS (source of truth — preserve these exactly):**
-${factsBlock}
+    const experienceTechLockLines =
+      this.buildExperienceTechLockLines(candidateContent);
 
-**TARGET JOB INFORMATION:**
+    const sanitizedCandidateContent = {
+      ...candidateContent,
+      experience: (
+        (candidateContent.experience as Array<Record<string, unknown>>) ?? []
+      ).map((exp) => {
+        const { allowedTech: _allowedTech, ...rest } = exp as {
+          allowedTech?: unknown;
+        } & Record<string, unknown>;
+        return rest;
+      }),
+    };
+
+    const user = `**JD REQUIREMENTS (what the target role asks for — do NOT treat these as facts the candidate has):**
 - Position: ${jobPosition}
 - Company: ${companyName}
 - Mandatory Skills: ${Array.isArray(technical.mandatorySkills) ? (technical.mandatorySkills as string[]).join(', ') : 'None specified'}
@@ -708,8 +845,14 @@ ${factsBlock}
 - Frameworks: ${Array.isArray(technical.frameworks) ? (technical.frameworks as string[]).join(', ') : 'None specified'}
 - Primary Keywords: ${Array.isArray(keywords.primary) ? (keywords.primary as string[]).join(', ') : 'None specified'}
 
+**EXPERIENCE_TECH_LOCK (per-experience exclusive technology allowlist — bullets for experience [i] may only name technologies from this list):**
+${experienceTechLockLines}
+
+**USER-VERIFIED FACTS (source of truth — preserve these exactly):**
+${factsBlock}
+
 **CURRENT CANDIDATE RESUME (bullets already pre-ranked and sized; may already include merged user facts):**
-${JSON.stringify(candidateContent)}`;
+${JSON.stringify(sanitizedCandidateContent)}`;
 
     return { system, user };
   }

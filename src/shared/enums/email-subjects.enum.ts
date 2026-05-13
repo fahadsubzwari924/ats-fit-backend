@@ -1,6 +1,6 @@
 export enum EmailSubjects {
-  PAYMENT_FAILED = 'Ats Fit Payment Failure Notification',
-  NOTIFICATION_FROM_ATS_FIT = 'Notification from ATS Fit',
+  PAYMENT_FAILED = 'Tairly Payment Failure Notification',
+  NOTIFICATION_FROM_ATS_FIT = 'Notification from Tairly',
   BETA_INVITE = 'Your Tailry beta access code',
   BETA_REDEEMED_WELCOME = 'Welcome to Tailry Pro — 30 days on us',
   BETA_EXPIRING_SOON = '{{daysRemaining}} days left — lock $7.20/mo for life',

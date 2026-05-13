@@ -109,6 +109,18 @@ export const TailoredContentJsonSchema = {
         required: ['title', 'items'],
       },
     },
+    skillAliases: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          skill: { type: 'string' },
+          alternatives: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['skill', 'alternatives'],
+      },
+    },
   },
   required: [
     'title',
@@ -119,5 +131,6 @@ export const TailoredContentJsonSchema = {
     'education',
     'certifications',
     'additionalSections',
+    'skillAliases',
   ],
 } as const;

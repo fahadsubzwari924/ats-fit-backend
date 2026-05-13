@@ -82,8 +82,8 @@ async function bootstrap() {
 
   // --- Swagger setup ---
   const config = new DocumentBuilder()
-    .setTitle('ATS Fit API')
-    .setDescription('API documentation for ATS Fit Backend')
+    .setTitle('Tairly API')
+    .setDescription('API documentation for Tairly Backend')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

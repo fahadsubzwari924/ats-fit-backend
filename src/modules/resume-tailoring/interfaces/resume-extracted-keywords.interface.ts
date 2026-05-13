@@ -38,6 +38,8 @@ export interface Experience {
   startDate: string;
   endDate: string;
   technologies?: string; // Optional technologies used in the role
+  // Populated at runtime by ResumeOptimizerService to fence the prompt — not part of extracted content.
+  allowedTech?: string[];
 }
 
 export interface Education {
@@ -70,6 +72,8 @@ export interface TailoredContent {
   education: Education[];
   certifications: Certification[];
   additionalSections: AdditionalSection[];
+  /** Optional alias mapping per skill — populated by resume extraction LLM. Consumed by KeywordMatchScoringService to expand candidate-side matchable surface. Absent on legacy records; degrades gracefully. */
+  skillAliases?: Array<{ skill: string; alternatives: string[] }>;
 }
 
 export interface AnalysisResult extends TailoredContent {

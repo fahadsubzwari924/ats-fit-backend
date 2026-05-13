@@ -30,7 +30,7 @@ export class ClaudeService {
     this.baseUrl = this.configService.get<string>('CLAUDE_CHAT_API_ENDPOINT');
     this.defaultModel = this.configService.get<string>(
       'CLAUDE_MODEL',
-      'claude-sonnet-4-20250514',
+      'claude-sonnet-4-6',
     );
     this.maxConcurrentRequests = this.configService.get<number>(
       'CLAUDE_MAX_CONCURRENT',
