@@ -52,7 +52,22 @@ export interface JobAnalysisResult {
   keywords: {
     primary: string[];
     secondary: string[];
-    synonyms: Array<{ term: string; alternatives: string[] }>;
+    /**
+     * Canonical per-keyword alias set emitted by the JD-analysis LLM.
+     * Consumed by `KeywordMatchScoringService` to expand the searchable
+     * surface beyond literal keyword strings. New canonical field.
+     */
+    aliases?: Array<{ term: string; alternatives: string[] }>;
+    /**
+     * Legacy mirror of `aliases` retained for one prompt-version cycle so
+     * pre-existing `job_analysis` JSONB rows (which persisted under
+     * `synonyms` in either canonical array or legacy map shape) still
+     * deserialize. Reads route through the orchestrator's `readJdAliases`
+     * helper, which tolerates both shapes.
+     */
+    synonyms?:
+      | Array<{ term: string; alternatives: string[] }>
+      | Record<string, string[]>;
   };
 
   metadata: {

@@ -11,6 +11,7 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BULK_TAILORING_MAX_RESUMES } from '../../../shared/constants/resume-tailoring.constants';
+import { MatchScoreBlock } from '../interfaces/match-score-block.interface';
 
 export class BatchJobItemDto {
   @ApiProperty({ example: 'Senior Frontend Engineer' })
@@ -64,7 +65,15 @@ export interface BatchJobResult {
   optimizationConfidence?: number;
   keywordsAdded?: number;
   sectionsChanged?: number;
+  /**
+   * Canonical MatchScoreBlock — the single source of truth FE renders from.
+   * `null` when scores are unavailable (e.g. failed jobs, legacy records
+   * with null `match_score_*` columns).
+   */
+  matchScore?: MatchScoreBlock | null;
+  /** @deprecated use `matchScore.before`; removed after FE migration lands */
   matchScoreBefore?: number;
+  /** @deprecated use `matchScore.after`; removed after FE migration lands */
   matchScoreAfter?: number;
   error?: string;
 }

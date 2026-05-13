@@ -149,6 +149,9 @@ export class BatchTailoringV2Processor {
           optimizationConfidence: result.optimizationConfidence,
           keywordsAdded: result.keywordsAdded,
           sectionsChanged: result.sectionsChanged,
+          // Canonical MatchScoreBlock — what the FE consumes going forward.
+          matchScore: result.matchScore,
+          // TODO: remove after FE migration lands
           matchScoreBefore: result.matchScoreBefore,
           matchScoreAfter: result.matchScoreAfter,
         },

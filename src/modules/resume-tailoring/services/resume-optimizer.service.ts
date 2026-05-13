@@ -21,6 +21,7 @@ import {
   VerifiedFact,
 } from '../interfaces/user-context.interface';
 import { BulletRelevanceScoringService } from './bullet-relevance-scoring.service';
+import { ExperienceTechAllowlistService } from './experience-tech-allowlist.service';
 import { PromptVariantResolverService } from './prompt-variant-resolver.service';
 import {
   BULLET_BUDGET_PER_RANK,
@@ -68,6 +69,7 @@ export class ResumeOptimizerService {
     private readonly promptService: PromptService,
     private readonly cacheService: CacheService,
     private readonly bulletRelevanceScoringService: BulletRelevanceScoringService,
+    private readonly experienceTechAllowlistService: ExperienceTechAllowlistService,
     private readonly configService: ConfigService,
     private readonly promptVariantResolverService: PromptVariantResolverService,
   ) {}
@@ -155,12 +157,39 @@ export class ResumeOptimizerService {
           jdKeywords,
           BULLET_BUDGET_PER_RANK,
         );
-      const rankedCandidateContent: TailoredContent = {
+
+      const jdTechTokens = [
+        ...(jobAnalysis.keywords?.primary ?? []),
+        ...(jobAnalysis.technical?.mandatorySkills ?? []),
+        ...(jobAnalysis.technical?.frameworks ?? []),
+        ...(jobAnalysis.technical?.programmingLanguages ?? []),
+        ...(jobAnalysis.technical?.tools ?? []),
+        ...(jobAnalysis.technical?.databases ?? []),
+      ];
+
+      const preAllowlistContent: TailoredContent = {
         ...candidateContent,
         experience: candidateContent.experience.map((exp, idx) => ({
           ...exp,
           responsibilities: rankedBullets[idx]?.bullets ?? exp.responsibilities,
           achievements: [],
+        })),
+      };
+
+      const allowlistPerExperience =
+        this.experienceTechAllowlistService.buildAllowlist(preAllowlistContent);
+
+      const techVocabulary =
+        this.experienceTechAllowlistService.buildTechVocabulary(
+          preAllowlistContent,
+          jdTechTokens,
+        );
+
+      const rankedCandidateContent: TailoredContent = {
+        ...preAllowlistContent,
+        experience: preAllowlistContent.experience.map((exp, idx) => ({
+          ...exp,
+          allowedTech: Array.from(allowlistPerExperience[idx] ?? []),
         })),
       };
 
@@ -220,7 +249,11 @@ export class ResumeOptimizerService {
         result.optimizedContent,
         rankedCandidateContent,
         verifiedFacts ?? [],
+        allowlistPerExperience,
+        techVocabulary,
       );
+
+      this.restoreSourceSkills(result.optimizedContent, rankedCandidateContent);
 
       // Post-LLM validation: ensure no experience or bullet was silently dropped
       this.validateNoExperienceDropped(
@@ -452,22 +485,52 @@ export class ResumeOptimizerService {
     optimizedContent: TailoredContent,
     sourceContent: TailoredContent,
     verifiedFacts: VerifiedFact[],
+    allowlistPerExperience: Array<Set<string>> = [],
+    techVocabulary: Set<string> = new Set<string>(),
   ): void {
     const verifiedText = verifiedFacts.map((f) => f.userResponse).join('\n');
 
     for (let i = 0; i < optimizedContent.experience.length; i++) {
       const outputExp = optimizedContent.experience[i];
       const sourceExp = sourceContent.experience[i];
+      const allowlist = allowlistPerExperience[i] ?? new Set<string>();
 
       for (const field of ['responsibilities', 'achievements'] as const) {
         const outputBullets = outputExp[field] ?? [];
         const sourceBullets = sourceExp?.[field] ?? [];
 
         outputExp[field] = outputBullets.map((bullet, j) => {
+          const sourceBullet = sourceBullets[j] ?? '';
+
+          // Class B — technology substitution check (runs BEFORE metric check
+          // because a tech swap is a stronger signal than a metric change).
+          if (techVocabulary.size > 0 && sourceBullet) {
+            const forbiddenTech =
+              this.experienceTechAllowlistService.detectForbiddenTokens(
+                bullet,
+                sourceBullet,
+                allowlist,
+                techVocabulary,
+              );
+            if (forbiddenTech.length > 0) {
+              this.logger.warn(
+                'hallucinated_tech detected — reverting bullet to source',
+                {
+                  experienceIndex: i,
+                  bulletIndex: j,
+                  offendingTokens: forbiddenTech,
+                  outputBullet: bullet,
+                  sourceBullet,
+                },
+              );
+              return sourceBullet;
+            }
+          }
+
+          // Class A — numeric hallucination check (existing behavior).
           const tokens = bullet.match(/\d+[%xkK]?|\$[\d,]+/g) ?? [];
           if (tokens.length === 0) return bullet;
 
-          const sourceBullet = sourceBullets[j] ?? '';
           const sourceFieldText = sourceBullets.join('\n');
           const failingTokens = tokens.filter(
             (token) =>
@@ -500,6 +563,85 @@ export class ResumeOptimizerService {
           return sourceBullet;
         });
       }
+    }
+  }
+
+  /**
+   * Deterministic skills lock — overwrite optimizedContent.skills with the
+   * source skills verbatim. The LLM is instructed to echo skills unchanged,
+   * but Class B (technology) hallucinations leak into the skills field too
+   * (e.g. injecting JD-only tech, dropping real skills). Logs a structured
+   * warning when the LLM diverged from source so we can monitor drift.
+   */
+  private restoreSourceSkills(
+    optimizedContent: TailoredContent,
+    sourceContent: TailoredContent,
+  ): void {
+    const sourceSkills = sourceContent.skills;
+    if (!sourceSkills) return;
+
+    const outputSkills = optimizedContent.skills;
+    const categories: Array<keyof TailoredContent['skills']> = [
+      'languages',
+      'frameworks',
+      'tools',
+      'databases',
+      'concepts',
+    ];
+
+    const normalize = (s: string): string => s.toLowerCase().trim();
+    const added: string[] = [];
+    const removed: string[] = [];
+
+    if (outputSkills) {
+      for (const category of categories) {
+        const sourceSet = new Set(
+          (sourceSkills[category] ?? []).map(normalize),
+        );
+        const outputSet = new Set(
+          (outputSkills[category] ?? []).map(normalize),
+        );
+        for (const token of outputSet) {
+          if (!sourceSet.has(token)) added.push(`${category}:${token}`);
+        }
+        for (const token of sourceSet) {
+          if (!outputSet.has(token)) removed.push(`${category}:${token}`);
+        }
+      }
+    }
+
+    if (added.length > 0 || removed.length > 0) {
+      this.logger.warn(
+        'hallucinated_skills detected — restoring source skills',
+        {
+          event: 'hallucinated_skills',
+          added,
+          removed,
+        },
+      );
+    }
+
+    // Deep clone to avoid sharing refs with source content
+    optimizedContent.skills = {
+      languages: [...(sourceSkills.languages ?? [])],
+      frameworks: [...(sourceSkills.frameworks ?? [])],
+      tools: [...(sourceSkills.tools ?? [])],
+      databases: [...(sourceSkills.databases ?? [])],
+      concepts: [...(sourceSkills.concepts ?? [])],
+    };
+
+    // Restore skillAliases from source as well. The optimizer's output schema
+    // does NOT include skillAliases, so the LLM should not emit them; defensively
+    // overwrite any drift with a deep clone of the source aliases.
+    if (sourceContent.skillAliases) {
+      optimizedContent.skillAliases = sourceContent.skillAliases.map(
+        (entry) => ({
+          skill: entry.skill,
+          alternatives: [...(entry.alternatives ?? [])],
+        }),
+      );
+    } else {
+      delete optimizedContent.skillAliases;
     }
   }
 

@@ -34,6 +34,7 @@ import { ResumeProfileEnrichmentService } from './services/resume-profile-enrich
 import { ProfileQuestionSelectionService } from './services/profile-question-selection.service';
 import { ProfileQuestionGenerationService } from './services/profile-question-generation.service';
 import { CoverLetterGenerationService } from './services/cover-letter-generation.service';
+import { CoverLetterPdfService } from './services/cover-letter-pdf.service';
 import { TailoredResumePdfStorageService } from './services/tailored-resume-pdf-storage.service';
 import { ProfileQuestionsController } from './controllers/profile-questions.controller';
 import { BasicInputValidationRule } from './validation/basic-input-validation.rule';
@@ -56,7 +57,10 @@ import { ChangesDiffComputationService } from './services/changes-diff-computati
 import { AtsChecksComputationService } from './services/ats-checks-computation.service';
 import { BulletsQuantifiedComputationService } from './services/bullets-quantified-computation.service';
 import { BulletRelevanceScoringService } from './services/bullet-relevance-scoring.service';
+import { ExperienceTechAllowlistService } from './services/experience-tech-allowlist.service';
 import { PromptVariantResolverService } from './services/prompt-variant-resolver.service';
+import { KeywordMatchScoringService } from './services/keyword-match-scoring.service';
+import { MatchScoreClassifierService } from './services/match-score-classifier.service';
 
 @Module({
   imports: [
@@ -109,12 +113,15 @@ import { PromptVariantResolverService } from './services/prompt-variant-resolver
     ResumeQueueService,
     // Bullet scoring (shared by optimizer + question selection)
     BulletRelevanceScoringService,
+    // Tech-substitution guardrail (paired with prompt EXPERIENCE_TECH_LOCK)
+    ExperienceTechAllowlistService,
     // Profile enrichment & profile questions
     ProfileQuestionSelectionService,
     ProfileQuestionGenerationService,
     ResumeProfileEnrichmentService,
     // Cover Letter Generation
     CoverLetterGenerationService,
+    CoverLetterPdfService,
     ResumeExtractionProcessor,
     ResumeProfileEnrichmentProcessor,
     ChangesDiffProcessor,
@@ -122,6 +129,11 @@ import { PromptVariantResolverService } from './services/prompt-variant-resolver
     AtsChecksComputationService,
     BulletsQuantifiedComputationService,
     PromptVariantResolverService,
+    // Keyword match scoring (3-layer scorer used by orchestrator)
+    KeywordMatchScoringService,
+    // Match score classifier — BE-side derivation of the canonical
+    // MatchScoreBlock (improvementKind, improvementMessage, statusColor).
+    MatchScoreClassifierService,
     // Interceptors
     {
       provide: APP_INTERCEPTOR,

@@ -24,10 +24,11 @@ import {
   NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
-import { MATCH_SCORE_MAX_PERCENTAGE } from '../../../shared/constants/resume-tailoring.constants';
 import { OPTIMIZATION_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
 import { ResumeContentService } from './resume-content.service';
 import { ResumeReplacementErrorCode } from '../../../shared/enums/resume-replacement.enum';
+import { KeywordMatchScoringService } from './keyword-match-scoring.service';
+import { MatchScoreClassifierService } from './match-score-classifier.service';
 
 /**
  * Resume Generation Orchestrator Service
@@ -56,6 +57,8 @@ export class ResumeGenerationOrchestratorService {
     private readonly bulletsQuantifiedComputationService: BulletsQuantifiedComputationService,
     private readonly changesDiffComputationService: ChangesDiffComputationService,
     private readonly resumeContentService: ResumeContentService,
+    private readonly keywordMatchScoringService: KeywordMatchScoringService,
+    private readonly matchScoreClassifierService: MatchScoreClassifierService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
     @InjectRepository(User)
@@ -94,13 +97,20 @@ export class ResumeGenerationOrchestratorService {
         optimizationResult,
       );
 
-      // Compute diff synchronously before persisting
+      // Compute diff synchronously before persisting.
+      // The fourth argument (scoringInput) routes `keywordAnalysis.coverage*`
+      // through the same KeywordMatchScoringService used for match_score_*,
+      // so the two pairs of numbers are produced by one engine.
       const diff = this.changesDiffComputationService.computeDiff(
         resumeContent.content as unknown as TailoredContent,
         optimizationResult.optimizedContent,
         {
           mandatorySkills: jobAnalysis.technical.mandatorySkills,
           primaryKeywords: jobAnalysis.keywords.primary,
+        },
+        {
+          originalText: resumeContent.originalText,
+          jobAnalysis,
         },
       );
 
@@ -260,23 +270,50 @@ export class ResumeGenerationOrchestratorService {
       ReturnType<typeof this.resumeOptimizerService.optimizeResumeContent>
     >,
   ) {
-    const targetKeywords: string[] = [
-      ...jobAnalysis.keywords.primary,
-      ...jobAnalysis.technical.mandatorySkills,
-    ];
+    // Single shared keyword-set builder (mirrors the diff service's call site)
+    // so before/after scores never drift due to divergent keyword construction.
+    const keywordSet = KeywordMatchScoringService.buildKeywordSet(jobAnalysis);
 
-    const matchScoreBefore = this.computeKeywordMatchScore(
-      resumeContent.rawContent as TailoredContent,
-      targetKeywords,
+    // BEFORE score: scored against the user's literal uploaded text only.
+    // `applyAliases: false` enforces the ATS-literal-scanner view —
+    // no UNIVERSAL_ALIAS_MAP, no per-keyword JD aliases, no candidate-side
+    // alias expansion. If `originalText` is missing (legacy paths) fall back
+    // to flattened `rawContent` and warn so we can hunt the gap down.
+    const beforeSource = resumeContent.originalText;
+    if (!beforeSource) {
+      this.logger.warn(
+        'originalText missing; falling back to rawContent for before-score',
+        {
+          resumeContentSource: resumeContent.source,
+        },
+      );
+    }
+    const matchScoreBefore = this.keywordMatchScoringService.computeScore(
+      beforeSource ?? (resumeContent.rawContent as TailoredContent),
+      keywordSet,
+      undefined,
+      { applyAliases: false },
     );
-    const matchScoreAfter = this.computeKeywordMatchScore(
+
+    // AFTER score: full alias machinery (Layer 1 + Layer 2 + Layer 3) against
+    // the structured optimized content. Candidate skill aliases come from the
+    // optimized content (skillAliases is preserved through optimization).
+    const matchScoreAfter = this.keywordMatchScoringService.computeScore(
       optimizationResult.optimizedContent,
-      targetKeywords,
+      keywordSet,
+      optimizationResult.optimizedContent.skillAliases,
+      { applyAliases: true },
     );
     const matchScoreDelta = matchScoreAfter - matchScoreBefore;
 
     this.logger.debug(
       `Keyword match scores — before: ${matchScoreBefore}%, after: ${matchScoreAfter}%, delta: ${matchScoreDelta}%`,
+    );
+
+    // Canonical block — single source of truth broadcast to every API surface.
+    const matchScoreBlock = this.matchScoreClassifierService.classify(
+      matchScoreBefore,
+      matchScoreAfter,
     );
 
     const atsChecks = this.atsChecksComputationService.computeChecks(
@@ -294,9 +331,12 @@ export class ResumeGenerationOrchestratorService {
     );
 
     return {
+      // Flat fields kept for one transition cycle — TODO: remove after FE
+      // migration lands and all consumers read from `matchScoreBlock`.
       matchScoreBefore,
       matchScoreAfter,
       matchScoreDelta,
+      matchScoreBlock,
       atsChecks,
       bulletsQuantified,
     };
@@ -438,6 +478,7 @@ export class ResumeGenerationOrchestratorService {
       matchScoreBefore,
       matchScoreAfter,
       matchScoreDelta,
+      matchScoreBlock,
       atsChecks,
       bulletsQuantified,
     } = scores;
@@ -471,6 +512,11 @@ export class ResumeGenerationOrchestratorService {
       templateUsed: input.templateId,
       primaryKeywordsFound: jobAnalysis.keywords.primary.length,
       mandatorySkillsAligned: jobAnalysis.technical.mandatorySkills.length,
+      // Canonical block — broadcast to every API surface as the single
+      // source of truth for FE rendering.
+      matchScore: matchScoreBlock,
+      // Flat fields retained for one transition cycle. TODO: remove after FE
+      // migration lands and all consumers read `matchScore` instead.
       matchScoreBefore,
       matchScoreAfter,
       matchScoreDelta,
@@ -534,71 +580,6 @@ export class ResumeGenerationOrchestratorService {
         message: 'Your resume is still processing. Please wait and try again.',
       });
     }
-  }
-
-  /**
-   * Flatten a TailoredContent object into a single lowercased string
-   * for keyword matching purposes.
-   */
-  private contentToText(content: TailoredContent): string {
-    if (!content) return '';
-
-    const parts: string[] = [];
-
-    if (content.title) parts.push(content.title);
-    if (content.summary) parts.push(content.summary);
-
-    if (content.skills) {
-      const { languages, frameworks, tools, databases, concepts } =
-        content.skills;
-      parts.push(
-        ...(languages ?? []),
-        ...(frameworks ?? []),
-        ...(tools ?? []),
-        ...(databases ?? []),
-        ...(concepts ?? []),
-      );
-    }
-
-    for (const exp of content.experience ?? []) {
-      if (exp.position) parts.push(exp.position);
-      parts.push(...(exp.responsibilities ?? []));
-      parts.push(...(exp.achievements ?? []));
-      if (exp.technologies) parts.push(exp.technologies);
-    }
-
-    for (const edu of content.education ?? []) {
-      if (edu.degree) parts.push(edu.degree);
-      if (edu.institution) parts.push(edu.institution);
-    }
-
-    for (const cert of content.certifications ?? []) {
-      if (cert.name) parts.push(cert.name);
-    }
-
-    return parts.join(' ').toLowerCase();
-  }
-
-  /**
-   * Compute the percentage of keywords found (case-insensitive substring match)
-   * in the given TailoredContent. Result is capped at 95 and rounded to the
-   * nearest integer.
-   */
-  private computeKeywordMatchScore(
-    content: TailoredContent,
-    keywords: string[],
-  ): number {
-    if (!keywords || keywords.length === 0) return 0;
-
-    const text = this.contentToText(content);
-    const uniqueKeywords = [...new Set(keywords.map((k) => k.toLowerCase()))];
-
-    const matchedCount = uniqueKeywords.filter((kw) =>
-      text.includes(kw),
-    ).length;
-    const raw = (matchedCount / uniqueKeywords.length) * 100;
-
-    return Math.min(MATCH_SCORE_MAX_PERCENTAGE, Math.round(raw));
   }
 
   /**

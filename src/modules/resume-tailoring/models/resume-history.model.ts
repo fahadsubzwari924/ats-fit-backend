@@ -1,5 +1,7 @@
 import { UserPlan } from '../../../database/entities/user.entity';
 import { ResumeGeneration } from '../../../database/entities/resume-generations.entity';
+import { MatchScoreBlock } from '../interfaces/match-score-block.interface';
+import { classifyMatchScore } from '../services/match-score-classifier.service';
 
 export class ResumeHistoryItem {
   id: string;
@@ -13,7 +15,15 @@ export class ResumeHistoryItem {
   createdAt: Date;
   canDownload: boolean;
   hasCoverLetter: boolean;
-  matchScore: { before: number; after: number; delta: number } | null;
+  /**
+   * Canonical MatchScoreBlock — `null` when scores were never persisted for
+   * this record (legacy v2.0/v2.1 rows without `match_score_*` columns).
+   * The previous fallback that substituted `changesDiff.keywordAnalysis.
+   * coverage*` is intentionally removed: post-Task-A those coverage numbers
+   * are produced by the same scorer, so a null column truly means the row
+   * was never scored — the FE handles `null` gracefully.
+   */
+  matchScore: MatchScoreBlock | null;
   atsChecks: { passed: number; total: number } | null;
 
   constructor(entity: ResumeGeneration) {
@@ -30,11 +40,7 @@ export class ResumeHistoryItem {
 
     this.matchScore =
       entity.matchScoreBefore != null && entity.matchScoreAfter != null
-        ? {
-            before: entity.matchScoreBefore,
-            after: entity.matchScoreAfter,
-            delta: entity.matchScoreAfter - entity.matchScoreBefore,
-          }
+        ? classifyMatchScore(entity.matchScoreBefore, entity.matchScoreAfter)
         : null;
 
     this.atsChecks =
@@ -63,18 +69,13 @@ export class ResumeHistoryDetail extends ResumeHistoryItem {
           }
         : null;
 
-    // Fallback: derive matchScore from changesDiff.keywordAnalysis for older records
-    const diff = entity.changes_diff as {
-      keywordAnalysis?: { coverageOriginal: number; coverageOptimized: number };
-    } | null;
-    if (!this.matchScore && diff?.keywordAnalysis) {
-      const ka = diff.keywordAnalysis;
-      this.matchScore = {
-        before: ka.coverageOriginal,
-        after: ka.coverageOptimized,
-        delta: ka.coverageOptimized - ka.coverageOriginal,
-      };
-    }
+    // NOTE: the legacy fallback that derived matchScore from
+    // `changesDiff.keywordAnalysis.coverage*` has been removed. After Task A,
+    // coverage* is produced by the same `KeywordMatchScoringService` that
+    // produces `match_score_*`, so a null `matchScore` truly means the row
+    // was never scored. Substituting coverage values would either be a
+    // duplicate (when columns are populated) or stale data (legacy rows),
+    // both of which the FE handles by rendering the absence explicitly.
   }
 }
 

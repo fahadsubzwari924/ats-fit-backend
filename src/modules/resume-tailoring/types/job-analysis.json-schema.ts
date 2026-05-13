@@ -108,11 +108,11 @@ export const JobAnalysisJsonSchema: Record<string, unknown> = {
     keywords: {
       type: 'object',
       additionalProperties: false,
-      required: ['primary', 'secondary', 'synonyms'],
+      required: ['primary', 'secondary', 'aliases'],
       properties: {
         primary: { type: 'array', items: { type: 'string' } },
         secondary: { type: 'array', items: { type: 'string' } },
-        synonyms: {
+        aliases: {
           type: 'array',
           items: {
             type: 'object',
