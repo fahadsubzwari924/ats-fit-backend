@@ -12,6 +12,7 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BULK_TAILORING_MAX_RESUMES } from '../../../shared/constants/resume-tailoring.constants';
 import { MatchScoreBlock } from '../interfaces/match-score-block.interface';
+import type { BatchJobError } from '../interfaces/batch-job-error.interface';
 
 export class BatchJobItemDto {
   @ApiProperty({ example: 'Senior Frontend Engineer' })
@@ -75,7 +76,14 @@ export interface BatchJobResult {
   matchScoreBefore?: number;
   /** @deprecated use `matchScore.after`; removed after FE migration lands */
   matchScoreAfter?: number;
-  error?: string;
+  /**
+   * Typed failure envelope on failed jobs. The FE renders `userMessage` as
+   * the body copy and uses `retryable` to decide whether to show the
+   * per-job retry button. Legacy plain-string `error_message` rows from
+   * pre-envelope deployments are synthesized into `{ category: 'UNKNOWN',
+   * retryable: true, ... }` by the service-layer mapper at read time.
+   */
+  error?: BatchJobError;
 }
 
 export interface BatchGenerateResponse {

@@ -19,3 +19,6 @@ export * from './profile-question.interface';
 // Legacy interfaces
 export * from './resume-extracted-keywords.interface';
 export * from './resume-template.interface';
+
+// Batch tailoring failure envelope
+export * from './batch-job-error.interface';

@@ -65,11 +65,30 @@ export class ClaudeService {
     let attempt = 0;
     let retryCount = 0;
     while (attempt < maxRetries) {
+      const startedAt = Date.now();
       try {
         this.activeRequests++;
         const response = await this.makeClaudeRequest(params);
         this.activeRequests--;
         this.processQueue();
+
+        const durationMs = Date.now() - startedAt;
+        const callerAttempt = params.attempt ?? 1;
+        const stopReason = response.choices?.[0]?.finish_reason ?? 'unknown';
+        const inputTokens = response.usage?.input_tokens ?? 0;
+        const outputTokens = response.usage?.output_tokens ?? 0;
+        const cacheRead = response.usage?.cache_read_input_tokens ?? 0;
+        const cacheCreate = response.usage?.cache_creation_input_tokens ?? 0;
+        const promptId = params.promptId ?? 'unknown';
+        const promptVersion = params.promptVersion ?? 'unknown';
+
+        // Structured prod telemetry — single INFO line per successful SDK call
+        // so `stop_reason` and token usage are observable in Railway logs.
+        // Format is intentionally space-delimited key=value pairs so it is
+        // greppable and parseable by ad-hoc log tooling.
+        this.logger.log(
+          `Claude completion ${promptId} v${promptVersion} attempt=${callerAttempt} stop_reason=${stopReason} input_tokens=${inputTokens} output_tokens=${outputTokens} cache_read=${cacheRead} cache_create=${cacheCreate} duration_ms=${durationMs}`,
+        );
 
         this.telemetryService.record({
           prompt_id: params.promptId ?? 'unknown',

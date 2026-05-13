@@ -22,6 +22,14 @@ export interface ClaudeRequestParams {
   }>;
   tool_choice?: { type: 'tool'; name: string };
   thinking?: { type: 'enabled'; budget_tokens: number };
+  /**
+   * Opaque attempt counter threaded through by callers so structured prod
+   * telemetry can distinguish first-call vs retry-call log lines. Defaults
+   * to 1 when omitted. Intended for use by retry wrappers (e.g. the
+   * optimizer's two-tier retry — see Task C of the batch-tailoring
+   * resilience plan).
+   */
+  attempt?: number;
 }
 
 export interface ClaudeResponse {

@@ -72,6 +72,12 @@ export const ERROR_CODES = {
 
   // Batch tailoring errors
   BATCH_LIMIT_EXCEEDED: 'ERR_BATCH_LIMIT_EXCEEDED',
+  // Per-job retry guardrails. JOB_NOT_RETRYABLE → caller hit the retry
+  // endpoint on a job whose `state` is not `failed` (e.g. completed/queued).
+  // RETRY_LIMIT_EXCEEDED → the job has already been manually retried twice;
+  // the hard cap is enforced via `batch_tailoring_jobs.retry_count >= 2`.
+  JOB_NOT_RETRYABLE: 'ERR_JOB_NOT_RETRYABLE',
+  RETRY_LIMIT_EXCEEDED: 'ERR_RETRY_LIMIT_EXCEEDED',
 
   // Tailoring session errors
   TAILORING_SESSION_NOT_FOUND: 'ERR_TAILORING_SESSION_NOT_FOUND',
@@ -95,6 +101,11 @@ export const ERROR_CODES = {
   INVALID_AI_RESPONSE_STRUCTURE: 'ERR_INVALID_AI_RESPONSE_STRUCTURE',
   MISSING_REQUIRED_AI_FIELD: 'ERR_MISSING_REQUIRED_AI_FIELD',
   AI_RESPONSE_PARSING_FAILED: 'ERR_AI_RESPONSE_PARSING_FAILED',
+  // Distinct from AI_RESPONSE_PARSING_FAILED: the LLM returned valid JSON but
+  // omitted/clipped content (e.g. dropped experience entries). Tracked
+  // separately so the retry whitelist and BatchJobErrorClassifier can map this
+  // to the AI_TRUNCATION category instead of AI_PARSING.
+  AI_OUTPUT_TRUNCATED: 'ERR_AI_OUTPUT_TRUNCATED',
   INVALID_POSITION_LEVEL: 'ERR_INVALID_POSITION_LEVEL',
   INVALID_CONFIDENCE_SCORE: 'ERR_INVALID_CONFIDENCE_SCORE',
   INVALID_METRIC_FIELD: 'ERR_INVALID_METRIC_FIELD',

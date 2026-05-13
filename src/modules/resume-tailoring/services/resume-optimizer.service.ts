@@ -11,6 +11,7 @@ import { ResumeOptimizationResult } from '../interfaces/resume-optimization.inte
 import {
   InternalServerErrorException,
   BadRequestException,
+  CustomHttpException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { ClaudeResponse } from '../../../shared/modules/external/interfaces';
@@ -193,78 +194,104 @@ export class ResumeOptimizerService {
         })),
       };
 
-      // Try Claude first, fallback to OpenAI on overload
+      // Two-tier retry: attempt 1 (Claude w/ 529→OpenAI fallback) → attempt 2
+      // (Claude only, cache-bypassed) → OpenAI fallback on validation failure.
+      // Cache was already consulted above; retries and OpenAI fallback MUST NOT
+      // re-read cache (they would just return the cached failure).
       let result: Omit<ResumeOptimizationResult, 'processingMetadata'>;
       let aiModel: string;
+      let outcomeLabel: '1' | '2' | 'openai-fallback';
 
       try {
-        result = await this.optimizeWithClaude(
+        const attempt1 = await this.runOptimizationAttempt(
           jobAnalysis,
           rankedCandidateContent,
           companyName,
           jobPosition,
           verifiedFacts,
           variant,
+          allowlistPerExperience,
+          techVocabulary,
+          1,
         );
-        aiModel = this.claudeService.defaultModel;
-        this.logger.log('Successfully used Claude for resume optimization');
+        result = attempt1.result;
+        aiModel = attempt1.aiModel;
+        outcomeLabel = '1';
       } catch (error) {
-        this.logger.debug(
-          `Claude optimization failed, checking if overload error: ${JSON.stringify(
-            {
-              message: error instanceof Error ? error.message : 'Unknown error',
-              type: typeof error,
-              isOverload: AIErrorUtil.isClaudeOverloadError(error),
-            },
-          )}`,
+        if (!this.isRetryableOptimizerError(error)) {
+          throw error;
+        }
+
+        const prevCount = this.extractOutputCount(error);
+        this.logger.warn(
+          `Optimizer retry attempt=2 reason=parsing-validation-failed previous_output_count=${prevCount}`,
         );
 
-        if (AIErrorUtil.isClaudeOverloadError(error)) {
-          this.logger.warn(
-            'Claude API overloaded, falling back to OpenAI for resume optimization',
-          );
-          result = await this.optimizeWithOpenAI(
+        try {
+          const attempt2 = await this.runOptimizationAttempt(
             jobAnalysis,
             rankedCandidateContent,
             companyName,
             jobPosition,
             verifiedFacts,
             variant,
+            allowlistPerExperience,
+            techVocabulary,
+            2,
           );
-          aiModel = MODEL_OPTIMIZER_FALLBACK;
-          this.logger.log(
-            'Successfully used OpenAI fallback for resume optimization',
+          result = attempt2.result;
+          aiModel = attempt2.aiModel;
+          outcomeLabel = '2';
+        } catch (secondError) {
+          if (!this.isRetryableOptimizerError(secondError)) {
+            throw secondError;
+          }
+
+          this.logger.warn(
+            'Falling through to OpenAI fallback after 2 Claude attempts failed validation',
           );
-        } else {
-          // Re-throw non-overload errors
-          throw error;
+
+          try {
+            const openAIResult = await this.optimizeWithOpenAI(
+              jobAnalysis,
+              rankedCandidateContent,
+              companyName,
+              jobPosition,
+              verifiedFacts,
+              variant,
+            );
+
+            this.applyPostLLMProcessing(
+              openAIResult,
+              rankedCandidateContent,
+              verifiedFacts,
+              allowlistPerExperience,
+              techVocabulary,
+            );
+
+            result = openAIResult;
+            aiModel = MODEL_OPTIMIZER_FALLBACK;
+            outcomeLabel = 'openai-fallback';
+          } catch (fallbackError) {
+            // If OpenAI fallback ALSO fails validation, propagate the ORIGINAL
+            // parsing-failure error so the downstream classifier maps it
+            // consistently (Task D).
+            if (this.isRetryableOptimizerError(fallbackError)) {
+              throw error;
+            }
+            throw fallbackError;
+          }
         }
       }
-
-      result.optimizedContent.summary = this.sanitizeSummary(
-        result.optimizedContent.summary,
-      );
-
-      this.scrubInventedMetrics(
-        result.optimizedContent,
-        rankedCandidateContent,
-        verifiedFacts ?? [],
-        allowlistPerExperience,
-        techVocabulary,
-      );
-
-      this.restoreSourceSkills(result.optimizedContent, rankedCandidateContent);
-
-      // Post-LLM validation: ensure no experience or bullet was silently dropped
-      this.validateNoExperienceDropped(
-        rankedCandidateContent,
-        result.optimizedContent,
-      );
 
       const processingTime = Date.now() - startTime;
 
       this.logger.log(
         `Resume optimization completed in ${processingTime}ms. Added ${result.optimizationMetrics.keywordsAdded} keywords, optimized ${result.optimizationMetrics.sectionsOptimized} sections`,
+      );
+
+      this.logger.log(
+        `Optimizer final outcome attempt=${outcomeLabel} duration_ms=${processingTime}`,
       );
 
       const finalResult = {
@@ -302,6 +329,172 @@ export class ResumeOptimizerService {
         ERROR_CODES.INTERNAL_SERVER,
       );
     }
+  }
+
+  /**
+   * Run a single optimization attempt: Claude (with 529-overload OpenAI
+   * fallback) → scrub invented metrics → restore source skills → validate no
+   * experience dropped. Returns the parsed result + the AI model label used.
+   *
+   * The 529-overload OpenAI fallback fires here because it's an Anthropic-
+   * error fallback, not a validation-failure fallback. The retry loop in
+   * `optimizeResumeContent` handles validation-failure recovery on top of
+   * this helper.
+   */
+  private async runOptimizationAttempt(
+    jobAnalysis: JobAnalysisResult,
+    rankedCandidateContent: TailoredContent,
+    companyName: string,
+    jobPosition: string,
+    verifiedFacts: VerifiedFact[] | undefined,
+    variant: string,
+    allowlistPerExperience: Array<Set<string>>,
+    techVocabulary: Set<string>,
+    attempt: number,
+  ): Promise<{
+    result: Omit<ResumeOptimizationResult, 'processingMetadata'>;
+    aiModel: string;
+  }> {
+    let result: Omit<ResumeOptimizationResult, 'processingMetadata'>;
+    let aiModel: string;
+
+    try {
+      result = await this.optimizeWithClaude(
+        jobAnalysis,
+        rankedCandidateContent,
+        companyName,
+        jobPosition,
+        verifiedFacts,
+        variant,
+        attempt,
+      );
+      aiModel = this.claudeService.defaultModel;
+      this.logger.log(
+        `Successfully used Claude for resume optimization (attempt=${attempt})`,
+      );
+    } catch (error) {
+      this.logger.debug(
+        `Claude optimization failed (attempt=${attempt}), checking if overload error: ${JSON.stringify(
+          {
+            message: error instanceof Error ? error.message : 'Unknown error',
+            type: typeof error,
+            isOverload: AIErrorUtil.isClaudeOverloadError(error),
+          },
+        )}`,
+      );
+
+      if (AIErrorUtil.isClaudeOverloadError(error)) {
+        this.logger.warn(
+          `Claude API overloaded (attempt=${attempt}), falling back to OpenAI for resume optimization`,
+        );
+        result = await this.optimizeWithOpenAI(
+          jobAnalysis,
+          rankedCandidateContent,
+          companyName,
+          jobPosition,
+          verifiedFacts,
+          variant,
+        );
+        aiModel = MODEL_OPTIMIZER_FALLBACK;
+        this.logger.log(
+          `Successfully used OpenAI fallback for resume optimization (attempt=${attempt})`,
+        );
+      } else {
+        // Re-throw non-overload errors so the outer retry loop can decide
+        // whether to retry (parsing-validation failures) or propagate.
+        throw error;
+      }
+    }
+
+    this.applyPostLLMProcessing(
+      result,
+      rankedCandidateContent,
+      verifiedFacts,
+      allowlistPerExperience,
+      techVocabulary,
+    );
+
+    return { result, aiModel };
+  }
+
+  /**
+   * Apply the deterministic post-LLM pipeline: sanitize summary, scrub
+   * invented metrics, restore source skills, validate no experience dropped.
+   * Mutates the passed-in result. Throws `AI_RESPONSE_PARSING_FAILED` from
+   * `validateNoExperienceDropped` if the LLM truncated the experience list.
+   */
+  private applyPostLLMProcessing(
+    result: Omit<ResumeOptimizationResult, 'processingMetadata'>,
+    rankedCandidateContent: TailoredContent,
+    verifiedFacts: VerifiedFact[] | undefined,
+    allowlistPerExperience: Array<Set<string>>,
+    techVocabulary: Set<string>,
+  ): void {
+    result.optimizedContent.summary = this.sanitizeSummary(
+      result.optimizedContent.summary,
+    );
+
+    this.scrubInventedMetrics(
+      result.optimizedContent,
+      rankedCandidateContent,
+      verifiedFacts ?? [],
+      allowlistPerExperience,
+      techVocabulary,
+    );
+
+    this.restoreSourceSkills(result.optimizedContent, rankedCandidateContent);
+
+    // Post-LLM validation: ensure no experience or bullet was silently dropped
+    this.validateNoExperienceDropped(
+      rankedCandidateContent,
+      result.optimizedContent,
+    );
+  }
+
+  /**
+   * Whitelist check: is this error one of the two LLM-output-quality failures
+   * that the two-tier retry is allowed to recover from?
+   *
+   * - `AI_OUTPUT_TRUNCATED` — validation guard caught a dropped experience
+   *   (the dominant failure mode this retry loop was built for).
+   * - `AI_RESPONSE_PARSING_FAILED` — JSON parse / structural validation
+   *   failure on the LLM payload.
+   *
+   * Anything else (BadRequestException, ForbiddenException, Anthropic 5xx
+   * that bubbled past the overload handler, etc.) propagates unchanged so
+   * we never retry on bad user input or quota errors.
+   */
+  private isRetryableOptimizerError(error: unknown): boolean {
+    if (!(error instanceof CustomHttpException)) {
+      return false;
+    }
+    const response = error.getResponse() as { errorCode?: unknown };
+    const code = response?.errorCode;
+    return (
+      code === ERROR_CODES.AI_OUTPUT_TRUNCATED ||
+      code === ERROR_CODES.AI_RESPONSE_PARSING_FAILED
+    );
+  }
+
+  /**
+   * Extract the output experience count attached to a validation-failure
+   * error's `details` payload. Returns `'unknown'` when the error doesn't
+   * carry that metadata (e.g. parse failures from `parseOptimizationResponse`).
+   */
+  private extractOutputCount(error: unknown): string {
+    if (!(error instanceof CustomHttpException)) {
+      return 'unknown';
+    }
+    const response = error.getResponse() as { details?: unknown };
+    const details = response?.details as { outputCount?: unknown } | null;
+    if (
+      details &&
+      typeof details === 'object' &&
+      typeof details.outputCount === 'number'
+    ) {
+      return String(details.outputCount);
+    }
+    return 'unknown';
   }
 
   /**
@@ -458,7 +651,9 @@ export class ResumeOptimizerService {
       );
       throw new InternalServerErrorException(
         'Resume optimization produced incomplete output — some work experiences were dropped. Please try again.',
-        ERROR_CODES.AI_RESPONSE_PARSING_FAILED,
+        ERROR_CODES.AI_OUTPUT_TRUNCATED,
+        undefined,
+        { inputCount, outputCount },
       );
     }
 
@@ -673,6 +868,7 @@ export class ResumeOptimizerService {
     jobPosition: string,
     verifiedFacts?: VerifiedFact[],
     variant: string = 'control',
+    attempt: number = 1,
   ): Promise<Omit<ResumeOptimizationResult, 'processingMetadata'>> {
     const { system, user } = this.promptService.getOptimizationPromptParts(
       jobAnalysis as unknown as Record<string, unknown>,
@@ -701,6 +897,7 @@ export class ResumeOptimizerService {
       promptVersion: OPTIMIZATION_PROMPT_VERSION,
       tools: [RETURN_OPTIMIZED_RESUME_TOOL],
       tool_choice: { type: 'tool', name: 'return_optimized_resume' },
+      attempt,
       ...(thinkingEnabled && {
         thinking: {
           type: 'enabled' as const,

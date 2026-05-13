@@ -19,3 +19,4 @@ export * from './payment-history.entity';
 export * from './tailoring-session.entity';
 export * from './enriched-resume-profile.entity';
 export * from './password-reset-token.entity';
+export * from './job-application-interview.entity';

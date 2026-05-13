@@ -36,6 +36,7 @@ import {
   EnqueueBatchV2ResponseDto,
 } from './dto/enqueue-batch-v2.dto';
 import { BatchSnapshotV2Dto } from './dto/batch-status-v2.dto';
+import { BatchJobRetryResponseDto } from '../dtos/batch-job-retry.dto';
 import { BadRequestException } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import {
@@ -201,5 +202,51 @@ export class BatchTailoringV2Controller {
       );
     }
     return this.batchService.getSnapshot(batchId, userId);
+  }
+
+  /**
+   * Per-job manual retry endpoint (Task E).
+   *
+   * Retries a single failed job in place without re-running the whole batch
+   * and WITHOUT decrementing quota (the batch enqueue already pre-checked
+   * quota, and the processor only records usage on success). The retried job
+   * runs through the same processor entry as the original attempt — the SSE
+   * channel for `:batchId` will deliver standard
+   * `job_started → job_progress → job_completed | job_failed` events for the
+   * retried job; the FE updates the row in place from those events.
+   *
+   * Auth: mirrors the other endpoints in this controller — the class-level
+   * `@UseGuards(JwtAuthGuard)` enforces a valid JWT, and
+   * `@TransformUserContext()` populates `req.userContext` so we can extract
+   * `userId` and pass it to the service for the ownership check.
+   *
+   * Status codes:
+   *   200 — retry enqueued, body = `{ ok: true, jobId, retryCount }`
+   *   400 — caller has no userContext (shouldn't happen post-guard)
+   *   403 — caller does not own the batch
+   *   404 — batch or job not found
+   *   409 — job state !== 'failed'  (ERR_JOB_NOT_RETRYABLE)
+   *   429 — retry_count >= 2        (ERR_RETRY_LIMIT_EXCEEDED)
+   */
+  @Post(':batchId/jobs/:jobId/retry')
+  @TransformUserContext()
+  @ApiOperation({
+    summary: 'Retry a single failed batch job (quota-free, in-place)',
+  })
+  @ApiResponse({ status: 200, type: BatchJobRetryResponseDto })
+  @HttpCode(HttpStatus.OK)
+  async retryJob(
+    @Param('batchId') batchId: string,
+    @Param('jobId') jobId: string,
+    @Req() req: RequestWithUserContext,
+  ): Promise<BatchJobRetryResponseDto> {
+    const userId = req.userContext?.userId;
+    if (!userId) {
+      throw new BadRequestException(
+        'Authentication required',
+        ERROR_CODES.AUTH_REQUIRED,
+      );
+    }
+    return this.batchService.retryFailedJob(batchId, jobId, userId);
   }
 }

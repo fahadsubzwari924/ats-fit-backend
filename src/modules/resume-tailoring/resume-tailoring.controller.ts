@@ -487,12 +487,23 @@ export class ResumeTailoringController {
           `Batch job failed for ${job.jobPosition} @ ${job.companyName}`,
           error,
         );
+        // Inline-synthesize the v2 envelope shape so the v1 API contract
+        // matches the v2 one. We don't pull in BatchJobErrorClassifierService
+        // here to avoid widening the v1 module's dep graph for a legacy
+        // endpoint; the envelope keeps `category: 'UNKNOWN'` + retryable.
+        const rawMessage =
+          error instanceof Error ? error.message : 'Resume generation failed';
         results.push({
           jobPosition: job.jobPosition,
           companyName: job.companyName,
           status: 'failed',
-          error:
-            error instanceof Error ? error.message : 'Resume generation failed',
+          error: {
+            category: 'UNKNOWN',
+            userMessage: rawMessage,
+            technicalDetail: 'legacy-v1-batch',
+            retryable: true,
+            occurredAt: new Date().toISOString(),
+          },
         });
       }
     }
