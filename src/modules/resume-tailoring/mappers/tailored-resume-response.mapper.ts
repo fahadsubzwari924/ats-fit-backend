@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { ResumeGenerationResult } from '../interfaces/resume-generation.interface';
 import { MatchScoreBlock } from '../interfaces/match-score-block.interface';
+import { AsciiSafeJsonUtil } from '../../../shared/utils/ascii-safe-json.util';
 
 /**
  * JSON envelope shape returned by `buildJsonEnvelope`. Used by JSON-only
@@ -58,7 +59,10 @@ export class TailoredResumeResponseMapper {
       'X-Match-Score-Before': result.matchScoreBefore.toString(),
       'X-Match-Score-After': result.matchScoreAfter.toString(),
       'X-Match-Score-Delta': result.matchScoreDelta.toString(),
-      'X-Match-Score': JSON.stringify(result.matchScore),
+      // ASCII-safe encode: `improvementMessage` may contain non-ASCII chars
+      // (e.g. em-dash U+2014) that Node rejects in HTTP headers with
+      // ERR_INVALID_CHAR. See `AsciiSafeJsonUtil` for rationale.
+      'X-Match-Score': AsciiSafeJsonUtil.stringify(result.matchScore),
       'X-Ats-Checks-Passed': result.atsChecksPassed.toString(),
       'X-Ats-Checks-Total': result.atsChecksTotal.toString(),
       'X-Bullets-Quantified-Before': result.bulletsQuantifiedBefore.toString(),
