@@ -198,7 +198,7 @@ export class ReplaceResumeService {
       throw new HttpException(
         {
           code: ResumeReplacementErrorCode.INVALID_FILE,
-          message: 'Unsupported file type.',
+          message: 'Only PDF files are supported for resume upload.',
         },
         HttpStatus.BAD_REQUEST,
       );

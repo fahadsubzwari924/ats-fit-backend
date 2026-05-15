@@ -353,7 +353,7 @@ export class UserController {
   })
   @ApiResponse({ status: 201, description: 'Replacement queued' })
   async replaceResume(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(FileValidationPipe) file: Express.Multer.File,
     @Req() request: RequestWithUserContext,
     @Headers(RESUME_REPLACEMENT.IDEMPOTENCY_HEADER) idempotencyKey?: string,
   ): Promise<ReplaceResumeResponseDto> {

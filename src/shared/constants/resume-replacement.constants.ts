@@ -6,9 +6,6 @@ export const RESUME_REPLACEMENT = {
   RESTORE_WINDOW_DAYS: 7,
   STUCK_JOB_THRESHOLD_MINUTES: 5,
   MAX_FILE_SIZE_BYTES: 5 * 1024 * 1024,
-  ALLOWED_MIME_TYPES: [
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  ] as const,
+  ALLOWED_MIME_TYPES: ['application/pdf'] as const,
   IDEMPOTENCY_HEADER: 'Idempotency-Key',
 } as const;
