@@ -97,26 +97,13 @@ export class UserService {
 
   /**
    * Mark the user's onboarding as completed.
-   * Returns the updated user for the auth response.
+   * Returns the same beta-resolved DTO shape as `/users/me` so the frontend
+   * state stays consistent — premium feature usage and `isPremium` reflect
+   * an active beta entitlement rather than the raw `user.plan` column.
    */
-  async markOnboardingComplete(userId: string): Promise<User> {
+  async markOnboardingComplete(userId: string): Promise<UserMeResponseDto> {
     await this.userRepository.update(userId, { onboarding_completed: true });
-
-    const user = await this.userRepository.findOne({
-      where: { id: userId, is_active: true },
-      relations: ['uploadedResumes'],
-    });
-    if (!user) {
-      throw new NotFoundException('User not found', ERROR_CODES.USER_NOT_FOUND);
-    }
-
-    // Only the active resume is user-facing; archived (replaced) resumes
-    // are kept for restore-on-failure but must not appear in `uploadedResumes`.
-    user.uploadedResumes = (user.uploadedResumes ?? []).filter(
-      (r) => r.isActive,
-    );
-
-    return user;
+    return this.getCurrentUser(userId);
   }
 
   /**
