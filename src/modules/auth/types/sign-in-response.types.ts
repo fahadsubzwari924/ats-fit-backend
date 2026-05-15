@@ -1,9 +1,6 @@
-import { User } from '../../../database/entities/user.entity';
-import { IFeatureUsage } from '../../../shared/interfaces/feature-usage.interface';
+import { UserMeResponseDto } from '../../user/dtos/user-me-response.dto';
 
 export type SignInResponse = {
-  user: Omit<User, 'password'> & {
-    featureUsage: Array<IFeatureUsage>;
-  };
+  user: UserMeResponseDto;
   access_token: string;
 };

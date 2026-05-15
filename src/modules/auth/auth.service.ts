@@ -8,7 +8,7 @@ import { SignUpDto } from './dtos/sign-up.dto';
 import { SignInDto } from './dtos/sign-in.dto';
 import { BaseMapperService } from '../../shared/services/base-mapper.service';
 import { UserService } from '../user/user.service';
-import { IFeatureUsage } from '../../shared/interfaces';
+import { UserMeResponseDto } from '../user/dtos/user-me-response.dto';
 import {
   BadRequestException,
   UnauthorizedException,
@@ -57,31 +57,18 @@ export class AuthService {
     });
     await this.userRepository.save(user);
 
-    // Auto-grant beta access if a pending invite exists for this email
+    // Auto-grant beta access if a pending invite exists for this email.
+    // Must complete before buildAuthUserResponse so the freshly-set
+    // `is_beta_user` flag is observed by resolveEffectivePlan downstream.
     await this.applyBetaFlagIfInvited(user);
 
-    // Load full user with relationships for the response
-    const fullUser = await this.findActiveUserByEmail(user.email);
-
-    // Generate token and feature usage in parallel
-    const [featureUsage, access_token] = await Promise.all([
-      this.getFeatureUsage(fullUser),
-      this.generateAccessToken(fullUser),
-    ]);
-
-    return {
-      user: {
-        ...this.sanitizeUserForResponse(fullUser),
-        featureUsage,
-      },
-      access_token,
-    };
+    return this.buildAuthUserResponse(user);
   }
 
   async signIn(signInDto: SignInDto): Promise<SignInResponse> {
     const { email, password } = signInDto;
 
-    // Step 1: Find and validate user
+    // Step 1: Find and validate user (loads bare-minimum credentials only)
     const user = await this.findActiveUserByEmail(email);
 
     if (user.registration_type !== RegistrationType.GENERAL) {
@@ -94,31 +81,75 @@ export class AuthService {
     // Step 2: Verify credentials
     await this.verifyUserPassword(user, password);
 
-    // Step 3: Generate response data in parallel
-    const [featureUsage, access_token] = await Promise.all([
-      this.getFeatureUsage(user),
-      this.generateAccessToken(user),
-    ]);
-
-    // Step 4: Return clean response (exclude password)
-    return {
-      user: {
-        ...this.sanitizeUserForResponse(user),
-        featureUsage,
-      },
-      access_token,
-    };
+    // Step 3: Build auth response with beta-resolved plan via UserService
+    return this.buildAuthUserResponse(user);
   }
 
-  private async generateAccessToken(user: User): Promise<string> {
+  /**
+   * Google authentication - handles both sign up and sign in
+   * Follows Single Responsibility Principle by delegating to specific methods
+   *
+   * @param googlePayload Token payload from Google OAuth
+   * @returns SignInResponse with user data and access token
+   */
+  async googleAuth(googlePayload: TokenPayload): Promise<SignInResponse> {
+    const { email, name } = googlePayload;
+
+    if (!email) {
+      throw new BadRequestException(
+        'Email not provided by Google',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+
+    // Step 1: Check if user exists
+    const existingUser = await this.findUserByEmail(email);
+
+    let user: User;
+
+    if (!existingUser) {
+      // Case 1: New user - create account (also applies beta flag if invited)
+      user = await this.createGoogleUser(email, name, googlePayload);
+    } else {
+      // Case 2 & 3: Existing user - validate registration type
+      this.validateGoogleUser(existingUser);
+      user = existingUser;
+    }
+
+    // Step 2: Build auth response with beta-resolved plan via UserService
+    return this.buildAuthUserResponse(user);
+  }
+
+  /**
+   * Build the auth response payload using UserService as the single source
+   * of truth for plan resolution, beta entitlement, feature usage, and
+   * uploaded-resume shape. The access token is signed from the verified
+   * user; both calls run in parallel.
+   */
+  private async buildAuthUserResponse(
+    user: Pick<User, 'id' | 'email'>,
+  ): Promise<SignInResponse> {
+    const [meResponse, access_token]: [UserMeResponseDto, string] =
+      await Promise.all([
+        this.userService.getCurrentUser(user.id),
+        this.generateAccessToken(user),
+      ]);
+
+    return { user: meResponse, access_token };
+  }
+
+  private async generateAccessToken(
+    user: Pick<User, 'id' | 'email'>,
+  ): Promise<string> {
     const payload = { sub: user.id, email: user.email };
     return this.jwtService.signAsync(payload);
   }
 
   /**
-   * Find active user by email with optimized query
-   * @param email User email
-   * @returns User entity with uploaded resumes
+   * Find active user by email for credential verification.
+   * Loads only the bare minimum required to verify the password and
+   * route to the right auth method; the response payload is built
+   * separately via UserService.getCurrentUser (single source of truth).
    */
   private async findActiveUserByEmail(email: string): Promise<User> {
     const user = await this.userRepository
@@ -127,21 +158,9 @@ export class AuthService {
         'user.id',
         'user.email',
         'user.password',
-        'user.full_name',
-        'user.plan',
-        'user.user_type',
         'user.registration_type',
         'user.is_active',
-        'user.created_at',
-        'user.updated_at',
-        'user.onboarding_completed',
       ])
-      .leftJoinAndSelect(
-        'user.uploadedResumes',
-        'resumes',
-        'resumes.isActive = :isActive',
-        { isActive: true },
-      )
       .where('user.email = :email AND user.is_active = :active', {
         email,
         active: true,
@@ -174,77 +193,6 @@ export class AuthService {
         ERROR_CODES.UNAUTHORIZED,
       );
     }
-  }
-
-  /**
-   * Remove sensitive data from user object before sending response
-   * @param user User entity
-   * @returns Sanitized user object
-   */
-  private sanitizeUserForResponse(user: User): Omit<User, 'password'> {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...sanitizedUser } = user;
-    return sanitizedUser;
-  }
-
-  /**
-   * Get feature usage for a user using the user service
-   * This follows the Single Responsibility Principle by delegating to UserService
-   * @param user User entity
-   * @returns Formatted feature usage array
-   */
-  private async getFeatureUsage(user: User): Promise<Array<IFeatureUsage>> {
-    return this.userService.getFeatureUsageForUser(user);
-  }
-
-  /**
-   * Google authentication - handles both sign up and sign in
-   * Follows Single Responsibility Principle by delegating to specific methods
-   *
-   * @param googlePayload Token payload from Google OAuth
-   * @returns SignInResponse with user data and access token
-   */
-  async googleAuth(googlePayload: TokenPayload): Promise<SignInResponse> {
-    const { email, name } = googlePayload;
-
-    if (!email) {
-      throw new BadRequestException(
-        'Email not provided by Google',
-        ERROR_CODES.BAD_REQUEST,
-      );
-    }
-
-    // Step 1: Check if user exists
-    const existingUser = await this.findUserByEmail(email);
-
-    let user: User;
-
-    if (!existingUser) {
-      // Case 1: New user - create account
-      user = await this.createGoogleUser(email, name, googlePayload);
-    } else {
-      // Case 2 & 3: Existing user - validate registration type
-      this.validateGoogleUser(existingUser);
-      user = existingUser;
-    }
-
-    // Step 2: Load user with relationships for response
-    const fullUser = await this.findActiveUserByEmail(user.email);
-
-    // Step 3: Generate response data in parallel
-    const [featureUsage, access_token] = await Promise.all([
-      this.getFeatureUsage(fullUser),
-      this.generateAccessToken(fullUser),
-    ]);
-
-    // Step 4: Return clean response
-    return {
-      user: {
-        ...this.sanitizeUserForResponse(fullUser),
-        featureUsage,
-      },
-      access_token,
-    };
   }
 
   /**
@@ -369,45 +317,5 @@ export class AuthService {
       user.is_beta_user = true;
       await this.userRepository.save(user);
     }
-  }
-
-  /**
-   * Load user with all required relationships for response
-   * @param userId User ID
-   * @returns User entity with relationships
-   */
-  private async loadUserWithRelationships(userId: string): Promise<User> {
-    const user = await this.userRepository
-      .createQueryBuilder('user')
-      .select([
-        'user.id',
-        'user.email',
-        'user.password',
-        'user.full_name',
-        'user.plan',
-        'user.user_type',
-        'user.registration_type',
-        'user.is_active',
-        'user.created_at',
-        'user.updated_at',
-        'user.onboarding_completed',
-      ])
-      .leftJoinAndSelect(
-        'user.uploadedResumes',
-        'resumes',
-        'resumes.isActive = :isActive',
-        { isActive: true },
-      )
-      .where('user.id = :userId', { userId })
-      .getOne();
-
-    if (!user) {
-      throw new UnauthorizedException(
-        'User not found',
-        ERROR_CODES.USER_NOT_FOUND,
-      );
-    }
-
-    return user;
   }
 }

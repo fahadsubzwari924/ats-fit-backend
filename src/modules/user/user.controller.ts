@@ -37,8 +37,8 @@ import {
   ProcessingStatusEnum,
   ResumeProfileStatusResponse,
 } from '../resume-tailoring/interfaces/resume-profile-enrichment.interface';
-import { User } from '../../database/entities/user.entity';
 import { ExtractedResumeContent } from '../../database/entities/extracted-resume-content.entity';
+import { UserMeResponseDto } from './dtos/user-me-response.dto';
 import { IFeatureUsage } from '../../shared/interfaces';
 import {
   BadRequestException,
@@ -229,7 +229,7 @@ export class UserController {
   })
   async completeOnboarding(
     @Req() request: RequestWithUserContext,
-  ): Promise<User> {
+  ): Promise<UserMeResponseDto> {
     const userId = request?.userContext?.userId;
 
     if (!userId) {
