@@ -1,4 +1,11 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
@@ -42,7 +49,8 @@ export class CheckJobRelevanceDto {
   companyName: string;
 
   @ApiPropertyOptional({
-    description: 'Optional resume ID. If omitted, latest active resume is used.',
+    description:
+      'Optional resume ID. If omitted, latest active resume is used.',
   })
   @IsOptional()
   @IsUUID(4)

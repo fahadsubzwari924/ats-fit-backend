@@ -39,6 +39,28 @@ export class ResumeContentService implements IResumeContentProvider {
   }
 
   /**
+   * Read-only lookup of the user's active extracted resume content.
+   *
+   * Mirrors `getUserProcessedResume()`'s filter (active + non-empty extracted
+   * text) but DOES NOT mutate `usage_count` / `last_used_at`. Used by the
+   * job-relevance fallback path where we just need to read content to score
+   * against, not record a tailoring usage event.
+   */
+  async getActiveExtractedContent(
+    userId: string,
+  ): Promise<ExtractedResumeContent | null> {
+    if (!userId) return null;
+    return this.extractedResumeRepository
+      .createQueryBuilder('resume')
+      .where('resume.userId = :userId', { userId })
+      .andWhere('resume.isActive = true')
+      .andWhere('resume.extractedText IS NOT NULL')
+      .andWhere("resume.extractedText != ''")
+      .orderBy('resume.createdAt', 'DESC')
+      .getOne();
+  }
+
+  /**
    * Get the user's processed resume
    * Note: Each user can only have one processed resume at a time
    */

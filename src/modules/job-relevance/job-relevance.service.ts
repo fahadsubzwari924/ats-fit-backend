@@ -7,6 +7,7 @@ import { JOB_RELEVANCE_CONSTANTS } from './constants/job-relevance.constants';
 import { JobRelevanceEngine } from './enums/job-relevance-engine.enum';
 import { JobRelevanceVerdict } from './enums/job-relevance-verdict.enum';
 import { JobRelevanceDimensionLabel } from './enums/job-relevance-dimension-label.enum';
+import { JobRelevanceSkipReason } from './enums/job-relevance-skip-reason.enum';
 import type { JobRelevanceResult } from './interfaces/job-relevance.interface';
 import type {
   JobRelevanceInput,
@@ -25,11 +26,17 @@ export class JobRelevanceService {
   ) {}
 
   async score(input: JobRelevanceInput): Promise<JobRelevanceResult> {
-    if (!this.isEnabled()) return this.buildSkipped();
-    if (input.profile.kind === 'none') return this.buildSkipped();
+    if (!this.isEnabled()) {
+      return this.handleSkipped(input, JobRelevanceSkipReason.FEATURE_DISABLED);
+    }
+    if (input.profile.kind === 'none') {
+      return this.handleSkipped(input, JobRelevanceSkipReason.NO_PROFILE);
+    }
 
     const profileText = this.flattenProfile(input.profile);
-    if (!profileText.trim()) return this.buildSkipped();
+    if (!profileText.trim()) {
+      return this.handleSkipped(input, JobRelevanceSkipReason.EMPTY_PROFILE);
+    }
 
     const profileVersion =
       input.profile.kind === 'enriched' ? input.profile.profileVersion : 0;
@@ -113,16 +120,36 @@ export class JobRelevanceService {
     return '';
   }
 
-  private buildSkipped(): JobRelevanceResult {
+  /**
+   * Builds the UNAVAILABLE sentinel returned when scoring can't run. The
+   * historical behavior (score=100, verdict=HIGH) was actively misleading —
+   * it surfaced as "100% fit" in the UI even when the feature was disabled
+   * or the user had no resume. The new sentinel uses a distinct verdict
+   * (`UNAVAILABLE`) and tags the cause via `unavailableReason` so the FE
+   * can render targeted guidance.
+   *
+   * Dimension scores are set to `SKIPPED.DIMENSION_SCORE` with MISMATCH
+   * labels — they're never meant to be displayed when the verdict is
+   * UNAVAILABLE, but the interface requires populated dimensions.
+   */
+  private buildSkipped(reason: JobRelevanceSkipReason): JobRelevanceResult {
+    const { COMPOSITE_SCORE, DIMENSION_SCORE } =
+      JOB_RELEVANCE_CONSTANTS.SKIPPED;
     return {
-      score: 100,
-      verdict: JobRelevanceVerdict.HIGH,
+      score: COMPOSITE_SCORE,
+      verdict: JobRelevanceVerdict.UNAVAILABLE,
       dimensions: {
-        techStack: { score: 100, label: JobRelevanceDimensionLabel.ALIGNED },
-        roleType: { score: 100, label: JobRelevanceDimensionLabel.ALIGNED },
+        techStack: {
+          score: DIMENSION_SCORE,
+          label: JobRelevanceDimensionLabel.MISMATCH,
+        },
+        roleType: {
+          score: DIMENSION_SCORE,
+          label: JobRelevanceDimensionLabel.MISMATCH,
+        },
         experienceLevel: {
-          score: 100,
-          label: JobRelevanceDimensionLabel.ALIGNED,
+          score: DIMENSION_SCORE,
+          label: JobRelevanceDimensionLabel.MISMATCH,
         },
       },
       gaps: [],
@@ -133,12 +160,31 @@ export class JobRelevanceService {
       cacheKey: null,
       computedAt: new Date().toISOString(),
       acknowledgedLowFit: false,
+      unavailableReason: reason,
     };
   }
 
+  /**
+   * Build the sentinel AND log it. Previously the three early `buildSkipped()`
+   * returns in `score()` short-circuited before `log()` was reached, leaving
+   * production silent about why the feature was a no-op. Funneling through
+   * here guarantees every skipped path is observable.
+   */
+  private handleSkipped(
+    input: JobRelevanceInput,
+    reason: JobRelevanceSkipReason,
+  ): JobRelevanceResult {
+    const result = this.buildSkipped(reason);
+    this.log(input, result);
+    return result;
+  }
+
   private log(input: JobRelevanceInput, result: JobRelevanceResult): void {
+    const reasonSuffix = result.unavailableReason
+      ? ` reason=${result.unavailableReason}`
+      : '';
     this.logger.log(
-      `[JobRelevance] user=${input.userId ?? 'anon'} engine=${result.engine} score=${result.score} verdict=${result.verdict} latencyMs=${result.latencyMs} cacheKey=${result.cacheKey ?? 'none'}`,
+      `[JobRelevance] user=${input.userId ?? 'anon'} engine=${result.engine} score=${result.score} verdict=${result.verdict} latencyMs=${result.latencyMs} cacheKey=${result.cacheKey ?? 'none'}${reasonSuffix}`,
     );
   }
 }

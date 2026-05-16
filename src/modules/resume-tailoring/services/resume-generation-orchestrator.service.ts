@@ -186,22 +186,53 @@ export class ResumeGenerationOrchestratorService {
   // Relevance helpers
   // ---------------------------------------------------------------------------
 
+  /**
+   * Build a `JobRelevanceProfileSource` for scoring.
+   *
+   * Resolution order — prefer the richest signal we have:
+   *   1. `enriched_resume_profiles` — has Q&A-derived facts and verified
+   *      achievements; gives Haiku the most accurate context.
+   *   2. `extracted_resume_contents.structuredContent` — the JSON-parsed
+   *      resume from the upload step. Used when the user uploaded a resume
+   *      but never completed enrichment (a common state — onboarding doesn't
+   *      force enrichment). Without this fallback, those users hit the
+   *      UNAVAILABLE sentinel even though we have plenty of content to score.
+   *   3. `extracted_resume_contents.extractedText` — raw text fallback when
+   *      structured content somehow ended up null.
+   *   4. `{ kind: 'none' }` — truly nothing on file; the service returns the
+   *      UNAVAILABLE sentinel with reason NO_PROFILE.
+   *
+   * Skipped entirely when the user uploaded a resume file with this request
+   * (`input.resumeFile` present) — that means they're using a one-off upload
+   * and we don't want to score against their old persisted profile.
+   */
   private async resolveRelevanceProfile(
     input: ResumeGenerationInput,
   ): Promise<JobRelevanceProfileSource> {
-    if (input.userContext?.userId && !input.resumeFile) {
-      const enriched =
-        await this.resumeProfileEnrichmentService.getProfileForUser(
-          input.userContext.userId,
-        );
-      if (enriched) {
-        return {
-          kind: 'enriched',
-          profileVersion: enriched.version,
-          content: enriched.enrichedContent,
-        };
-      }
+    if (!input.userContext?.userId || input.resumeFile) {
+      return { kind: 'none' };
     }
+    const userId = input.userContext.userId;
+
+    const enriched =
+      await this.resumeProfileEnrichmentService.getProfileForUser(userId);
+    if (enriched) {
+      return {
+        kind: 'enriched',
+        profileVersion: enriched.version,
+        content: enriched.enrichedContent,
+      };
+    }
+
+    const extracted =
+      await this.resumeContentService.getActiveExtractedContent(userId);
+    if (extracted?.structuredContent) {
+      return { kind: 'extracted', content: extracted.structuredContent };
+    }
+    if (extracted?.extractedText?.trim()) {
+      return { kind: 'raw-text', text: extracted.extractedText };
+    }
+
     return { kind: 'none' };
   }
 
