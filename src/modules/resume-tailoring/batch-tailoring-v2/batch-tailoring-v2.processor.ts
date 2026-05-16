@@ -103,6 +103,8 @@ export class BatchTailoringV2Processor {
         userContext: job.data.userContext,
       });
 
+      if (result.kind !== 'pdf') return;
+
       // Stage 3: finalizing
       await this.transition(batchJobId, 'finalizing');
       await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_PROGRESS, {

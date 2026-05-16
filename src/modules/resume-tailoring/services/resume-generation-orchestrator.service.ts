@@ -1,6 +1,17 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { JobRelevanceService } from '../../job-relevance/job-relevance.service';
+import { JobRelevanceVerdict } from '../../job-relevance/enums/job-relevance-verdict.enum';
+import type { JobRelevanceProfileSource } from '../../job-relevance/interfaces/job-relevance-input.interface';
+import type { JobRelevanceResult } from '../../job-relevance/interfaces/job-relevance.interface';
+import { ResumeProfileEnrichmentService } from './resume-profile-enrichment.service';
 import { JobAnalysisService } from './job-analysis.service';
 import { ResumeContentProcessorService } from './resume-content-processor.service';
 import { ResumeOptimizerService } from './resume-optimizer.service';
@@ -21,7 +32,6 @@ import {
 import {
   BadRequestException,
   InternalServerErrorException,
-  NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { OPTIMIZATION_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
@@ -59,6 +69,9 @@ export class ResumeGenerationOrchestratorService {
     private readonly resumeContentService: ResumeContentService,
     private readonly keywordMatchScoringService: KeywordMatchScoringService,
     private readonly matchScoreClassifierService: MatchScoreClassifierService,
+    @Inject(forwardRef(() => JobRelevanceService))
+    private readonly jobRelevanceService: JobRelevanceService,
+    private readonly resumeProfileEnrichmentService: ResumeProfileEnrichmentService,
     @InjectRepository(ResumeGeneration)
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
     @InjectRepository(User)
@@ -71,87 +84,225 @@ export class ResumeGenerationOrchestratorService {
   async generateOptimizedResume(
     input: ResumeGenerationInput,
   ): Promise<ResumeGenerationResult> {
+    this.logger.log(
+      `Starting resume generation for ${input.jobPosition} at ${input.companyName}`,
+    );
+
+    const abortController = new AbortController();
+
+    const relevancePromise = this.resolveRelevanceProfile(input).then(
+      (profile) =>
+        this.jobRelevanceService.score({
+          userId: input.userContext?.userId ?? null,
+          profile,
+          jobPosition: input.jobPosition,
+          companyName: input.companyName,
+          jobDescription: input.jobDescription,
+          abortSignal: abortController.signal,
+        }),
+    );
+
+    const tailorPromise = this.runTailoringPipeline(
+      input,
+      abortController.signal,
+    ).catch((err: Error): ResumeGenerationResult | null => {
+      if (err.name === 'AbortError') return null;
+      throw err;
+    });
+
+    const relevance = await relevancePromise;
+
+    const isLowFit =
+      relevance.verdict === JobRelevanceVerdict.LOW && !input.acknowledgeLowFit;
+
+    if (isLowFit) {
+      abortController.abort();
+      await tailorPromise;
+      this.logger.log(
+        `[JobRelevance] Aborted tailor — score=${relevance.score} verdict=${relevance.verdict} ack=false`,
+      );
+      return { kind: 'low_fit_warning', relevance };
+    }
+
+    const tailorOutcome = await tailorPromise;
+
+    if (!tailorOutcome) {
+      throw new InternalServerErrorException(
+        'Tailor pipeline produced no result after relevance check passed',
+        ERROR_CODES.INTERNAL_SERVER,
+      );
+    }
+
+    if (tailorOutcome.kind !== 'pdf') {
+      throw new InternalServerErrorException(
+        'Unexpected non-pdf result from tailor pipeline',
+        ERROR_CODES.INTERNAL_SERVER,
+      );
+    }
+
+    // Persist relevance onto saved generation
+    if (tailorOutcome.resumeGenerationId) {
+      await this.resumeGenerationRepository.update(
+        { id: tailorOutcome.resumeGenerationId },
+        {
+          preGenerationRelevance: {
+            ...relevance,
+            acknowledgedLowFit: !!input.acknowledgeLowFit,
+          },
+        },
+      );
+    }
+
+    return { ...tailorOutcome, relevance };
+  }
+
+  /**
+   * Standalone relevance check — runs ONLY the relevance scoring pass, without
+   * touching the tailoring pipeline. Used by the new two-step UX where the
+   * client previews job fit before deciding whether to spend quota on a full
+   * tailor.
+   *
+   * The result is cached in Redis under the same key as the full flow uses,
+   * so when the client subsequently calls /generate the relevance step there
+   * is a cache hit (no second LLM call, no extra latency).
+   *
+   * No DB persistence happens here — relevance is only saved to the
+   * `resume_generations` row when an actual tailored resume is produced.
+   */
+  async checkRelevanceOnly(
+    input: ResumeGenerationInput,
+  ): Promise<JobRelevanceResult> {
+    const profile = await this.resolveRelevanceProfile(input);
+    return this.jobRelevanceService.score({
+      userId: input.userContext?.userId ?? null,
+      profile,
+      jobPosition: input.jobPosition,
+      companyName: input.companyName,
+      jobDescription: input.jobDescription,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Relevance helpers
+  // ---------------------------------------------------------------------------
+
+  private async resolveRelevanceProfile(
+    input: ResumeGenerationInput,
+  ): Promise<JobRelevanceProfileSource> {
+    if (input.userContext?.userId && !input.resumeFile) {
+      const enriched =
+        await this.resumeProfileEnrichmentService.getProfileForUser(
+          input.userContext.userId,
+        );
+      if (enriched) {
+        return {
+          kind: 'enriched',
+          profileVersion: enriched.version,
+          content: enriched.enrichedContent,
+        };
+      }
+    }
+    return { kind: 'none' };
+  }
+
+  private throwIfAborted(signal: AbortSignal, context: string): void {
+    if (signal.aborted) {
+      const err = new Error(`Tailor pipeline aborted at: ${context}`);
+      err.name = 'AbortError';
+      throw err;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tailoring pipeline (extracted from generateOptimizedResume)
+  // ---------------------------------------------------------------------------
+
+  private async runTailoringPipeline(
+    input: ResumeGenerationInput,
+    signal: AbortSignal,
+  ): Promise<ResumeGenerationResult> {
     const startTime = Date.now();
 
-    try {
-      this.logger.log(
-        `Starting resume generation for ${input.jobPosition} at ${input.companyName}`,
-      );
-
-      if (!input.resumeFile) {
-        await this.assertProfileReady(input.userContext.userId);
-      }
-
-      const validationTime = await this.runValidation(input);
-      const { jobAnalysis, resumeContent, parallelOperationsTime } =
-        await this.runAnalysisAndProcessing(input);
-      const { optimizationResult, optimizationTime } =
-        await this.runOptimization(input, jobAnalysis, resumeContent);
-      const scores = this.computeScores(
-        jobAnalysis,
-        resumeContent,
-        optimizationResult,
-      );
-      const { pdfResult, pdfGenerationTime } = await this.runPdfGeneration(
-        input,
-        optimizationResult,
-      );
-
-      // Compute diff synchronously before persisting.
-      // The fourth argument (scoringInput) routes `keywordAnalysis.coverage*`
-      // through the same KeywordMatchScoringService used for match_score_*,
-      // so the two pairs of numbers are produced by one engine.
-      const diff = this.changesDiffComputationService.computeDiff(
-        resumeContent.content as unknown as TailoredContent,
-        optimizationResult.optimizedContent,
-        {
-          mandatorySkills: jobAnalysis.technical.mandatorySkills,
-          primaryKeywords: jobAnalysis.keywords.primary,
-        },
-        {
-          originalText: resumeContent.originalText,
-          jobAnalysis,
-        },
-      );
-
-      const { savedGeneration, dbTime } = await this.persistGeneration(
-        input,
-        resumeContent,
-        optimizationResult,
-        pdfResult,
-        jobAnalysis,
-        scores,
-        diff,
-      );
-
-      const totalProcessingTime = Date.now() - startTime;
-      this.logger.log(
-        `Resume generation completed in ${totalProcessingTime}ms ` +
-          `(Validation: ${validationTime}ms, Parallel: ${parallelOperationsTime}ms, ` +
-          `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, Diff: inline)`,
-      );
-
-      return this.buildResult(
-        input,
-        pdfResult,
-        savedGeneration,
-        resumeContent,
-        optimizationResult,
-        jobAnalysis,
-        scores,
-        diff,
-        {
-          validationTime,
-          parallelOperationsTime,
-          optimizationTime,
-          pdfGenerationTime,
-          dbTime,
-          totalProcessingTime,
-        },
-      );
-    } catch (error) {
-      this.handlePipelineError(error, Date.now() - startTime);
+    if (!input.resumeFile) {
+      await this.assertProfileReady(input.userContext.userId);
     }
+    this.throwIfAborted(signal, 'pre-validation');
+
+    const validationTime = await this.runValidation(input);
+    this.throwIfAborted(signal, 'post-validation');
+
+    const { jobAnalysis, resumeContent, parallelOperationsTime } =
+      await this.runAnalysisAndProcessing(input);
+    this.throwIfAborted(signal, 'post-analysis');
+
+    const { optimizationResult, optimizationTime } = await this.runOptimization(
+      input,
+      jobAnalysis,
+      resumeContent,
+    );
+    this.throwIfAborted(signal, 'post-optimization');
+
+    const scores = this.computeScores(
+      jobAnalysis,
+      resumeContent,
+      optimizationResult,
+    );
+    this.throwIfAborted(signal, 'pre-pdf');
+
+    const { pdfResult, pdfGenerationTime } = await this.runPdfGeneration(
+      input,
+      optimizationResult,
+    );
+    this.throwIfAborted(signal, 'post-pdf');
+
+    const diff = this.changesDiffComputationService.computeDiff(
+      resumeContent.content as unknown as TailoredContent,
+      optimizationResult.optimizedContent,
+      {
+        mandatorySkills: jobAnalysis.technical.mandatorySkills,
+        primaryKeywords: jobAnalysis.keywords.primary,
+      },
+      {
+        originalText: resumeContent.originalText,
+        jobAnalysis,
+      },
+    );
+
+    const { savedGeneration, dbTime } = await this.persistGeneration(
+      input,
+      resumeContent,
+      optimizationResult,
+      pdfResult,
+      jobAnalysis,
+      scores,
+      diff,
+    );
+
+    const totalProcessingTime = Date.now() - startTime;
+    this.logger.log(
+      `Resume generation completed in ${totalProcessingTime}ms ` +
+        `(Validation: ${validationTime}ms, Parallel: ${parallelOperationsTime}ms, ` +
+        `Optimization: ${optimizationTime}ms, PDF: ${pdfGenerationTime}ms, DB: ${dbTime}ms, Diff: inline)`,
+    );
+
+    return this.buildResult(
+      input,
+      pdfResult,
+      savedGeneration,
+      resumeContent,
+      optimizationResult,
+      jobAnalysis,
+      scores,
+      diff,
+      {
+        validationTime,
+        parallelOperationsTime,
+        optimizationTime,
+        pdfGenerationTime,
+        dbTime,
+        totalProcessingTime,
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -487,6 +638,7 @@ export class ResumeGenerationOrchestratorService {
     const sectionsChanged = diff.sectionsChanged;
 
     return {
+      kind: 'pdf' as const,
       pdfContent: pdfResult.pdfContent,
       filename: pdfResult.filename,
       resumeGenerationId: savedGeneration.id,
@@ -526,50 +678,6 @@ export class ResumeGenerationOrchestratorService {
       bulletsQuantifiedAfter: bulletsQuantified.after,
       bulletsQuantifiedTotal: bulletsQuantified.total,
     };
-  }
-
-  private handlePipelineError(error: unknown, processingTime: number): never {
-    this.logger.error(
-      `Resume generation failed after ${processingTime}ms`,
-      error,
-    );
-
-    if (
-      error instanceof BadRequestException ||
-      error instanceof NotFoundException ||
-      error instanceof ConflictException
-    ) {
-      throw error;
-    }
-
-    if (
-      error instanceof Error &&
-      (error.message.includes('timeout') ||
-        error.message.includes('AI service') ||
-        error.message.includes('Claude') ||
-        error.message.includes('OpenAI') ||
-        error.message.includes('GPT'))
-    ) {
-      throw new InternalServerErrorException(
-        'AI processing services are temporarily unavailable. Please try again in a few moments.',
-        ERROR_CODES.INTERNAL_SERVER,
-      );
-    }
-
-    if (
-      error instanceof Error &&
-      (error.message.includes('PDF') || error.message.includes('template'))
-    ) {
-      throw new InternalServerErrorException(
-        'PDF generation failed. Please check your template selection and try again.',
-        ERROR_CODES.PROMPT_GENERATION_FAILED,
-      );
-    }
-
-    throw new InternalServerErrorException(
-      'Resume generation failed due to an internal error. Please try again or contact support if the issue persists.',
-      ERROR_CODES.INTERNAL_SERVER,
-    );
   }
 
   private async assertProfileReady(userId: string): Promise<void> {

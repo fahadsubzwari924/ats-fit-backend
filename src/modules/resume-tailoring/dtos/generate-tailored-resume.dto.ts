@@ -5,6 +5,7 @@ import {
   MaxLength,
   MinLength,
   IsUUID,
+  IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
@@ -85,4 +86,9 @@ export class GenerateTailoredResumeDto {
   @IsOptional()
   @IsUUID(4, { message: 'Resume ID must be a valid UUID' })
   resumeId?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  acknowledgeLowFit?: boolean;
 }

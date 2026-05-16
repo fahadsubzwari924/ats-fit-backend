@@ -1,6 +1,11 @@
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { JobRelevanceService } from '../../job-relevance/job-relevance.service';
+import { JobRelevanceVerdict } from '../../job-relevance/enums/job-relevance-verdict.enum';
+import type { JobRelevanceResult } from '../../job-relevance/interfaces/job-relevance.interface';
+import type { JobRelevanceProfileSource } from '../../job-relevance/interfaces/job-relevance-input.interface';
+import { ResumeProfileEnrichmentService } from '../services/resume-profile-enrichment.service';
 import { Queue } from 'bull';
 import { DataSource, Repository } from 'typeorm';
 import { BatchTailoringRun } from '../../../database/entities/batch-tailoring-run.entity';
@@ -60,6 +65,8 @@ export class BatchTailoringV2Service {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly dataSource: DataSource,
+    private readonly jobRelevanceService: JobRelevanceService,
+    private readonly resumeProfileEnrichmentService: ResumeProfileEnrichmentService,
   ) {}
 
   async enqueueBatch(args: {
@@ -67,7 +74,14 @@ export class BatchTailoringV2Service {
     jobs: BatchJobItemDto[];
     templateId: string;
     resumeId?: string;
-  }): Promise<{ batchId: string; totalJobs: number }> {
+    acknowledgeLowFit?: boolean;
+  }): Promise<
+    | { kind: 'enqueued'; batchId: string; totalJobs: number }
+    | {
+        kind: 'low_fit_warning';
+        jobs: Array<{ jobIndex: number; relevance: JobRelevanceResult }>;
+      }
+  > {
     if (!args.jobs.length) {
       throw new BadRequestException(
         'At least one job is required',
@@ -79,6 +93,25 @@ export class BatchTailoringV2Service {
         `Batch size exceeds limit of ${BATCH_V2_MAX_JOBS}`,
         ERROR_CODES.BAD_REQUEST,
       );
+    }
+
+    if (!args.acknowledgeLowFit) {
+      const relevances = await this.runPreflightRelevance(
+        args.userContext.userId,
+        args.jobs,
+      );
+      const hasLowFit = relevances.some(
+        (r) => r.verdict === JobRelevanceVerdict.LOW,
+      );
+      if (hasLowFit) {
+        return {
+          kind: 'low_fit_warning',
+          jobs: relevances.map((relevance, jobIndex) => ({
+            jobIndex,
+            relevance,
+          })),
+        };
+      }
     }
 
     const { batchId, jobRecords } = await this.dataSource.transaction(
@@ -150,7 +183,40 @@ export class BatchTailoringV2Service {
     this.logger.log(
       `Enqueued batch ${batchId} with ${args.jobs.length} jobs for user ${args.userContext.userId}`,
     );
-    return { batchId, totalJobs: args.jobs.length };
+    return { kind: 'enqueued', batchId, totalJobs: args.jobs.length };
+  }
+
+  private async resolveRelevanceProfile(
+    userId: string,
+  ): Promise<JobRelevanceProfileSource> {
+    const enriched =
+      await this.resumeProfileEnrichmentService.getProfileForUser(userId);
+    if (enriched) {
+      return {
+        kind: 'enriched',
+        profileVersion: enriched.version,
+        content: enriched.enrichedContent,
+      };
+    }
+    return { kind: 'none' };
+  }
+
+  private async runPreflightRelevance(
+    userId: string,
+    jobs: BatchJobItemDto[],
+  ): Promise<JobRelevanceResult[]> {
+    const profile = await this.resolveRelevanceProfile(userId);
+    return Promise.all(
+      jobs.map((job) =>
+        this.jobRelevanceService.score({
+          userId,
+          profile,
+          jobPosition: job.jobPosition,
+          companyName: job.companyName,
+          jobDescription: job.jobDescription,
+        }),
+      ),
+    );
   }
 
   /**

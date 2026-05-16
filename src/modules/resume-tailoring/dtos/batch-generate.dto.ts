@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsOptional,
   IsString,
   MinLength,
@@ -54,6 +55,10 @@ export class BatchGenerateDto {
   @IsOptional()
   @IsString()
   resumeId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeLowFit?: boolean;
 }
 
 export interface BatchJobResult {

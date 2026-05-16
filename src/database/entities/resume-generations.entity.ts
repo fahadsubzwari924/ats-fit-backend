@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 import { User } from './user.entity';
 import { ResumeTemplate } from './resume-templates.entity';
+import type { JobRelevanceResult } from '../../modules/job-relevance/interfaces/job-relevance.interface';
 
 @Entity({ name: 'resume_generations' })
 export class ResumeGeneration {
@@ -87,6 +88,9 @@ export class ResumeGeneration {
 
   @Column({ name: 'prompt_version', nullable: true, length: 16 })
   prompt_version: string | null;
+
+  @Column({ name: 'pre_generation_relevance', type: 'jsonb', nullable: true })
+  preGenerationRelevance: JobRelevanceResult | null;
 
   @CreateDateColumn()
   created_at: Date;
