@@ -2,6 +2,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsOptional,
   IsString,
   IsUUID,
@@ -49,6 +50,11 @@ export class EnqueueBatchV2Dto {
   @IsOptional()
   @IsUUID()
   resumeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeLowFit?: boolean;
 }
 
 export class EnqueueBatchV2ResponseDto {

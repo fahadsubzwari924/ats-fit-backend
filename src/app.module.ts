@@ -21,6 +21,7 @@ import { HealthModule } from './health/health.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { BetaAccessModule } from './modules/beta-access/beta-access.module';
 import { ContactModule } from './modules/contact/contact.module';
+import { JobRelevanceModule } from './modules/job-relevance/job-relevance.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { ContactModule } from './modules/contact/contact.module';
     SubscriptionModule,
     BetaAccessModule,
     ContactModule,
+    JobRelevanceModule,
   ],
   providers: [
     {

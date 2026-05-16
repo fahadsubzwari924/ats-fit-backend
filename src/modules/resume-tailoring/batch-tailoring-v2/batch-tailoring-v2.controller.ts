@@ -9,10 +9,12 @@ import {
   Param,
   Post,
   Req,
+  Res,
   Sse,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -43,6 +45,7 @@ import {
   BATCH_V2_HEARTBEAT_MS,
   BATCH_V2_SSE_EVENT_NAMES,
 } from './constants/batch-tailoring-v2.constants';
+import { JOB_RELEVANCE_CONSTANTS } from '../../job-relevance/constants/job-relevance.constants';
 import type { SnapshotEvent } from './interfaces/batch-sse-event.interface';
 import type { UserContext } from '../interfaces/user-context.interface';
 
@@ -58,7 +61,6 @@ export class BatchTailoringV2Controller {
   ) {}
 
   @Post('generate')
-  @HttpCode(HttpStatus.ACCEPTED)
   @TransformUserContext()
   @UseGuards(PremiumUserGuard)
   @RateLimitFeature(FeatureType.RESUME_BATCH_GENERATION)
@@ -68,7 +70,8 @@ export class BatchTailoringV2Controller {
   async enqueue(
     @Body() dto: EnqueueBatchV2Dto,
     @Req() req: RequestWithUserContext,
-  ): Promise<EnqueueBatchV2ResponseDto> {
+    @Res({ passthrough: false }) res: Response,
+  ): Promise<void> {
     const userId = req.userContext?.userId;
     if (!userId) {
       throw new BadRequestException(
@@ -101,11 +104,25 @@ export class BatchTailoringV2Controller {
       });
     }
 
-    return this.batchService.enqueueBatch({
+    const result = await this.batchService.enqueueBatch({
       userContext: req.userContext as UserContext,
       jobs: dto.jobs,
       templateId: dto.templateId,
       resumeId: dto.resumeId,
+      acknowledgeLowFit: dto.acknowledgeLowFit ?? false,
+    });
+
+    if (result.kind === 'low_fit_warning') {
+      res.status(HttpStatus.OK).json({
+        type: JOB_RELEVANCE_CONSTANTS.RESPONSE_TYPES.BATCH_LOW_FIT_WARNING,
+        jobs: result.jobs,
+      });
+      return;
+    }
+
+    res.status(HttpStatus.ACCEPTED).json({
+      batchId: result.batchId,
+      totalJobs: result.totalJobs,
     });
   }
 

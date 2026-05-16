@@ -49,6 +49,7 @@ import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { AtsMatchModule } from '../ats-match/ats-match.module';
 import { AuthModule } from '../auth/auth.module';
 import { QueueModule } from '../queue/queue.module';
+import { JobRelevanceModule } from '../job-relevance/job-relevance.module';
 import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-provider.token';
 import { ResumeExtractionProcessor } from './processors/resume-extraction.processor';
 import { ResumeProfileEnrichmentProcessor } from './processors/resume-profile-enrichment.processor';
@@ -83,6 +84,7 @@ import { MatchScoreClassifierService } from './services/match-score-classifier.s
     forwardRef(() => AtsMatchModule),
     forwardRef(() => QueueModule),
     forwardRef(() => AuthModule),
+    forwardRef(() => JobRelevanceModule),
   ],
   providers: [
     ResumeService,
@@ -160,6 +162,7 @@ import { MatchScoreClassifierService } from './services/match-score-classifier.s
     ResumeQueueService,
     ResumeProfileEnrichmentService,
     PromptVariantResolverService,
+    KeywordMatchScoringService,
   ],
 })
 export class ResumeTailoringModule {}

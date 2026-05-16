@@ -45,8 +45,25 @@ Turn a **job description + candidate context** into a **downloadable tailored re
 
 - **`POST /resume-tailoring/generate`** — **Public** (no JWT required) but subject to **rate limits** (`FeatureType.RESUME_GENERATION`).
 - **Multipart:** `resumeFile` (PDF) optional when resume already stored; body fields include job description, position, company, `templateId`, optional `resumeId` (see `GenerateTailoredResumeDto` in code).
-- **Response:** Raw **PDF** stream (not JSON).
-- **Response headers (client contract):** Include generation id, tailoring mode, keyword/section/achievement metrics, and optimization confidence (see controller `setPdfResponseHeaders` in code for exact header names).
+- **Response:** Raw **PDF** stream (not JSON) — unless the pre-generation relevance gate fires (see below).
+- **Response headers (client contract):** Include generation id, tailoring mode, keyword/section/achievement metrics, and optimization confidence (see controller `setPdfResponseHeaders` in code for exact header names). Also includes `X-Relevance-Score`, `X-Relevance-Verdict`, `X-Relevance-Cache-Hit` on PDF responses.
+
+### Pre-generation relevance gate
+
+When `JOB_RELEVANCE_GATE_ENABLED=true`, `POST /resume-tailoring/generate` runs a Haiku 4.5 job-fit check **in parallel** with the tailoring pipeline. If the score verdict is `low` and `acknowledgeLowFit` was not `true`, the tailoring pipeline is aborted and the response is:
+
+- **HTTP 200** with `Content-Type: application/json`
+- Body: `{ "type": "low_fit_warning", "relevance": { score, verdict, dimensions, gaps, strengths, ... } }`
+
+To force generation regardless of score, resubmit with `acknowledgeLowFit: true`. The relevance result is persisted on the `resume_generations.pre_generation_relevance` column in all cases.
+
+The same pre-flight logic applies to `POST /resume-tailoring/batch/v2/generate`: all jobs are scored synchronously before enqueueing. Any low-fit job returns:
+
+- **HTTP 200** with `{ "type": "batch_low_fit_warning", "jobs": [...per-job verdicts] }`
+
+Set `acknowledgeLowFit: true` in the batch body to bypass the gate.
+
+Kill-switch: set `JOB_RELEVANCE_GATE_ENABLED=false` to disable globally (engine returns `skipped`, score=100, no LLM call fires).
 
 ## History and artifacts
 

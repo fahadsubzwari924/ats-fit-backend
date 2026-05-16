@@ -13,6 +13,7 @@ import { BATCH_TAILORING_V2_QUEUE } from './constants/batch-tailoring-v2.constan
 import { ResumeTailoringModule } from '../resume-tailoring.module';
 import { AuthModule } from '../../auth/auth.module';
 import { RateLimitModule } from '../../rate-limit/rate-limit.module';
+import { JobRelevanceModule } from '../../job-relevance/job-relevance.module';
 
 /**
  * BatchTailoringV2Module — owns all Batch-Tailoring V2 infrastructure.
@@ -37,6 +38,7 @@ import { RateLimitModule } from '../../rate-limit/rate-limit.module';
     ResumeTailoringModule,
     forwardRef(() => AuthModule),
     forwardRef(() => RateLimitModule),
+    JobRelevanceModule,
   ],
   controllers: [BatchTailoringV2Controller],
   providers: [

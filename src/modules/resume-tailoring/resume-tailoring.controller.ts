@@ -22,6 +22,7 @@ import { CoverLetterGenerationService } from './services/cover-letter-generation
 import { CoverLetterPdfService } from './services/cover-letter-pdf.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { GenerateTailoredResumeDto } from './dtos/generate-tailored-resume.dto';
+import { CheckJobRelevanceDto } from './dtos/check-job-relevance.dto';
 import { GenerateCoverLetterDto } from './dtos/generate-cover-letter.dto';
 import {
   BatchGenerateDto,
@@ -55,6 +56,9 @@ import {
   HISTORY_DEFAULT_PAGE,
 } from '../../shared/constants/resume-tailoring.constants';
 import { TailoredResumeResponseMapper } from './mappers/tailored-resume-response.mapper';
+import { JOB_RELEVANCE_CONSTANTS } from '../job-relevance/constants/job-relevance.constants';
+import { JobRelevanceEngine } from '../job-relevance/enums/job-relevance-engine.enum';
+import { AsciiSafeJsonUtil } from '../../shared/utils/ascii-safe-json.util';
 
 @ApiTags('Resume Tailoring')
 @Controller('resume-tailoring')
@@ -214,7 +218,48 @@ export class ResumeTailoringController {
           resumeId: generateResumeDto.resumeId,
           userContext: resumeUserContext,
           resumeFile,
+          acknowledgeLowFit: generateResumeDto.acknowledgeLowFit ?? false,
         });
+
+      if (result.kind === 'low_fit_warning') {
+        res.setHeader(
+          JOB_RELEVANCE_CONSTANTS.HEADERS.RELEVANCE_SCORE,
+          String(result.relevance.score),
+        );
+        res.setHeader(
+          JOB_RELEVANCE_CONSTANTS.HEADERS.RELEVANCE_VERDICT,
+          result.relevance.verdict,
+        );
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).json({
+          type: JOB_RELEVANCE_CONSTANTS.RESPONSE_TYPES.LOW_FIT_WARNING,
+          relevance: result.relevance,
+        });
+        return;
+      }
+
+      // PDF path — add relevance headers
+      res.setHeader(
+        JOB_RELEVANCE_CONSTANTS.HEADERS.RELEVANCE_SCORE,
+        String(result.relevance?.score ?? ''),
+      );
+      res.setHeader(
+        JOB_RELEVANCE_CONSTANTS.HEADERS.RELEVANCE_VERDICT,
+        result.relevance?.verdict ?? '',
+      );
+      res.setHeader(
+        JOB_RELEVANCE_CONSTANTS.HEADERS.RELEVANCE_CACHE_HIT,
+        String(result.relevance?.engine === JobRelevanceEngine.CACHE_HIT),
+      );
+      // Full breakdown JSON for the frontend Fit Score step. ASCII-safe encode
+      // because gaps/strengths may contain non-ASCII characters that Node
+      // rejects in HTTP headers with ERR_INVALID_CHAR.
+      if (result.relevance) {
+        res.setHeader(
+          JOB_RELEVANCE_CONSTANTS.HEADERS.RELEVANCE_BLOCK,
+          AsciiSafeJsonUtil.stringify(result.relevance),
+        );
+      }
 
       // Convert base64 to buffer for PDF download
       const pdfBuffer = Buffer.from(result.pdfContent, 'base64');
@@ -249,6 +294,47 @@ export class ResumeTailoringController {
       // All other errors are wrapped as InternalServerErrorException by the orchestrator
       throw error;
     }
+  }
+
+  /**
+   * POST /resume-tailoring/relevance
+   *
+   * Lightweight relevance pre-check used by the multi-step tailor flow. Runs
+   * ONLY the job-fit scoring pass — no tailoring, no PDF, no quota consumed,
+   * no DB write. Returns the canonical `JobRelevanceResult` so the client can
+   * show the breakdown before the user commits to spending a generation
+   * credit on the full tailor.
+   *
+   * The Redis cache stores the scored result under
+   * `relevance:v2:{profileVersion}:{jdHash}` — so when the client subsequently
+   * calls `/generate`, the orchestrator's relevance step is a free cache hit.
+   */
+  @Post('relevance')
+  @HttpCode(HttpStatus.OK)
+  @TransformUserContext()
+  @UseInterceptors(FileInterceptor('resumeFile'), ValidationLoggingInterceptor)
+  async checkJobRelevance(
+    @Body() dto: CheckJobRelevanceDto,
+    @UploadedFile(FileValidationPipe)
+    resumeFile: Express.Multer.File | undefined,
+    @Req() request: RequestWithUserContext,
+  ): Promise<{ relevance: unknown }> {
+    const resumeUserContext = request.userContext as ResumeUserContext;
+    const relevance =
+      await this.resumeGenerationOrchestratorService.checkRelevanceOnly({
+        jobDescription: dto.jobDescription,
+        jobPosition: dto.jobPosition,
+        companyName: dto.companyName,
+        // templateId is not needed for relevance scoring; pass an empty string
+        // since the input interface requires it. The orchestrator's
+        // checkRelevanceOnly path never reads this field.
+        templateId: '',
+        resumeId: dto.resumeId,
+        userContext: resumeUserContext,
+        resumeFile,
+        acknowledgeLowFit: false,
+      });
+    return { relevance };
   }
 
   /**
@@ -458,6 +544,13 @@ export class ResumeTailoringController {
               userContext,
             },
           );
+
+        if (result.kind !== 'pdf') {
+          this.logger.warn(
+            `[batch-v1] job returned non-pdf result kind=${result.kind} — skipping (enable JOB_RELEVANCE_GATE_ENABLED to handle low-fit in v2 batch)`,
+          );
+          continue;
+        }
 
         // Each resume successfully produced inside the batch consumes 1 unit of
         // the shared RESUME_GENERATION pool. Failed jobs do NOT consume quota.

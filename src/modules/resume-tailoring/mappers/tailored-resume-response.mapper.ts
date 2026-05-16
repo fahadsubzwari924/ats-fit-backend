@@ -45,6 +45,7 @@ export class TailoredResumeResponseMapper {
     result: ResumeGenerationResult,
     contentLength: number,
   ): void {
+    if (result.kind !== 'pdf') return;
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename=${result.filename}`,
@@ -79,6 +80,9 @@ export class TailoredResumeResponseMapper {
   static buildJsonEnvelope(
     result: ResumeGenerationResult,
   ): TailoredResumeJsonEnvelope {
+    if (result.kind !== 'pdf') {
+      throw new Error('buildJsonEnvelope called with non-pdf result');
+    }
     return {
       resumeGenerationId: result.resumeGenerationId,
       filename: result.filename,
