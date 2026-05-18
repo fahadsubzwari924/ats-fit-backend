@@ -12,8 +12,8 @@ export const AB_EXPERIMENTS: AbExperiment[] = [
   {
     key: 'optimizer-constitutional-rubric',
     variants: [
-      { name: 'control', weight: 50 },
-      { name: 'with-rubric', weight: 50 },
+      { name: 'control', weight: 0 },
+      { name: 'with-rubric', weight: 100 },
     ],
   },
 ];

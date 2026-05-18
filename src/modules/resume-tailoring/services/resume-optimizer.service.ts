@@ -452,13 +452,17 @@ export class ResumeOptimizerService {
   }
 
   /**
-   * Whitelist check: is this error one of the two LLM-output-quality failures
+   * Whitelist check: is this error one of the LLM-output-quality failures
    * that the two-tier retry is allowed to recover from?
    *
    * - `AI_OUTPUT_TRUNCATED` — validation guard caught a dropped experience
    *   (the dominant failure mode this retry loop was built for).
    * - `AI_RESPONSE_PARSING_FAILED` — JSON parse / structural validation
    *   failure on the LLM payload.
+   * - `MISSING_REQUIRED_AI_FIELD` — Claude can return a structurally-
+   *   malformed payload (e.g. stringified nested objects) that the
+   *   Anthropic tool_use API does not catch because it doesn't strictly
+   *   enforce nested types; the OpenAI fallback should rescue the user.
    *
    * Anything else (BadRequestException, ForbiddenException, Anthropic 5xx
    * that bubbled past the overload handler, etc.) propagates unchanged so
@@ -472,7 +476,8 @@ export class ResumeOptimizerService {
     const code = response?.errorCode;
     return (
       code === ERROR_CODES.AI_OUTPUT_TRUNCATED ||
-      code === ERROR_CODES.AI_RESPONSE_PARSING_FAILED
+      code === ERROR_CODES.AI_RESPONSE_PARSING_FAILED ||
+      code === ERROR_CODES.MISSING_REQUIRED_AI_FIELD
     );
   }
 
@@ -512,10 +517,11 @@ export class ResumeOptimizerService {
     }
 
     try {
-      const parsedResult = JSON.parse(content) as unknown;
+      const parsedResult = JSON.parse(content) as Record<string, unknown>;
+      this.coerceStringifiedFields(parsedResult, 'claude');
       this.validateOptimizationResult(parsedResult);
 
-      return parsedResult as Omit<
+      return parsedResult as unknown as Omit<
         ResumeOptimizationResult,
         'processingMetadata'
       >;
@@ -534,6 +540,31 @@ export class ResumeOptimizerService {
         'Failed to parse optimization response',
         ERROR_CODES.AI_RESPONSE_PARSING_FAILED,
       );
+    }
+  }
+
+  private coerceStringifiedFields(
+    parsed: Record<string, unknown>,
+    source: 'claude' | 'openai',
+  ): void {
+    const fields: Array<'optimizedContent' | 'optimizationMetrics'> = [
+      'optimizedContent',
+      'optimizationMetrics',
+    ];
+
+    for (const field of fields) {
+      const value = parsed[field];
+      if (typeof value !== 'string') continue;
+
+      try {
+        parsed[field] = JSON.parse(value);
+        this.logger.warn('hallucinated_stringified_payload', {
+          source,
+          field,
+        });
+      } catch {
+        // Leave the field as-is; validateOptimizationResult will throw a clear error.
+      }
     }
   }
 
@@ -967,9 +998,10 @@ export class ResumeOptimizerService {
     }
 
     try {
-      const parsedResult: unknown = JSON.parse(content);
+      const parsedResult = JSON.parse(content) as Record<string, unknown>;
+      this.coerceStringifiedFields(parsedResult, 'openai');
       this.validateOptimizationResult(parsedResult);
-      return parsedResult as Omit<
+      return parsedResult as unknown as Omit<
         ResumeOptimizationResult,
         'processingMetadata'
       >;
