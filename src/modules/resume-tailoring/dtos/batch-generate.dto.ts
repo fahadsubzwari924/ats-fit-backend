@@ -64,6 +64,7 @@ export class BatchGenerateDto {
 export interface BatchJobResult {
   jobPosition: string;
   companyName: string;
+  jobDescription: string;
   status: 'success' | 'failed';
   resumeGenerationId?: string;
   pdfContent?: string;

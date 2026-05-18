@@ -50,6 +50,7 @@ import { AtsMatchModule } from '../ats-match/ats-match.module';
 import { AuthModule } from '../auth/auth.module';
 import { QueueModule } from '../queue/queue.module';
 import { JobRelevanceModule } from '../job-relevance/job-relevance.module';
+import { JobApplicationModule } from '../job-application/job-application.module';
 import { RESUME_CONTENT_PROVIDER } from '../../shared/tokens/resume-content-provider.token';
 import { ResumeExtractionProcessor } from './processors/resume-extraction.processor';
 import { ResumeProfileEnrichmentProcessor } from './processors/resume-profile-enrichment.processor';
@@ -85,6 +86,7 @@ import { MatchScoreClassifierService } from './services/match-score-classifier.s
     forwardRef(() => QueueModule),
     forwardRef(() => AuthModule),
     forwardRef(() => JobRelevanceModule),
+    JobApplicationModule,
   ],
   providers: [
     ResumeService,

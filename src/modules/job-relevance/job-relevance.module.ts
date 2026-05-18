@@ -7,9 +7,10 @@ import { JobRelevanceKeywordFastPathService } from './fast-path/job-relevance-ke
 import { JobRelevanceLlmClient } from './clients/job-relevance-llm.client';
 import { JOB_RELEVANCE_CONSTANTS } from './constants/job-relevance.constants';
 import { ResumeTailoringModule } from '../resume-tailoring/resume-tailoring.module';
+import { RateLimitModule } from '../rate-limit/rate-limit.module';
 
 @Module({
-  imports: [forwardRef(() => ResumeTailoringModule)],
+  imports: [forwardRef(() => ResumeTailoringModule), RateLimitModule],
   providers: [
     {
       provide: JOB_RELEVANCE_CONSTANTS.DB.REDIS_PROVIDER_TOKEN,

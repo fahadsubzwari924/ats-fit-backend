@@ -15,6 +15,24 @@ export interface JobRelevanceDimensions {
   experienceLevel: JobRelevanceDimension;
 }
 
+/**
+ * Per-mandatory-technology analysis emitted by the LLM. Forced by the tool
+ * schema (`minItems: 1`) so the model cannot skip enumeration — `gaps` is
+ * then derived authoritatively server-side from this list (filter where
+ * `presentInProfile === false`).
+ *
+ * Persisted into `resume_generations.pre_generation_relevance` JSONB for
+ * post-hoc audit ("what did Haiku think was mandatory for this JD?").
+ */
+export interface MandatoryTechAnalysis {
+  /** Technology name as it appears in the JD (e.g. ".NET / ASP.NET Core"). */
+  name: string;
+  /** True when the candidate profile demonstrably mentions this technology. */
+  presentInProfile: boolean;
+  /** Optional rationale — where in the profile it was found, or why missing. */
+  evidence?: string;
+}
+
 export interface JobRelevanceResult {
   /** Weighted composite score, integer in range [0, 100] */
   score: number;
@@ -22,6 +40,12 @@ export interface JobRelevanceResult {
   dimensions: JobRelevanceDimensions;
   gaps: string[];
   strengths: string[];
+  /**
+   * Structured enumeration of every mandatory technology the LLM identified
+   * in the JD, marked present/missing. Server derives `gaps` from this when
+   * available; field is optional for fallback / fast-path / legacy entries.
+   */
+  mandatoryTechs?: MandatoryTechAnalysis[];
   engine: JobRelevanceEngine;
   model: string | null;
   latencyMs: number;

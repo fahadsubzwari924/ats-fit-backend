@@ -278,12 +278,21 @@ export class ResumeTailoringController {
     } catch (error) {
       const processingTime = Date.now() - startTime;
       this.logger.error(
-        `Resume generation failed after ${processingTime}ms`,
-        error,
+        JSON.stringify({
+          event: 'resume_generation.request_failed',
+          userId: request.userContext?.userId ?? null,
+          jobPosition: generateResumeDto.jobPosition,
+          companyName: generateResumeDto.companyName,
+          templateId: generateResumeDto.templateId,
+          resumeId: generateResumeDto.resumeId ?? null,
+          hasResumeFile: !!resumeFile,
+          processingTimeMs: processingTime,
+          errorName: error instanceof Error ? error.name : 'Unknown',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        }),
+        error instanceof Error ? error.stack : undefined,
       );
 
-      // The orchestrator service handles specific error types and re-throws them
-      // We just need to handle the final error response here
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException
@@ -291,7 +300,6 @@ export class ResumeTailoringController {
         throw error;
       }
 
-      // All other errors are wrapped as InternalServerErrorException by the orchestrator
       throw error;
     }
   }
@@ -312,6 +320,7 @@ export class ResumeTailoringController {
   @Post('relevance')
   @HttpCode(HttpStatus.OK)
   @TransformUserContext()
+  @RateLimitFeature(FeatureType.JOB_RELEVANCE_SCORE)
   @UseInterceptors(FileInterceptor('resumeFile'), ValidationLoggingInterceptor)
   async checkJobRelevance(
     @Body() dto: CheckJobRelevanceDto,
@@ -562,6 +571,7 @@ export class ResumeTailoringController {
         results.push({
           jobPosition: job.jobPosition,
           companyName: job.companyName,
+          jobDescription: job.jobDescription,
           status: 'success',
           resumeGenerationId: result.resumeGenerationId,
           pdfContent: result.pdfContent,
@@ -589,6 +599,7 @@ export class ResumeTailoringController {
         results.push({
           jobPosition: job.jobPosition,
           companyName: job.companyName,
+          jobDescription: job.jobDescription,
           status: 'failed',
           error: {
             category: 'UNKNOWN',

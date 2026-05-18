@@ -568,6 +568,7 @@ export class BatchTailoringV2Service {
     return {
       jobPosition: job.job_position,
       companyName: job.company_name,
+      jobDescription: job.job_description,
       status: 'success',
       resumeGenerationId: rg?.id,
       filename: generateResumeFilename(candidateName, job.job_position),

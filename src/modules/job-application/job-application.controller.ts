@@ -31,6 +31,7 @@ import {
   JobApplicationResponseDto,
   JobApplicationListResponseDto,
   JobApplicationStatsResponseDto,
+  JobApplicationTagsResponseDto,
 } from './dtos/job-application-response.dto';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { RequestWithUserContext } from '../../shared/interfaces/request-user.interface';
@@ -124,6 +125,28 @@ export class JobApplicationController {
     // Field selection could be applied to stats as well if needed
     // For now, we return the full stats object
     return stats;
+  }
+
+  @Get('tags')
+  @ApiOperation({
+    summary: 'Get all unique tags',
+    description:
+      'Returns all unique tag strings used by the authenticated user across all their job applications, sorted alphabetically.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tags retrieved successfully',
+    type: JobApplicationTagsResponseDto,
+  })
+  async getUserTags(
+    @Req() request: RequestWithUserContext,
+  ): Promise<JobApplicationTagsResponseDto> {
+    this.logger.log('Fetching unique tags for user');
+
+    const userId = request.userContext.userId;
+    const tags = await this.jobApplicationService.getUserTags(userId);
+
+    return { tags };
   }
 
   @Get(':id')

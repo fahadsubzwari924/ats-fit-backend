@@ -39,6 +39,7 @@ import { ResumeContentService } from './resume-content.service';
 import { ResumeReplacementErrorCode } from '../../../shared/enums/resume-replacement.enum';
 import { KeywordMatchScoringService } from './keyword-match-scoring.service';
 import { MatchScoreClassifierService } from './match-score-classifier.service';
+import { JobApplicationService } from '../../job-application/job-application.service';
 
 /**
  * Resume Generation Orchestrator Service
@@ -55,6 +56,62 @@ export class ResumeGenerationOrchestratorService {
   private readonly logger = new Logger(
     ResumeGenerationOrchestratorService.name,
   );
+
+  /**
+   * Emit a single JSON-serializable error line for a pipeline stage. Keys are
+   * fixed so log searches (Railway / Grafana / Loki) can grep on any of them.
+   * The raw stack is passed as the second argument so default NestJS console
+   * formatting still prints it; structured-log transports pick up the keys
+   * from the first argument.
+   */
+  private logStageError(
+    stage: string,
+    input: ResumeGenerationInput,
+    error: unknown,
+    extra: Record<string, unknown> = {},
+  ): void {
+    const payload = {
+      event: 'resume_generation.stage_failed',
+      stage,
+      userId: input.userContext?.userId ?? null,
+      jobPosition: input.jobPosition,
+      companyName: input.companyName,
+      templateId: input.templateId,
+      resumeId: input.resumeId ?? null,
+      hasResumeFile: !!input.resumeFile,
+      errorName: error instanceof Error ? error.name : 'Unknown',
+      errorMessage:
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : JSON.stringify(error),
+      ...extra,
+    };
+    this.logger.error(
+      JSON.stringify(payload),
+      error instanceof Error ? error.stack : undefined,
+    );
+  }
+
+  /**
+   * Run a pipeline stage and structurally log + rethrow if it fails. AbortError
+   * is intentionally NOT logged — it's a normal control flow signal when the
+   * relevance check shortcuts the tailor pipeline.
+   */
+  private async withStage<T>(
+    stage: string,
+    input: ResumeGenerationInput,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') throw error;
+      this.logStageError(stage, input, error);
+      throw error;
+    }
+  }
 
   constructor(
     private readonly validatorService: ResumeValidationService,
@@ -76,6 +133,7 @@ export class ResumeGenerationOrchestratorService {
     private readonly resumeGenerationRepository: Repository<ResumeGeneration>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly jobApplications: JobApplicationService,
   ) {}
 
   /**
@@ -90,8 +148,8 @@ export class ResumeGenerationOrchestratorService {
 
     const abortController = new AbortController();
 
-    const relevancePromise = this.resolveRelevanceProfile(input).then(
-      (profile) =>
+    const relevancePromise = this.resolveRelevanceProfile(input)
+      .then((profile) =>
         this.jobRelevanceService.score({
           userId: input.userContext?.userId ?? null,
           profile,
@@ -100,7 +158,11 @@ export class ResumeGenerationOrchestratorService {
           jobDescription: input.jobDescription,
           abortSignal: abortController.signal,
         }),
-    );
+      )
+      .catch((err: unknown) => {
+        this.logStageError('relevance-scoring', input, err);
+        throw err;
+      });
 
     const tailorPromise = this.runTailoringPipeline(
       input,
@@ -140,17 +202,26 @@ export class ResumeGenerationOrchestratorService {
       );
     }
 
-    // Persist relevance onto saved generation
     if (tailorOutcome.resumeGenerationId) {
-      await this.resumeGenerationRepository.update(
-        { id: tailorOutcome.resumeGenerationId },
-        {
-          preGenerationRelevance: {
-            ...relevance,
-            acknowledgedLowFit: !!input.acknowledgeLowFit,
+      try {
+        await this.resumeGenerationRepository.update(
+          { id: tailorOutcome.resumeGenerationId },
+          {
+            preGenerationRelevance: {
+              ...relevance,
+              acknowledgedLowFit: !!input.acknowledgeLowFit,
+            },
           },
-        },
-      );
+        );
+      } catch (relevancePersistError) {
+        // Side-channel write — do NOT fail the user-facing pdf delivery if
+        // this update blips. The pdf has already been generated and the
+        // resume_generation row already exists; the relevance JSONB column
+        // is purely analytical context.
+        this.logStageError('persist-relevance', input, relevancePersistError, {
+          resumeGenerationId: tailorOutcome.resumeGenerationId,
+        });
+      }
     }
 
     return { ...tailorOutcome, relevance };
@@ -255,21 +326,27 @@ export class ResumeGenerationOrchestratorService {
     const startTime = Date.now();
 
     if (!input.resumeFile) {
-      await this.assertProfileReady(input.userContext.userId);
+      await this.withStage('profile-readiness', input, () =>
+        this.assertProfileReady(input.userContext.userId),
+      );
     }
     this.throwIfAborted(signal, 'pre-validation');
 
-    const validationTime = await this.runValidation(input);
+    const validationTime = await this.withStage('validation', input, () =>
+      this.runValidation(input),
+    );
     this.throwIfAborted(signal, 'post-validation');
 
     const { jobAnalysis, resumeContent, parallelOperationsTime } =
-      await this.runAnalysisAndProcessing(input);
+      await this.withStage('analysis-and-processing', input, () =>
+        this.runAnalysisAndProcessing(input),
+      );
     this.throwIfAborted(signal, 'post-analysis');
 
-    const { optimizationResult, optimizationTime } = await this.runOptimization(
+    const { optimizationResult, optimizationTime } = await this.withStage(
+      'optimization',
       input,
-      jobAnalysis,
-      resumeContent,
+      () => this.runOptimization(input, jobAnalysis, resumeContent),
     );
     this.throwIfAborted(signal, 'post-optimization');
 
@@ -280,9 +357,10 @@ export class ResumeGenerationOrchestratorService {
     );
     this.throwIfAborted(signal, 'pre-pdf');
 
-    const { pdfResult, pdfGenerationTime } = await this.runPdfGeneration(
+    const { pdfResult, pdfGenerationTime } = await this.withStage(
+      'pdf-generation',
       input,
-      optimizationResult,
+      () => this.runPdfGeneration(input, optimizationResult),
     );
     this.throwIfAborted(signal, 'post-pdf');
 
@@ -299,15 +377,39 @@ export class ResumeGenerationOrchestratorService {
       },
     );
 
-    const { savedGeneration, dbTime } = await this.persistGeneration(
+    const { savedGeneration, dbTime } = await this.withStage(
+      'persist-generation',
       input,
-      resumeContent,
-      optimizationResult,
-      pdfResult,
-      jobAnalysis,
-      scores,
-      diff,
+      () =>
+        this.persistGeneration(
+          input,
+          resumeContent,
+          optimizationResult,
+          pdfResult,
+          jobAnalysis,
+          scores,
+          diff,
+        ),
     );
+
+    // Auto-track this generation as a job_application. Idempotent — the DB
+    // partial unique index on `resume_generation_id` guarantees one row even
+    // under retry. Failures are logged but never fail the user-facing pdf
+    // delivery; the resume has already been generated and persisted.
+    try {
+      await this.jobApplications.trackTailoringApplication({
+        userId: input.userContext.userId,
+        resumeGenerationId: savedGeneration.id,
+        companyName: input.companyName,
+        jobPosition: input.jobPosition,
+        jobDescription: input.jobDescription,
+      });
+    } catch (trackError) {
+      this.logger.error(
+        `Failed to auto-track application for resume_generation ${savedGeneration.id}`,
+        trackError instanceof Error ? trackError.stack : trackError,
+      );
+    }
 
     const totalProcessingTime = Date.now() - startTime;
     this.logger.log(
@@ -732,17 +834,19 @@ export class ResumeGenerationOrchestratorService {
       const resumeGeneration = this.resumeGenerationRepository.create(payload);
       return await this.resumeGenerationRepository.save(resumeGeneration);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown database error';
-      this.logger.error('Failed to save resume generation record', {
-        error: errorMessage,
-        payload: {
-          user_id: payload.user_id,
-          template_id: payload.template_id,
-          company_name: payload.company_name,
-        },
-      });
-
+      this.logger.error(
+        JSON.stringify({
+          event: 'resume_generation.persist_failed',
+          userId: payload.user_id ?? null,
+          templateId: payload.template_id ?? null,
+          companyName: payload.company_name ?? null,
+          jobPosition: payload.job_position ?? null,
+          errorName: error instanceof Error ? error.name : 'Unknown',
+          errorMessage:
+            error instanceof Error ? error.message : 'Unknown database error',
+        }),
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new InternalServerErrorException(
         'Failed to save resume generation record. Please try again or contact support if the issue persists.',
         ERROR_CODES.INTERNAL_SERVER,

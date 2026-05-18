@@ -13,6 +13,8 @@ import type {
   JobRelevanceInput,
   JobRelevanceProfileSource,
 } from './interfaces/job-relevance-input.interface';
+import { RateLimitService } from '../rate-limit/rate-limit.service';
+import { FeatureType } from '../../database/entities/usage-tracking.entity';
 
 @Injectable()
 export class JobRelevanceService {
@@ -23,6 +25,7 @@ export class JobRelevanceService {
     private readonly fastPath: JobRelevanceKeywordFastPathService,
     private readonly llm: JobRelevanceLlmClient,
     private readonly config: ConfigService,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   async score(input: JobRelevanceInput): Promise<JobRelevanceResult> {
@@ -42,6 +45,22 @@ export class JobRelevanceService {
       input.profile.kind === 'enriched' ? input.profile.profileVersion : 0;
     const cacheKey = this.cache.buildKey(profileVersion, input.jobDescription);
 
+    // Quota check — applies to both callers (standalone /relevance endpoint
+    // AND the orchestrator-internal call inside generateOptimizedResume).
+    // Cache hits never burn quota (they bypass the LLM), so we defer the
+    // hard gate until AFTER the cache lookup. The check itself is cheap
+    // (one indexed read against usage_tracking + rate_limit_configs).
+    // Guests (no userId) skip the check — they're blocked at the route
+    // guard layer, never reach this service from the standalone endpoint.
+    let remainingBefore = Number.POSITIVE_INFINITY;
+    if (input.userId) {
+      const usage = await this.rateLimit.checkRateLimit(
+        { userId: input.userId } as never,
+        FeatureType.JOB_RELEVANCE_SCORE,
+      );
+      remainingBefore = usage.remaining;
+    }
+
     const cached = await this.cache.get(cacheKey);
     if (cached) {
       const hit: JobRelevanceResult = this.applyHardRequirementOverride({
@@ -51,6 +70,13 @@ export class JobRelevanceService {
       });
       this.log(input, hit);
       return hit;
+    }
+
+    if (remainingBefore <= 0) {
+      // Quota exhausted — return the UNAVAILABLE sentinel. Callers treat
+      // this the same as FEATURE_DISABLED / NO_PROFILE today: standalone
+      // endpoint surfaces it; orchestrator FE removes the Fit Score step.
+      return this.handleSkipped(input, JobRelevanceSkipReason.QUOTA_EXHAUSTED);
     }
 
     const fast = this.fastPath.tryScore(profileText, input.jobDescription);
@@ -78,6 +104,23 @@ export class JobRelevanceService {
     });
     if (final.engine === JobRelevanceEngine.LLM) {
       await this.cache.set(cacheKey, final);
+      // Record usage only when we actually called the LLM. Cache hits and
+      // fast-path skips do not consume quota — fast-path is keyword-only
+      // and costs us nothing; cache hits cost us nothing either. Errors
+      // recording usage are logged but do not fail the response — the
+      // user already got a valid relevance result.
+      if (input.userId) {
+        try {
+          await this.rateLimit.recordUsage(
+            { userId: input.userId } as never,
+            FeatureType.JOB_RELEVANCE_SCORE,
+          );
+        } catch (recordError) {
+          this.logger.warn(
+            `Failed to record JOB_RELEVANCE_SCORE usage for user ${input.userId}: ${(recordError as Error).message}`,
+          );
+        }
+      }
     }
     this.log(input, final);
     return final;

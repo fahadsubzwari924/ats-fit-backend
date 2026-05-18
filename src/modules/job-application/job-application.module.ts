@@ -9,7 +9,6 @@ import { JobApplicationInterview } from '../../database/entities/job-application
 import { ResumeGeneration } from '../../database/entities/resume-generations.entity';
 import { User } from '../../database/entities/user.entity';
 import { SharedModule } from '../../shared/shared.module';
-import { RateLimitModule } from '../rate-limit/rate-limit.module';
 import { FieldSelectionService } from '../../shared/services/field-selection.service';
 
 @Module({
@@ -21,7 +20,6 @@ import { FieldSelectionService } from '../../shared/services/field-selection.ser
       User,
     ]),
     SharedModule,
-    RateLimitModule,
   ],
   controllers: [JobApplicationController, JobApplicationInterviewController],
   providers: [

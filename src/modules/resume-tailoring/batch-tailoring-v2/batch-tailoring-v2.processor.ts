@@ -41,6 +41,49 @@ import type { BatchJobPayloadV2 } from './interfaces/batch-job-payload.interface
 export class BatchTailoringV2Processor {
   private readonly logger = new Logger(BatchTailoringV2Processor.name);
 
+  /**
+   * Build the canonical structured-log payload for a batch-job event so every
+   * log line in this processor shares the same key set. Pass the job's
+   * `data` payload so `userId`, `companyName`, `jobPosition` are always
+   * present.
+   */
+  private buildLogContext(
+    data: BatchJobPayloadV2,
+    extra: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      userId: data.userId,
+      batchId: data.batchId,
+      batchJobId: data.batchJobId,
+      jobIndex: data.jobIndex,
+      companyName: data.companyName,
+      jobPosition: data.jobPosition,
+      ...extra,
+    };
+  }
+
+  private logProcessorError(
+    event: string,
+    data: BatchJobPayloadV2,
+    error: unknown,
+    extra: Record<string, unknown> = {},
+  ): void {
+    this.logger.error(
+      JSON.stringify({
+        event,
+        ...this.buildLogContext(data, extra),
+        errorName: error instanceof Error ? error.name : 'Unknown',
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : JSON.stringify(error),
+      }),
+      error instanceof Error ? error.stack : undefined,
+    );
+  }
+
   constructor(
     @InjectRepository(BatchTailoringJob)
     private readonly jobRepo: Repository<BatchTailoringJob>,
@@ -66,32 +109,72 @@ export class BatchTailoringV2Processor {
 
     try {
       // Stage 1: analyzing
-      await this.transition(batchJobId, 'analyzing');
+      try {
+        await this.transition(batchJobId, 'analyzing');
+      } catch (transitionError) {
+        this.logProcessorError(
+          'batch_v2.transition_failed',
+          job.data,
+          transitionError,
+          { fromStage: 'queued', toStage: 'analyzing' },
+        );
+        throw transitionError;
+      }
       // Bump run to 'processing' when the first job starts; condition prevents
       // redundant updates from concurrent workers on subsequent jobs.
-      await this.runRepo.update(
-        { id: batchId, status: 'queued' },
-        { status: 'processing' },
-      );
-      await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_STARTED, {
+      try {
+        await this.runRepo.update(
+          { id: batchId, status: 'queued' },
+          { status: 'processing' },
+        );
+      } catch (runUpdateError) {
+        this.logProcessorError(
+          'batch_v2.run_status_update_failed',
+          job.data,
+          runUpdateError,
+          { intendedStatus: 'processing' },
+        );
+        throw runUpdateError;
+      }
+      await this.safeEmit(
         batchId,
-        // DB UUID is emitted alongside `jobIndex` (additive — both stay) so
-        // the FE can match SSE updates to snapshot rows even when a retry
-        // re-emits the same index. Retried jobs reuse the same row, so
-        // `jobId` is naturally stable across attempts.
-        jobId: batchJobId,
-        jobIndex,
-        stage: 'analyzing',
-      });
+        BATCH_V2_SSE_EVENT_NAMES.JOB_STARTED,
+        {
+          batchId,
+          // DB UUID is emitted alongside `jobIndex` (additive — both stay) so
+          // the FE can match SSE updates to snapshot rows even when a retry
+          // re-emits the same index. Retried jobs reuse the same row, so
+          // `jobId` is naturally stable across attempts.
+          jobId: batchJobId,
+          jobIndex,
+          stage: 'analyzing',
+        },
+        job.data,
+      );
 
       // Stage 2: optimizing
-      await this.transition(batchJobId, 'optimizing');
-      await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_PROGRESS, {
+      try {
+        await this.transition(batchJobId, 'optimizing');
+      } catch (transitionError) {
+        this.logProcessorError(
+          'batch_v2.transition_failed',
+          job.data,
+          transitionError,
+          { fromStage: 'analyzing', toStage: 'optimizing' },
+        );
+        throw transitionError;
+      }
+      await this.safeEmit(
         batchId,
-        jobId: batchJobId,
-        jobIndex,
-        stage: 'optimizing',
-      });
+        BATCH_V2_SSE_EVENT_NAMES.JOB_PROGRESS,
+        {
+          batchId,
+          jobId: batchJobId,
+          jobIndex,
+          stage: 'optimizing',
+        },
+        job.data,
+      );
 
       // Run the resume generation pipeline
       const result = await this.orchestrator.generateOptimizedResume({
@@ -106,24 +189,60 @@ export class BatchTailoringV2Processor {
       if (result.kind !== 'pdf') return;
 
       // Stage 3: finalizing
-      await this.transition(batchJobId, 'finalizing');
-      await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_PROGRESS, {
+      try {
+        await this.transition(batchJobId, 'finalizing');
+      } catch (transitionError) {
+        this.logProcessorError(
+          'batch_v2.transition_failed',
+          job.data,
+          transitionError,
+          { fromStage: 'optimizing', toStage: 'finalizing' },
+        );
+        throw transitionError;
+      }
+      await this.safeEmit(
         batchId,
-        jobId: batchJobId,
-        jobIndex,
-        stage: 'finalizing',
-      });
+        BATCH_V2_SSE_EVENT_NAMES.JOB_PROGRESS,
+        {
+          batchId,
+          jobId: batchJobId,
+          jobIndex,
+          stage: 'finalizing',
+        },
+        job.data,
+      );
 
       // Persist completed state with the generation ID
-      await this.jobRepo.update(
-        { id: batchJobId },
-        {
-          state: 'completed',
-          resume_generation_id: result.resumeGenerationId,
-          completed_at: new Date(),
-        },
-      );
-      await this.bumpRunCounters(batchId, { completed: 1 });
+      try {
+        await this.jobRepo.update(
+          { id: batchJobId },
+          {
+            state: 'completed',
+            resume_generation_id: result.resumeGenerationId,
+            completed_at: new Date(),
+          },
+        );
+      } catch (persistError) {
+        this.logProcessorError(
+          'batch_v2.complete_persist_failed',
+          job.data,
+          persistError,
+          { resumeGenerationId: result.resumeGenerationId },
+        );
+        throw persistError;
+      }
+
+      try {
+        await this.bumpRunCounters(batchId, { completed: 1 });
+      } catch (bumpError) {
+        this.logProcessorError(
+          'batch_v2.bump_run_counters_failed',
+          job.data,
+          bumpError,
+          { delta: { completed: 1 } },
+        );
+        throw bumpError;
+      }
 
       // Shared-pool: each successful resume in a batch consumes 1 unit of the
       // monthly RESUME_GENERATION pool (same pool that single tailorings draw
@@ -142,41 +261,58 @@ export class BatchTailoringV2Processor {
         );
       }
 
+      // Auto-tracking of the job_application happens inside
+      // `ResumeGenerationOrchestratorService.runTailoringPipeline` — single
+      // source of truth covering both single and batch flows. Do NOT add a
+      // tracker call here; it would double-fire (idempotent but noisy).
+
       // NOTE: `pdfContent` deliberately omitted from the SSE payload. Pushing
       // 100KB+ base64 over every SSE event is wasteful, fragile across proxies,
       // and creates a divergence between live events (which had it) and
       // snapshot/replay paths (which don't, because the DB only stores the
       // S3 key). Frontend downloads PDFs on demand via
       // `GET /resume-tailoring/download/:resumeGenerationId`.
-      await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_COMPLETED, {
+      await this.safeEmit(
         batchId,
-        jobId: batchJobId,
-        jobIndex,
-        result: {
-          jobPosition: job.data.jobPosition,
-          companyName: job.data.companyName,
-          status: 'success',
-          resumeGenerationId: result.resumeGenerationId,
-          filename: result.filename,
-          optimizationConfidence: result.optimizationConfidence,
-          keywordsAdded: result.keywordsAdded,
-          sectionsChanged: result.sectionsChanged,
-          // Canonical MatchScoreBlock — what the FE consumes going forward.
-          matchScore: result.matchScore,
-          // TODO: remove after FE migration lands
-          matchScoreBefore: result.matchScoreBefore,
-          matchScoreAfter: result.matchScoreAfter,
+        BATCH_V2_SSE_EVENT_NAMES.JOB_COMPLETED,
+        {
+          batchId,
+          jobId: batchJobId,
+          jobIndex,
+          result: {
+            jobPosition: job.data.jobPosition,
+            companyName: job.data.companyName,
+            jobDescription: job.data.jobDescription,
+            status: 'success',
+            resumeGenerationId: result.resumeGenerationId,
+            filename: result.filename,
+            optimizationConfidence: result.optimizationConfidence,
+            keywordsAdded: result.keywordsAdded,
+            sectionsChanged: result.sectionsChanged,
+            // Canonical MatchScoreBlock — what the FE consumes going forward.
+            matchScore: result.matchScore,
+            // TODO: remove after FE migration lands
+            matchScoreBefore: result.matchScoreBefore,
+            matchScoreAfter: result.matchScoreAfter,
+          },
         },
-      });
+        job.data,
+      );
 
       this.logger.log(
         `Batch v2 job ${batchJobId} (index ${jobIndex}) completed successfully`,
       );
 
-      await this.maybeFinishBatch(batchId, startedAt);
+      try {
+        await this.maybeFinishBatch(batchId, startedAt);
+      } catch (finishError) {
+        this.logProcessorError(
+          'batch_v2.maybe_finish_failed',
+          job.data,
+          finishError,
+        );
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-
       // Build the typed envelope BEFORE writing/emitting. The classifier
       // never throws — it returns `UNKNOWN` if it can't categorize — so this
       // path is safe to call unconditionally inside the catch block.
@@ -187,34 +323,78 @@ export class BatchTailoringV2Processor {
       // facing envelope. `technicalDetail` is a short structured string
       // (e.g. `code=ERR_AI_OUTPUT_TRUNCATED inputCount=9 outputCount=4`).
       this.logger.error(
-        `Batch v2 job ${batchJobId} (index ${jobIndex}) failed: ${message} | category=${envelope.category} technicalDetail=${envelope.technicalDetail}`,
+        JSON.stringify({
+          event: 'batch_v2.job_failed',
+          ...this.buildLogContext(job.data, {
+            category: envelope.category,
+            technicalDetail: envelope.technicalDetail,
+            durationMs: Date.now() - startedAt,
+          }),
+          errorName: error instanceof Error ? error.name : 'Unknown',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        }),
         error instanceof Error ? error.stack : undefined,
       );
 
-      await this.jobRepo.update(
-        { id: batchJobId },
-        {
-          state: 'failed',
-          // The column stays `text` — we JSON-encode the envelope so legacy
-          // plain-string rows and new JSON rows coexist without a migration.
-          // The service-layer mapper detects shape at read time.
-          error_message: envelopeJson,
-          completed_at: new Date(),
-        },
-      );
-      await this.bumpRunCounters(batchId, { failed: 1 });
+      try {
+        await this.jobRepo.update(
+          { id: batchJobId },
+          {
+            state: 'failed',
+            // The column stays `text` — we JSON-encode the envelope so legacy
+            // plain-string rows and new JSON rows coexist without a migration.
+            // The service-layer mapper detects shape at read time.
+            error_message: envelopeJson,
+            completed_at: new Date(),
+          },
+        );
+      } catch (failurePersistError) {
+        // Secondary write — original failure already logged above. Log the
+        // secondary so we know the row was never marked failed; otherwise
+        // the batch will appear stuck in 'optimizing' forever.
+        this.logProcessorError(
+          'batch_v2.failure_persist_failed',
+          job.data,
+          failurePersistError,
+          { originalCategory: envelope.category },
+        );
+      }
 
-      await this.emit(batchId, BATCH_V2_SSE_EVENT_NAMES.JOB_FAILED, {
+      try {
+        await this.bumpRunCounters(batchId, { failed: 1 });
+      } catch (bumpError) {
+        this.logProcessorError(
+          'batch_v2.bump_run_counters_failed',
+          job.data,
+          bumpError,
+          { delta: { failed: 1 } },
+        );
+      }
+
+      await this.safeEmit(
         batchId,
-        // DB UUID is the stable cross-attempt identifier — the FE keys its
-        // retry button off this value. `jobIndex` stays alongside for legacy
-        // index-based matching.
-        jobId: batchJobId,
-        jobIndex,
-        error: envelope,
-      });
+        BATCH_V2_SSE_EVENT_NAMES.JOB_FAILED,
+        {
+          batchId,
+          // DB UUID is the stable cross-attempt identifier — the FE keys its
+          // retry button off this value. `jobIndex` stays alongside for legacy
+          // index-based matching.
+          jobId: batchJobId,
+          jobIndex,
+          error: envelope,
+        },
+        job.data,
+      );
 
-      await this.maybeFinishBatch(batchId, startedAt);
+      try {
+        await this.maybeFinishBatch(batchId, startedAt);
+      } catch (finishError) {
+        this.logProcessorError(
+          'batch_v2.maybe_finish_failed',
+          job.data,
+          finishError,
+        );
+      }
     }
   }
 
@@ -327,5 +507,28 @@ export class BatchTailoringV2Processor {
     );
     const eventId = rows[0]?.last_event_id ?? 0;
     this.events.publish({ batchId, eventName, data, eventId });
+  }
+
+  /**
+   * Emit an SSE event without ever failing the worker. SSE delivery is
+   * advisory — the snapshot endpoint is the source of truth for replay — so a
+   * transient publish/event-id-update failure must not poison the batch.
+   */
+  private async safeEmit(
+    batchId: string,
+    eventName: string,
+    data: Record<string, unknown>,
+    jobData: BatchJobPayloadV2,
+  ): Promise<void> {
+    try {
+      await this.emit(batchId, eventName, data);
+    } catch (emitError) {
+      this.logProcessorError(
+        'batch_v2.sse_publish_failed',
+        jobData,
+        emitError,
+        { sseEvent: eventName },
+      );
+    }
   }
 }

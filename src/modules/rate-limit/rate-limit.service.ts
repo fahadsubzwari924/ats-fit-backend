@@ -522,6 +522,8 @@ export class RateLimitService {
    *   PREMIUM  / RESUME_GENERATION        → 30  tailored resumes / month (single + batch share this pool)
    *   PREMIUM  / COVER_LETTER             → 15  cover letters / month
    *   PREMIUM  / RESUME_BATCH_GENERATION  → 10  batch JOBS / month (structural cap on batch UX, NOT a separate resume budget)
+   *   FREEMIUM / JOB_RELEVANCE_SCORE      → 10  fit checks / month
+   *   PREMIUM  / JOB_RELEVANCE_SCORE      → 100 fit checks / month
    *
    * Shared-pool semantics:
    *   - Single tailoring → +1 RESUME_GENERATION
@@ -529,6 +531,10 @@ export class RateLimitService {
    *     resume successfully produced inside the batch (so a 3-job batch costs 3 from the monthly 30).
    *   - Batch route pre-checks both `currentUsage(RESUME_GENERATION) + N ≤ 30` and
    *     `currentUsage(RESUME_BATCH_GENERATION) + 1 ≤ 10` before enqueueing.
+   *   - Standalone /relevance call → +1 JOB_RELEVANCE_SCORE
+   *   - Orchestrator-internal call during tailoring → +1 JOB_RELEVANCE_SCORE
+   *     (preview-then-tailor on the same JD costs 1 total — the second call
+   *     is a cache hit, which does not record usage)
    *
    * Intentional omissions:
    *   - FREEMIUM / RESUME_BATCH_GENERATION: blocked at route level by PremiumUserGuard
