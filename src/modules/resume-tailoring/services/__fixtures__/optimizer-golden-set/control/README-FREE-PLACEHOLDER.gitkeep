@@ -1,0 +1,6 @@
+This directory holds golden-set fixtures for the `control` A/B variant of the
+resume optimizer. The variant is currently dark-launched (weight=0) so no
+fixture is required by the coverage gate. If you ever flip `control` back on
+(weight > 0), the coverage gate in
+`../../optimizer-golden-set.spec.ts` will fail until at least one `.json`
+fixture exists alongside this placeholder.

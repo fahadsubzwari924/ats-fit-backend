@@ -36,6 +36,7 @@ import { AB_EXPERIMENT_KEYS } from '../constants/ab-experiments.constants';
 import { ResumeOptimizationJsonSchema } from '../types/resume-optimization.json-schema';
 import { OPTIMIZATION_PROMPT_VERSION } from '../../../shared/constants/prompt-versions.constants';
 import { RETURN_OPTIMIZED_RESUME_TOOL } from '../types/claude-tools';
+import { ResumeOptimizationResultSchema } from '../schemas/resume-optimization-result.schema';
 
 // changesDiff has been removed from the AI response — it is computed
 // programmatically in a background Bull job (ChangesDiffProcessor).
@@ -568,73 +569,38 @@ export class ResumeOptimizerService {
     }
   }
 
-  /**
-   * Validate the parsed optimization result structure
-   */
-  private validateOptimizationResult(result: any): void {
-    const requiredFields = ['optimizedContent', 'optimizationMetrics'];
+  private validateOptimizationResult(result: unknown): void {
+    const parsed = ResumeOptimizationResultSchema.safeParse(result);
+    if (parsed.success) return;
 
-    for (const field of requiredFields) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      if (!result[field]) {
-        throw new InternalServerErrorException(
-          `Missing required field in AI response: ${field}`,
-          ERROR_CODES.MISSING_REQUIRED_AI_FIELD,
-        );
-      }
-    }
-
-    // Validate optimizedContent structure
-    const contentFields = [
-      'title',
-      'contactInfo',
-      'summary',
-      'skills',
-      'experience',
-      'education',
-      'certifications',
-    ];
-
-    for (const field of contentFields) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      if (result.optimizedContent[field] === undefined) {
-        throw new InternalServerErrorException(
-          `Missing required field in AI response: optimizedContent.${field}`,
-          ERROR_CODES.MISSING_REQUIRED_AI_FIELD,
-        );
-      }
-    }
-
-    // Validate metrics
-    const metricsFields = [
-      'keywordsAdded',
-      'sectionsOptimized',
-      'achievementsQuantified',
-      'skillsAligned',
-      'confidenceScore',
-    ];
-
-    for (const field of metricsFields) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      if (typeof result.optimizationMetrics[field] !== 'number') {
-        throw new BadRequestException(
-          `Invalid metric field: ${field}`,
-          ERROR_CODES.INVALID_METRIC_FIELD,
-        );
-      }
-    }
+    const issue = parsed.error.issues[0];
+    const path = issue.path.join('.') || '(root)';
 
     if (
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      result.optimizationMetrics.confidenceScore < 0 ||
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      result.optimizationMetrics.confidenceScore > 100
+      (issue.code === 'too_small' || issue.code === 'too_big') &&
+      path === 'optimizationMetrics.confidenceScore'
     ) {
       throw new BadRequestException(
         'Invalid confidence score',
         ERROR_CODES.INVALID_CONFIDENCE_SCORE,
       );
     }
+
+    if (
+      issue.code === 'invalid_type' &&
+      path.startsWith('optimizationMetrics.')
+    ) {
+      const field = path.split('.').slice(1).join('.');
+      throw new BadRequestException(
+        `Invalid metric field: ${field}`,
+        ERROR_CODES.INVALID_METRIC_FIELD,
+      );
+    }
+
+    throw new InternalServerErrorException(
+      `Missing or invalid AI response field: ${path}`,
+      ERROR_CODES.MISSING_REQUIRED_AI_FIELD,
+    );
   }
 
   private sanitizeSummary(summary: string): string {

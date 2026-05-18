@@ -222,6 +222,101 @@ describe('ResumeOptimizerService', () => {
     });
   });
 
+  describe('validateOptimizationResult (Zod)', () => {
+    const invokeValidator = (result: unknown): void =>
+      (service as any).validateOptimizationResult(result);
+
+    const expectMissingFieldOnPath = (
+      result: unknown,
+      pathFragment: string,
+    ) => {
+      let caught: unknown;
+      try {
+        invokeValidator(result);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(InternalServerErrorException);
+      const body = (caught as CustomHttpException).getResponse() as {
+        errorCode?: string;
+        message?: string;
+      };
+      expect(body.errorCode).toBe(ERROR_CODES.MISSING_REQUIRED_AI_FIELD);
+      expect(body.message).toContain(pathFragment);
+    };
+
+    it('throws MISSING_REQUIRED_AI_FIELD when optimizedContent is missing', () => {
+      expectMissingFieldOnPath(
+        { optimizationMetrics: buildValidOptimizationMetrics() },
+        'optimizedContent',
+      );
+    });
+
+    it('throws MISSING_REQUIRED_AI_FIELD when optimizedContent is the wrong type (number)', () => {
+      expectMissingFieldOnPath(
+        {
+          optimizedContent: 42,
+          optimizationMetrics: buildValidOptimizationMetrics(),
+        },
+        'optimizedContent',
+      );
+    });
+
+    it('throws MISSING_REQUIRED_AI_FIELD with nested path when contactInfo.email is missing', () => {
+      const optimizedContent = buildValidOptimizedContent();
+      delete (optimizedContent.contactInfo as { email?: string }).email;
+      expectMissingFieldOnPath(
+        {
+          optimizedContent,
+          optimizationMetrics: buildValidOptimizationMetrics(),
+        },
+        'optimizedContent.contactInfo.email',
+      );
+    });
+
+    it('throws BadRequestException INVALID_CONFIDENCE_SCORE when confidenceScore is out of range', () => {
+      let caught: unknown;
+      try {
+        invokeValidator({
+          optimizedContent: buildValidOptimizedContent(),
+          optimizationMetrics: {
+            ...buildValidOptimizationMetrics(),
+            confidenceScore: 150,
+          },
+        });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(BadRequestException);
+      const body = (caught as CustomHttpException).getResponse() as {
+        errorCode?: string;
+      };
+      expect(body.errorCode).toBe(ERROR_CODES.INVALID_CONFIDENCE_SCORE);
+    });
+
+    it('throws BadRequestException INVALID_METRIC_FIELD when a metric is the wrong type', () => {
+      let caught: unknown;
+      try {
+        invokeValidator({
+          optimizedContent: buildValidOptimizedContent(),
+          optimizationMetrics: {
+            ...buildValidOptimizationMetrics(),
+            keywordsAdded: 'five',
+          },
+        });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(BadRequestException);
+      const body = (caught as CustomHttpException).getResponse() as {
+        errorCode?: string;
+        message?: string;
+      };
+      expect(body.errorCode).toBe(ERROR_CODES.INVALID_METRIC_FIELD);
+      expect(body.message).toContain('keywordsAdded');
+    });
+  });
+
   describe('isRetryableOptimizerError', () => {
     it('returns true for MISSING_REQUIRED_AI_FIELD', () => {
       const err = new InternalServerErrorException(
