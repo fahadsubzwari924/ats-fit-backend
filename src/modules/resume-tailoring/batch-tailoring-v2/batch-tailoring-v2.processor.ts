@@ -176,7 +176,14 @@ export class BatchTailoringV2Processor {
         job.data,
       );
 
-      // Run the resume generation pipeline
+      // Run the resume generation pipeline.
+      //
+      // `acknowledgeLowFit` is threaded from the original batch enqueue. When
+      // the user explicitly dismissed the batch-level low-fit warning, the
+      // orchestrator's per-job relevance gate must NOT abort jobs with
+      // verdict=low — the user already saw and accepted that risk at the
+      // batch gate. Without this, a 3-job batch where one job scores low
+      // completes only 2 jobs and silently drops the third.
       const result = await this.orchestrator.generateOptimizedResume({
         jobDescription: job.data.jobDescription,
         jobPosition: job.data.jobPosition,
@@ -184,6 +191,7 @@ export class BatchTailoringV2Processor {
         templateId: job.data.templateId,
         resumeId: job.data.resumeId,
         userContext: job.data.userContext,
+        acknowledgeLowFit: job.data.acknowledgeLowFit,
       });
 
       if (result.kind !== 'pdf') return;

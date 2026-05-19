@@ -32,11 +32,12 @@ export interface FormattedFeatureUsage {
 
 /**
  * Aggregated usage stats returned by getUserUsageStats().
- * FREEMIUM: resume_generation + cover_letter.
- * PREMIUM:  resume_generation + cover_letter + resume_batch_generation.
+ * FREEMIUM: resume_generation + cover_letter + job_relevance_score.
+ * PREMIUM:  resume_generation + cover_letter + resume_batch_generation + job_relevance_score.
  */
 export interface UserUsageStats {
   resume_generation: RateLimitResult;
   cover_letter: RateLimitResult;
+  job_relevance_score: RateLimitResult;
   resume_batch_generation?: RateLimitResult;
 }

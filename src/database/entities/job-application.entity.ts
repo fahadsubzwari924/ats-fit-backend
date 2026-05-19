@@ -22,6 +22,7 @@ import type { IJobApplicationContact } from '../../modules/job-application/inter
 import type { IJobApplicationAttachment } from '../../modules/job-application/interfaces/job-application-attachment.interface';
 import type { IJobApplicationStatusHistoryEntry } from '../../modules/job-application/interfaces/job-application-status-history.interface';
 import type { IJobApplicationCompensationOffer } from '../../modules/job-application/interfaces/job-application-compensation-offer.interface';
+import { decimalToNumberTransformer } from '../../shared/utils/decimal-numeric.transformer';
 
 export enum ApplicationStatus {
   WISHLIST = 'wishlist',
@@ -81,12 +82,18 @@ export class JobApplication {
   work_mode: WorkMode;
 
   // ── Compensation (posted) ───────────────────────────────────
+  // `transformer: decimalToNumberTransformer` is required: Postgres `numeric`
+  // is returned by the driver as a string (precision-preserving), which makes
+  // the TS `: number` annotation a lie at runtime. Without coercion on read,
+  // a load → edit → save round-trip emits `"3000.00"` (string) back to the
+  // create/update DTO, where `@IsNumber()` rejects it.
   @Column({
     name: 'salary_min',
     type: 'decimal',
     precision: 12,
     scale: 2,
     nullable: true,
+    transformer: decimalToNumberTransformer,
   })
   salary_min: number;
 
@@ -96,6 +103,7 @@ export class JobApplication {
     precision: 12,
     scale: 2,
     nullable: true,
+    transformer: decimalToNumberTransformer,
   })
   salary_max: number;
 

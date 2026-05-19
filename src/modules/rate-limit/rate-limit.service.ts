@@ -356,8 +356,13 @@ export class RateLimitService {
           FeatureType.RESUME_GENERATION,
           FeatureType.COVER_LETTER,
           FeatureType.RESUME_BATCH_GENERATION,
+          FeatureType.JOB_RELEVANCE_SCORE,
         ]
-      : [FeatureType.RESUME_GENERATION, FeatureType.COVER_LETTER];
+      : [
+          FeatureType.RESUME_GENERATION,
+          FeatureType.COVER_LETTER,
+          FeatureType.JOB_RELEVANCE_SCORE,
+        ];
 
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
@@ -393,6 +398,12 @@ export class RateLimitService {
       ),
       cover_letter: this.computeRateLimitResult(
         FeatureType.COVER_LETTER,
+        configMap,
+        usageMap,
+        period,
+      ),
+      job_relevance_score: this.computeRateLimitResult(
+        FeatureType.JOB_RELEVANCE_SCORE,
         configMap,
         usageMap,
         period,
@@ -442,6 +453,7 @@ export class RateLimitService {
     const entries: FormattedFeatureUsage[] = [
       toEntry(FeatureType.RESUME_GENERATION, stats.resume_generation),
       toEntry(FeatureType.COVER_LETTER, stats.cover_letter),
+      toEntry(FeatureType.JOB_RELEVANCE_SCORE, stats.job_relevance_score),
     ];
 
     if (stats.resume_batch_generation) {

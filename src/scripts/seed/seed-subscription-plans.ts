@@ -25,6 +25,7 @@ export async function seedSubscriptionPlans(dataSource: DataSource) {
       features: [
         '30 tailored resumes per month — single or batch',
         '15 cover letters per month',
+        '100 job-fit checks per month',
         {
           title: 'Batch tailoring',
           subitems: [
@@ -50,6 +51,7 @@ export async function seedSubscriptionPlans(dataSource: DataSource) {
       features: [
         '30 tailored resumes per month — single or batch',
         '15 cover letters per month',
+        '100 job-fit checks per month',
         {
           title: 'Batch tailoring',
           subitems: [

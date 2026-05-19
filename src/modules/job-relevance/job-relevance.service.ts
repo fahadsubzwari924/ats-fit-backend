@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JobRelevanceCacheService } from './cache/job-relevance-cache.service';
 import { JobRelevanceKeywordFastPathService } from './fast-path/job-relevance-keyword-fast-path.service';
@@ -25,6 +25,10 @@ export class JobRelevanceService {
     private readonly fastPath: JobRelevanceKeywordFastPathService,
     private readonly llm: JobRelevanceLlmClient,
     private readonly config: ConfigService,
+    // forwardRef matches the module-level forwardRef on RateLimitModule —
+    // both ends of a cyclic dep need the deferral so Nest can resolve the
+    // provider after the cycle settles. See job-relevance.module.ts.
+    @Inject(forwardRef(() => RateLimitService))
     private readonly rateLimit: RateLimitService,
   ) {}
 
