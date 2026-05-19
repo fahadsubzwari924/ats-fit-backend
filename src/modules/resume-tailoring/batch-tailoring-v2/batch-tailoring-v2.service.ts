@@ -147,6 +147,7 @@ export class BatchTailoringV2Service {
         templateId: args.templateId,
         resumeId: args.resumeId,
         userContext: args.userContext,
+        acknowledgeLowFit: args.acknowledgeLowFit,
       }),
       opts: {
         // The processor's catch block persists failures and emits JOB_FAILED
@@ -413,6 +414,7 @@ export class BatchTailoringV2Service {
       templateId: string;
       resumeId?: string;
       userContext: UserContext;
+      acknowledgeLowFit?: boolean;
     },
   ): BatchJobPayloadV2 {
     return {
@@ -427,6 +429,7 @@ export class BatchTailoringV2Service {
       templateId: args.templateId,
       resumeId: args.resumeId,
       userContext: args.userContext,
+      acknowledgeLowFit: args.acknowledgeLowFit,
     };
   }
 
@@ -568,6 +571,7 @@ export class BatchTailoringV2Service {
     return {
       jobPosition: job.job_position,
       companyName: job.company_name,
+      jobDescription: job.job_description,
       status: 'success',
       resumeGenerationId: rg?.id,
       filename: generateResumeFilename(candidateName, job.job_position),

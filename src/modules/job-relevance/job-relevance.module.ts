@@ -7,9 +7,17 @@ import { JobRelevanceKeywordFastPathService } from './fast-path/job-relevance-ke
 import { JobRelevanceLlmClient } from './clients/job-relevance-llm.client';
 import { JOB_RELEVANCE_CONSTANTS } from './constants/job-relevance.constants';
 import { ResumeTailoringModule } from '../resume-tailoring/resume-tailoring.module';
+import { RateLimitModule } from '../rate-limit/rate-limit.module';
 
 @Module({
-  imports: [forwardRef(() => ResumeTailoringModule)],
+  imports: [
+    forwardRef(() => ResumeTailoringModule),
+    // RateLimitModule must be lazily resolved — the import graph cycles
+    // through RateLimitModule → UserModule → ResumeTailoringModule → back
+    // here. Without forwardRef, NestJS scans this module before
+    // RateLimitModule's export evaluates, leaving imports[1] = undefined.
+    forwardRef(() => RateLimitModule),
+  ],
   providers: [
     {
       provide: JOB_RELEVANCE_CONSTANTS.DB.REDIS_PROVIDER_TOKEN,

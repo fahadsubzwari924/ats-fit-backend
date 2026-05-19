@@ -10,6 +10,7 @@ import { Repository, SelectQueryBuilder } from 'typeorm';
 import {
   JobApplication,
   ApplicationStatus,
+  ApplicationSource,
 } from '../../database/entities/job-application.entity';
 import { ResumeGeneration } from '../../database/entities/resume-generations.entity';
 import { User } from '../../database/entities/user.entity';
@@ -27,6 +28,7 @@ import { JOB_APPLICATION_FIELD_CONFIG } from './config/field-selection.config';
 import { resolveAppliedAtOnCreate } from './utils/resolve-applied-at-on-create';
 import { appendStatusHistoryIfChanged } from './services/job-application-status-history.helper';
 import type { IJobApplicationStatusHistoryEntry } from './interfaces/job-application-status-history.interface';
+import type { ITrackTailoringApplication } from './interfaces/track-tailoring-application.interface';
 
 const JOB_APPLICATION_LIST_SORT_COLUMNS = new Set([
   'created_at',
@@ -172,10 +174,13 @@ export class JobApplicationService {
         throw error;
       }
       this.logger.error('Error creating job application:', error);
-      throw new BadRequestException(
-        'Failed to create job application',
-        ERROR_CODES.BAD_REQUEST,
-      );
+      // `cause` is load-bearing — `trackTailoringApplication` unwraps it via
+      // `isUniqueResumeGenerationConflict` to detect Postgres 23505 on the
+      // `uq_job_applications_resume_generation_id` index. Do not drop it.
+      throw new BadRequestException('Failed to create job application', {
+        description: ERROR_CODES.BAD_REQUEST,
+        cause: error,
+      });
     }
   }
 
@@ -447,6 +452,95 @@ export class JobApplicationService {
         ERROR_CODES.BAD_REQUEST,
       );
     }
+  }
+
+  /**
+   * Get all unique tags used by a user across their job applications
+   */
+  async getUserTags(userId: string): Promise<string[]> {
+    try {
+      this.logger.log(`Fetching unique tags for user: ${userId}`);
+
+      const result = await this.jobApplicationRepository
+        .createQueryBuilder('ja')
+        .select('DISTINCT unnest(ja.tags)', 'tag')
+        .where('ja.user_id = :userId', { userId })
+        .andWhere('ja.tags IS NOT NULL')
+        .getRawMany<{ tag: string }>();
+
+      const tags = result
+        .map((row) => row.tag)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+
+      this.logger.log(`Found ${tags.length} unique tags for user: ${userId}`);
+      return tags;
+    } catch (error) {
+      this.logger.error('Error fetching user tags:', error);
+      throw new BadRequestException(
+        'Failed to fetch tags',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
+   * Auto-track a job application after a successful resume tailoring.
+   *
+   * Single source of truth for "generated resume becomes tracked application".
+   * Idempotent via the partial unique index
+   * `uq_job_applications_resume_generation_id` — duplicate-key violations are
+   * swallowed so the same tailoring (retried batch job, double-fire from
+   * orchestrator) never produces multiple rows.
+   *
+   * Returns the persisted row on first call, `null` when the unique index
+   * rejected the insert (already tracked).
+   */
+  async trackTailoringApplication(
+    input: ITrackTailoringApplication,
+  ): Promise<JobApplication | null> {
+    this.logger.log(
+      `Tracking tailoring application for user ${input.userId}, resume_generation ${input.resumeGenerationId}`,
+    );
+
+    try {
+      return await this.createJobApplication({
+        user_id: input.userId,
+        company_name: input.companyName,
+        job_position: input.jobPosition,
+        job_description: input.jobDescription,
+        application_source: ApplicationSource.TAILORED_RESUME,
+        status: ApplicationStatus.APPLIED,
+        resume_generation_id: input.resumeGenerationId,
+        applied_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      if (this.isUniqueResumeGenerationConflict(error)) {
+        this.logger.log(
+          `Tailoring application already tracked for resume_generation ${input.resumeGenerationId} — skipping`,
+        );
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  private isUniqueResumeGenerationConflict(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    // `createJobApplication` wraps unknown errors as `BadRequestException`
+    // with the original error attached as `cause`. Unwrap once if present so
+    // we can still see the Postgres driverError/code/constraint.
+    const raw = (error as { cause?: unknown }).cause ?? error;
+    if (!raw || typeof raw !== 'object') return false;
+    const driverError = (raw as { driverError?: unknown }).driverError;
+    const candidate = (driverError ?? raw) as {
+      code?: string;
+      constraint?: string;
+    };
+    return (
+      candidate.code === '23505' &&
+      candidate.constraint === 'uq_job_applications_resume_generation_id'
+    );
   }
 
   private async validateCreateJobApplicationRequest(

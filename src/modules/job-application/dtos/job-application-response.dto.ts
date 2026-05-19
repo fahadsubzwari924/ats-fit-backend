@@ -224,3 +224,13 @@ export class JobApplicationStatsResponseDto {
   @ApiProperty({ description: 'Monthly application trend' })
   monthly_trend: { month: string; count: number }[];
 }
+
+export class JobApplicationTagsResponseDto {
+  @ApiProperty({
+    description:
+      'Unique tags used across all job applications, sorted alphabetically',
+    type: [String],
+    example: ['backend', 'contract', 'remote'],
+  })
+  tags: string[];
+}

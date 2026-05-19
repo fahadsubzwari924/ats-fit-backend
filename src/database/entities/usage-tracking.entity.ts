@@ -13,6 +13,7 @@ export enum FeatureType {
   JOB_APPLICATION_TRACKING = 'job_application_tracking',
   COVER_LETTER = 'cover_letter',
   RESUME_BATCH_GENERATION = 'resume_batch_generation',
+  JOB_RELEVANCE_SCORE = 'job_relevance_score',
 }
 
 @Entity({ name: 'usage_tracking' })

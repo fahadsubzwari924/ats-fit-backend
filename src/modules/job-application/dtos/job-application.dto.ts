@@ -240,12 +240,12 @@ export class UpdateJobApplicationDto {
   // ── Compensation (posted) ──────────────────────────────────
   @IsOptional()
   @IsNumber({}, { message: 'salary_min must be a number' })
-  @Min(0)
+  @Min(0, { message: 'Minimum salary cannot be negative' })
   salary_min?: number;
 
   @IsOptional()
   @IsNumber({}, { message: 'salary_max must be a number' })
-  @Min(0)
+  @Min(0, { message: 'Maximum salary cannot be negative' })
   salary_max?: number;
 
   @IsOptional()

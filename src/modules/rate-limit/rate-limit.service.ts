@@ -356,8 +356,13 @@ export class RateLimitService {
           FeatureType.RESUME_GENERATION,
           FeatureType.COVER_LETTER,
           FeatureType.RESUME_BATCH_GENERATION,
+          FeatureType.JOB_RELEVANCE_SCORE,
         ]
-      : [FeatureType.RESUME_GENERATION, FeatureType.COVER_LETTER];
+      : [
+          FeatureType.RESUME_GENERATION,
+          FeatureType.COVER_LETTER,
+          FeatureType.JOB_RELEVANCE_SCORE,
+        ];
 
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
@@ -393,6 +398,12 @@ export class RateLimitService {
       ),
       cover_letter: this.computeRateLimitResult(
         FeatureType.COVER_LETTER,
+        configMap,
+        usageMap,
+        period,
+      ),
+      job_relevance_score: this.computeRateLimitResult(
+        FeatureType.JOB_RELEVANCE_SCORE,
         configMap,
         usageMap,
         period,
@@ -442,6 +453,7 @@ export class RateLimitService {
     const entries: FormattedFeatureUsage[] = [
       toEntry(FeatureType.RESUME_GENERATION, stats.resume_generation),
       toEntry(FeatureType.COVER_LETTER, stats.cover_letter),
+      toEntry(FeatureType.JOB_RELEVANCE_SCORE, stats.job_relevance_score),
     ];
 
     if (stats.resume_batch_generation) {
@@ -522,6 +534,8 @@ export class RateLimitService {
    *   PREMIUM  / RESUME_GENERATION        → 30  tailored resumes / month (single + batch share this pool)
    *   PREMIUM  / COVER_LETTER             → 15  cover letters / month
    *   PREMIUM  / RESUME_BATCH_GENERATION  → 10  batch JOBS / month (structural cap on batch UX, NOT a separate resume budget)
+   *   FREEMIUM / JOB_RELEVANCE_SCORE      → 10  fit checks / month
+   *   PREMIUM  / JOB_RELEVANCE_SCORE      → 100 fit checks / month
    *
    * Shared-pool semantics:
    *   - Single tailoring → +1 RESUME_GENERATION
@@ -529,6 +543,10 @@ export class RateLimitService {
    *     resume successfully produced inside the batch (so a 3-job batch costs 3 from the monthly 30).
    *   - Batch route pre-checks both `currentUsage(RESUME_GENERATION) + N ≤ 30` and
    *     `currentUsage(RESUME_BATCH_GENERATION) + 1 ≤ 10` before enqueueing.
+   *   - Standalone /relevance call → +1 JOB_RELEVANCE_SCORE
+   *   - Orchestrator-internal call during tailoring → +1 JOB_RELEVANCE_SCORE
+   *     (preview-then-tailor on the same JD costs 1 total — the second call
+   *     is a cache hit, which does not record usage)
    *
    * Intentional omissions:
    *   - FREEMIUM / RESUME_BATCH_GENERATION: blocked at route level by PremiumUserGuard

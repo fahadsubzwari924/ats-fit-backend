@@ -96,6 +96,10 @@ export class JobRelevanceKeywordFastPathService {
       },
       gaps,
       strengths,
+      // Fast-path uses keyword overlap, not per-tech analysis. Empty array
+      // signals "no structured enumeration was performed" to downstream
+      // auditing tools. Distinct from "LLM enumerated and found none".
+      mandatoryTechs: [],
       engine: JobRelevanceEngine.KEYWORD_FAST_PATH,
       model: null,
       latencyMs: 0,
