@@ -21,13 +21,27 @@
 | Cancellation | `mode: scheduled` — access retained until period end |
 | HTTP client | Official `creem` npm SDK |
 
+## Amendments from Task 1 (SDK ground truth, verified)
+
+`docs/specs/creem-sdk-surface.md` pins `creem@1.6.0`'s real surface; it supersedes any signature guessed elsewhere in this plan.
+
+| Assumed in original plan | Actual (verified) |
+|---|---|
+| `new Creem({ serverURL })` | `new Creem({ apiKey, server: 'prod' \| 'test' })` — `serverIdx` does not exist |
+| `createCheckout(...)` | `creem.checkouts.create(request, options?)` |
+| `cancelSubscription(id)` | `creem.subscriptions.cancel(id, entity, options?)` — **second arg required** |
+| `generateCustomerLinks(...)` | `creem.customers.generateBillingLinks(request, options?)` |
+| single `creem-signature` header | **two** schemes; see below |
+
+**Webhook verification decision (locked):** hand-roll both schemes in our own gateway. `import { verifyWebhookSignature } from 'creem/webhooks'` fails `TS2307` under this repo's `tsconfig.json` (no `moduleResolution` → Node10 classic, which ignores the package `exports` map), and bumping `moduleResolution` repo-wide is out of scope for a payments PR. We do not know which scheme the dashboard emits until Task 12, so support both and fail closed.
+
 ## Architectural notes carried into the tasks
 
 1. **`subscription.paid` fires on every renewal with the same subscription ID.** Idempotency must key on the *transaction* ID, not the subscription ID, or renewals after the first get silently swallowed.
 2. **Creem keeps one subscription row across renewals; LemonSqueezy created a new one.** `replacement-quota.service.ts:203` explicitly relies on `starts_at` being the *current* period start. Under Creem, `starts_at` must be refreshed from `current_period_start_date` on every `subscription.paid`, otherwise the monthly replacement quota never resets.
 3. **`subscription.scheduled_cancel` ≠ cancelled.** It must flag `is_cancelled` while leaving `is_active` true; the downgrade happens on `subscription.expired`.
 4. **Pre-existing security bug fixed in-flight:** `subscription.service.ts:500` returns `true` when the signature header is absent, on a `@Public()` endpoint. Anyone can forge a payment event today.
-5. **SDK surface is unverified.** Published docs and the SDK README disagree (`checkouts.create` vs `createCheckout`, `customers.generateBillingLinks` vs `generateCustomerLinks`). Task 1 pins the real surface before any adapter code is written; `CreemService` is the only file allowed to reference SDK symbols.
+5. **SDK surface is now pinned (Task 1 complete).** Published docs and the SDK README disagreed; `docs/specs/creem-sdk-surface.md` records the verified truth from `node_modules/creem@1.6.0` with file:line citations. `CreemService` remains the only file allowed to reference SDK symbols.
 
 ## File structure
 
@@ -51,7 +65,7 @@
 
 ---
 
-### Task 1: Pin the Creem SDK and record its real surface
+### Task 1: Pin the Creem SDK and record its real surface — ✅ COMPLETE (`5bdbb0d`)
 
 **path:** `package.json`, `docs/specs/creem-sdk-surface.md`
 **intent:** Install `creem`, and capture the actual method names/argument shapes from the shipped `.d.ts` so no later task guesses.
@@ -148,12 +162,17 @@ export interface NormalizedWebhookEvent {
 - [ ] **Step 1:** In `payment-gateway.interface.ts`, make verification required and add parsing:
 
 ```ts
-  /** Verify webhook authenticity against the raw request body. */
-  verifyWebhookSignature(signature: string, rawBody: string): boolean;
+/** Subset of incoming request headers needed for signature verification. */
+export type WebhookHeaders = Record<string, string | string[] | undefined>;
+
+  /** Verify webhook authenticity from the request headers + raw body. */
+  verifyWebhookSignature(headers: WebhookHeaders, rawBody: string): boolean;
 
   /** Translate a provider webhook payload into the internal event shape. */
   parseWebhook(rawPayload: unknown): NormalizedWebhookEvent;
 ```
+
+Creem supports two signature schemes keyed off *different* headers, so the whole header bag must be passed — a single `signature: string` parameter cannot express this. Update `PaymentService.verifyWebhookSignature` (`src/shared/services/payment.service.ts:154`) to the same shape, and drop its `return true` fallback for gateways that don't implement verification — verification is now a required interface member.
 
 - [ ] **Step 2:** Add `CREEM = 'creem'` to `PaymentProvider`.
 - [ ] **Step 3:** Add `SCHEDULED_CANCEL = 'scheduled_cancel'` to `SubscriptionStatus`.
@@ -175,8 +194,13 @@ export interface NormalizedWebhookEvent {
 
 ```ts
 const isProd = this.configService.get<string>('NODE_ENV') === 'production';
-const serverURL = isProd ? 'https://api.creem.io' : 'https://test-api.creem.io';
+this.client = new Creem({
+  apiKey: this.configService.get<string>('CREEM_API_KEY'),
+  server: isProd ? 'prod' : 'test',
+});
 ```
+
+`server` is a named key (`'prod' | 'test'`), verified at `node_modules/creem/dist/commonjs/lib/config.d.ts:25`. There is no `serverIdx`. Passing `server` is preferred over a raw `serverURL` so the host mapping stays the SDK's problem.
 
 - [ ] **Step 2:** Expose exactly four methods, each translating SDK errors into the repo's `custom-http-exceptions` per `docs/ERROR-HANDLING.md`:
   - `createCheckoutSession({ productId, email, metadata, discountCode, successUrl })`
@@ -224,7 +248,7 @@ const CREEM_STATUS_MAP: Record<string, SubscriptionStatus> = {
 };
 ```
 
-- [ ] **Step 2:** Implement the gateway. `createCheckout` maps `variantId → productId`, `customData → metadata`, `discountCode → discountCode`. `cancelSubscription` passes `mode: 'scheduled'`. `createCustomerPortal` calls the billing-link method.
+- [ ] **Step 2:** Implement the gateway. `createCheckout` maps `variantId → productId`, `customData → metadata`, `discountCode → discountCode`. `cancelSubscription` calls `creem.subscriptions.cancel(id, { mode: 'scheduled' })` — the second argument is **required** (`node_modules/creem/dist/commonjs/sdk/subscriptions.d.ts:28`), so omitting it is a type error, not a default. `createCustomerPortal` calls the billing-link method.
 - [ ] **Step 3:** Keep `getCustomerSubscriptions` returning `[]` with a warn log — it is unused today and out of scope.
 - [ ] **Step 4:** `npm run build`, commit.
 
@@ -243,6 +267,8 @@ const CREEM_STATUS_MAP: Record<string, SubscriptionStatus> = {
   - a body signed with the correct secret verifies;
   - a tampered body fails;
   - **an empty/missing signature fails** (this is the bypass bug — must be asserted);
+  - a body signed under the standard-webhook scheme verifies, and one with a timestamp older than 300s is rejected as a replay;
+  - a request carrying neither `webhook-signature` nor `creem-signature` is rejected;
   - `subscription.paid` parses to `SUBSCRIPTION_RENEWED` with `gatewayTransactionId` from `object.last_transaction_id`;
   - `checkout.completed` reads the subscription ID from `object.subscription.id`;
   - `subscription.scheduled_cancel` parses to `SUBSCRIPTION_CANCEL_SCHEDULED`, not `SUBSCRIPTION_CANCELLED`;
@@ -250,7 +276,12 @@ const CREEM_STATUS_MAP: Record<string, SubscriptionStatus> = {
 
 - [ ] **Step 2: Run and confirm failure** — `npx jest src/modules/subscription/tests/creem-webhook.spec.ts` → FAIL.
 
-- [ ] **Step 3: Implement `verifyWebhookSignature`.** HMAC-SHA256 hex over the raw body, compared with `crypto.timingSafeEqual` inside a length guard. No environment escape hatch, no empty-signature pass.
+- [ ] **Step 3: Implement `verifyWebhookSignature(headers, rawBody)` supporting both Creem schemes**, selected by which header is present. Algorithms are documented in `docs/specs/creem-sdk-surface.md` (read off the SDK's compiled `webhooks.js`); do not invent them:
+
+  - **Standard-webhook scheme** — headers `webhook-id`, `webhook-timestamp`, `webhook-signature`. Strip the `whsec_` prefix from the secret and base64-decode it; sign `` `${id}.${timestamp}.${rawBody}` `` with HMAC-SHA256; compare base64, accounting for the space-delimited, version-tagged (`v1,<sig>`) header format. Reject when `|now - timestamp| > 300s` (replay window).
+  - **Legacy scheme** — header `creem-signature` or `x-creem-signature`. HMAC-SHA256 of the raw body with the raw secret, compared as hex.
+  - **Neither header present → reject.** No environment escape hatch, no empty-signature pass.
+  - Use `crypto.timingSafeEqual` inside a length guard on both paths.
 
 - [ ] **Step 4: Implement `parseWebhook`** against the Creem envelope `{ id, eventType, created_at, object }` using this map:
 
@@ -284,8 +315,8 @@ Field extraction: `gatewaySubscriptionId` = `object.id` for `subscription.*`, `o
 **agency:** `Security Engineer` / `@agency-security-engineer.mdc`
 **docs:** `docs/SECURITY.md`, `docs/API-PATTERNS.md`
 
-- [ ] **Step 1:** Change the handler signature: read `@Headers('creem-signature')`, accept the body as `unknown` (drop `PaymentConfirmationDto`), keep `RawBodyRequest`.
-- [ ] **Step 2:** Verify via `this.paymentService.verifyWebhookSignature(signature, req.rawBody.toString('utf8'))` and reject with 400 before any state mutation. If `req.rawBody` is absent, reject — never fall back to `JSON.stringify(payload)`, which does not round-trip byte-for-byte.
+- [ ] **Step 1:** Change the handler signature: take the whole header bag via `@Headers() headers: WebhookHeaders` (not a single named header — scheme selection needs all of them), accept the body as `unknown` (drop `PaymentConfirmationDto`), keep `RawBodyRequest`.
+- [ ] **Step 2:** Verify via `this.paymentService.verifyWebhookSignature(headers, req.rawBody.toString('utf8'))` and reject with 400 before any state mutation. If `req.rawBody` is absent, reject — never fall back to `JSON.stringify(payload)`, which does not round-trip byte-for-byte.
 - [ ] **Step 3:** Parse via `this.paymentService.parseWebhook(payload)`, then resolve user/plan from `event.metadata.user_id` / `event.metadata.plan_id`, falling back to `event.customerEmail` for user lookup.
 - [ ] **Step 4:** Rewrite `routeWebhookEvent` on `PaymentEventType`:
 
