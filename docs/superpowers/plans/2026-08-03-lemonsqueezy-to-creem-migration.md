@@ -35,6 +35,23 @@
 
 **Webhook verification decision (locked):** hand-roll both schemes in our own gateway. `import { verifyWebhookSignature } from 'creem/webhooks'` fails `TS2307` under this repo's `tsconfig.json` (no `moduleResolution` → Node10 classic, which ignores the package `exports` map), and bumping `moduleResolution` repo-wide is out of scope for a payments PR. We do not know which scheme the dashboard emits until Task 12, so support both and fail closed.
 
+## Build verification during the migration window (Tasks 2–10)
+
+Task 1 removed `@lemonsqueezy/lemonsqueezy.js` while `src/main.ts` and `lemon_squeezy.service.ts` still import it, so **`npm run build` is expected to be red until Task 11 deletes those files.** The baseline is exactly two errors:
+
+```
+src/main.ts:17:35 - error TS2307: Cannot find module '@lemonsqueezy/lemonsqueezy.js'
+src/modules/subscription/externals/services/lemon_squeezy.service.ts:9:8 - error TS2307: Cannot find module '@lemonsqueezy/lemonsqueezy.js'
+```
+
+Until Task 11, "the build passes" means **no errors other than those two**. Every task in this window verifies with:
+
+```bash
+npm run build 2>&1 | grep -E "error TS" | grep -v "@lemonsqueezy/lemonsqueezy.js"
+```
+
+Empty output = pass. Any line printed = a real regression you introduced. From Task 11 onward, the gate reverts to plain `npm run build` exiting 0.
+
 ## Architectural notes carried into the tasks
 
 1. **`subscription.paid` fires on every renewal with the same subscription ID.** Idempotency must key on the *transaction* ID, not the subscription ID, or renewals after the first get silently swallowed.
@@ -148,7 +165,7 @@ export interface NormalizedWebhookEvent {
 
 - [ ] **Step 3:** `npm run build` → expect clean compile. Commit.
 
-**verify:** `npm run build` exits 0.
+**verify:** `npm run build 2>&1 | grep -E "error TS" | grep -v "@lemonsqueezy/lemonsqueezy.js"` prints nothing (see "Build verification during the migration window").
 
 ---
 
@@ -210,7 +227,7 @@ this.client = new Creem({
 - [ ] **Step 3:** Build the success URL exactly as the old service did (`SUBSCRIPTION_SUCCESS_URL` + `?payment=success`) so the frontend's existing `?payment=success` check keeps working — Creem appends its own params additively.
 - [ ] **Step 4:** `npm run build`, then commit.
 
-**verify:** `npm run build` exits 0; `grep -rn "from 'creem'" src/` returns only `creem.service.ts`.
+**verify:** `npm run build 2>&1 | grep -E "error TS" | grep -v "@lemonsqueezy/lemonsqueezy.js"` prints nothing; `grep -rn "from 'creem'" src/` returns only `creem.service.ts`.
 
 ---
 
@@ -252,7 +269,7 @@ const CREEM_STATUS_MAP: Record<string, SubscriptionStatus> = {
 - [ ] **Step 3:** Keep `getCustomerSubscriptions` returning `[]` with a warn log — it is unused today and out of scope.
 - [ ] **Step 4:** `npm run build`, commit.
 
-**verify:** `npm run build` exits 0.
+**verify:** `npm run build 2>&1 | grep -E "error TS" | grep -v "@lemonsqueezy/lemonsqueezy.js"` prints nothing (see "Build verification during the migration window").
 
 ---
 
@@ -332,7 +349,7 @@ Field extraction: `gatewaySubscriptionId` = `object.id` for `subscription.*`, `o
 - [ ] **Step 5:** Return HTTP 200 for handled-but-unrouted events so Creem does not enter its 30s/1m/5m/1h retry cycle.
 - [ ] **Step 6:** `npm run build`, `npm run lint`, commit.
 
-**verify:** `npm run build` exits 0; `grep -n "x-signature\|PaymentConfirmationDto" src/modules/subscription/controllers/subscription.controller.ts` returns nothing.
+**verify:** `npm run build 2>&1 | grep -E "error TS" | grep -v "@lemonsqueezy/lemonsqueezy.js"` prints nothing; `grep -n "x-signature\|PaymentConfirmationDto" src/modules/subscription/controllers/subscription.controller.ts` returns nothing.
 
 ---
 
@@ -362,7 +379,7 @@ Without this, `ReplacementQuotaService.resolveMonthlyWindow` (`replacement-quota
 - [ ] **Step 5:** In `cancelUserSubscription` (`:411-462`), stop downgrading immediately. Call the gateway (scheduled), then set `is_cancelled = true` / `cancelled_at` / `status = SCHEDULED_CANCEL`, keep `is_active` true, and return. The downgrade now happens only via the `subscription.expired` webhook.
 - [ ] **Step 6:** `npm run build`, commit.
 
-**verify:** `npm run build` exits 0; `grep -n "LEMON_SQUEEZY\|lemonSqueezy" src/modules/subscription/services/subscription.service.ts` returns nothing.
+**verify:** `npm run build 2>&1 | grep -E "error TS" | grep -v "@lemonsqueezy/lemonsqueezy.js"` prints nothing; `grep -n "LEMON_SQUEEZY\|lemonSqueezy" src/modules/subscription/services/subscription.service.ts` returns nothing.
 
 ---
 
@@ -380,7 +397,7 @@ Without this, `ReplacementQuotaService.resolveMonthlyWindow` (`replacement-quota
 - [ ] **Step 5:** Plan resolution: `event.metadata.plan_id` first, then `findByProductId(event.gatewayProductId)` (renamed in Task 10).
 - [ ] **Step 6:** `npm run build`, commit.
 
-**verify:** `npm run build` exits 0; `grep -n "data?.attributes" src/modules/subscription/services/payment-history.service.ts` returns nothing.
+**verify:** `npm run build 2>&1 | grep -E "error TS" | grep -v "@lemonsqueezy/lemonsqueezy.js"` prints nothing; `grep -n "data?.attributes" src/modules/subscription/services/payment-history.service.ts` returns nothing.
 
 ---
 

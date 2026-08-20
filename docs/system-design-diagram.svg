@@ -1,0 +1,289 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1660" height="1180" viewBox="0 0 1660 1180" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <filter id="shadow" x="-6%" y="-6%" width="112%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 Z" fill="#334155"/>
+    </marker>
+    <marker id="arrowDash" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 Z" fill="#e11d48"/>
+    </marker>
+  </defs>
+
+  <rect width="1660" height="1180" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="40" y="48" font-size="30" font-weight="700" fill="#0f172a">Tairly — System Design</text>
+  <text x="40" y="72" font-size="14" fill="#64748b">AI resume-tailoring SaaS · Angular SPA + NestJS modular monolith · Railway / Cloudflare · async-first, single-source-of-truth</text>
+
+  <!-- Legend -->
+  <g font-size="11.5" fill="#475569">
+    <line x1="1190" y1="40" x2="1220" y2="40" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="1226" y="44">sync request / data path</text>
+    <line x1="1190" y1="62" x2="1220" y2="62" stroke="#e11d48" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrowDash)"/>
+    <text x="1226" y="66">external API call</text>
+  </g>
+
+  <!-- ============ EXTERNAL INTEGRATIONS (right column) ============ -->
+  <rect x="1252" y="208" width="368" height="864" rx="14" fill="#fff1f2" stroke="#fecdd3" stroke-width="1.5"/>
+  <text x="1272" y="232" font-size="12.5" font-weight="700" letter-spacing="1" fill="#be123c">EXTERNAL INTEGRATIONS</text>
+
+  <!-- external boxes -->
+  <g>
+    <rect x="1268" y="248" width="336" height="78" rx="10" fill="#ffffff" stroke="#fda4af" filter="url(#shadow)"/>
+    <rect x="1268" y="248" width="6" height="78" rx="3" fill="#e11d48"/>
+    <text x="1286" y="276" font-size="14.5" font-weight="700" fill="#0f172a">OpenAI API</text>
+    <text x="1286" y="297" font-size="11.5" fill="#64748b">Resume tailoring &amp; extraction LLM</text>
+    <text x="1286" y="313" font-size="11.5" fill="#64748b">(OPENAI_MODEL)</text>
+  </g>
+  <g>
+    <rect x="1268" y="338" width="336" height="78" rx="10" fill="#ffffff" stroke="#fda4af" filter="url(#shadow)"/>
+    <rect x="1268" y="338" width="6" height="78" rx="3" fill="#e11d48"/>
+    <text x="1286" y="366" font-size="14.5" font-weight="700" fill="#0f172a">Anthropic Claude</text>
+    <text x="1286" y="387" font-size="11.5" fill="#64748b">Haiku 4.5 — job-relevance</text>
+    <text x="1286" y="403" font-size="11.5" fill="#64748b">pre-generation gate</text>
+  </g>
+  <g>
+    <rect x="1268" y="428" width="336" height="78" rx="10" fill="#ffffff" stroke="#fda4af" filter="url(#shadow)"/>
+    <rect x="1268" y="428" width="6" height="78" rx="3" fill="#e11d48"/>
+    <text x="1286" y="456" font-size="14.5" font-weight="700" fill="#0f172a">AWS SES + Brevo</text>
+    <text x="1286" y="477" font-size="11.5" fill="#64748b">Transactional &amp; lifecycle</text>
+    <text x="1286" y="493" font-size="11.5" fill="#64748b">email (templated)</text>
+  </g>
+  <g>
+    <rect x="1268" y="518" width="336" height="78" rx="10" fill="#ffffff" stroke="#fda4af" filter="url(#shadow)"/>
+    <rect x="1268" y="518" width="6" height="78" rx="3" fill="#e11d48"/>
+    <text x="1286" y="546" font-size="14.5" font-weight="700" fill="#0f172a">Lemon Squeezy</text>
+    <text x="1286" y="567" font-size="11.5" fill="#64748b">Checkout, payments,</text>
+    <text x="1286" y="583" font-size="11.5" fill="#64748b">signed webhooks</text>
+  </g>
+  <g>
+    <rect x="1268" y="608" width="336" height="78" rx="10" fill="#ffffff" stroke="#fda4af" filter="url(#shadow)"/>
+    <rect x="1268" y="608" width="6" height="78" rx="3" fill="#e11d48"/>
+    <text x="1286" y="636" font-size="14.5" font-weight="700" fill="#0f172a">Google OAuth</text>
+    <text x="1286" y="657" font-size="11.5" fill="#64748b">Federated sign-in</text>
+  </g>
+  <g>
+    <rect x="1268" y="698" width="336" height="78" rx="10" fill="#ffffff" stroke="#fda4af" filter="url(#shadow)"/>
+    <rect x="1268" y="698" width="6" height="78" rx="3" fill="#e11d48"/>
+    <text x="1286" y="726" font-size="14.5" font-weight="700" fill="#0f172a">PDF Engine</text>
+    <text x="1286" y="747" font-size="11.5" fill="#64748b">Puppeteer / node-latex</text>
+    <text x="1286" y="763" font-size="11.5" fill="#64748b">(in-process render)</text>
+  </g>
+
+  <!-- ============ ZONE 1: USERS & EDGE ============ -->
+  <text x="40" y="104" font-size="12.5" font-weight="700" letter-spacing="1" fill="#2563eb">USERS &amp; EDGE</text>
+  <g>
+    <rect x="40" y="116" width="360" height="74" rx="12" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="60" y="148" font-size="15" font-weight="700" fill="#0f172a">Job Seeker — Browser</text>
+    <text x="60" y="170" font-size="11.5" fill="#64748b">Desktop / mobile web client</text>
+  </g>
+  <g>
+    <rect x="440" y="116" width="780" height="74" rx="12" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="460" y="148" font-size="15" font-weight="700" fill="#0f172a">Cloudflare</text>
+    <text x="460" y="170" font-size="11.5" fill="#64748b">Authoritative DNS · Edge CDN · TLS termination · WAF · CNAME-at-apex failover</text>
+  </g>
+  <line x1="400" y1="153" x2="436" y2="153" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ============ ZONE 2: PRESENTATION ============ -->
+  <text x="40" y="228" font-size="12.5" font-weight="700" letter-spacing="1" fill="#4f46e5">PRESENTATION</text>
+  <g>
+    <rect x="40" y="240" width="570" height="80" rx="12" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="60" y="270" font-size="15" font-weight="700" fill="#0f172a">Marketing Site — tairly.com</text>
+    <text x="60" y="292" font-size="11.5" fill="#64748b">Static build (Tailwind) · Cloudflare Pages (edge, SEO)</text>
+    <text x="60" y="309" font-size="11.5" fill="#64748b">repo: ats-fit-website</text>
+  </g>
+  <g>
+    <rect x="650" y="240" width="570" height="80" rx="12" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="670" y="270" font-size="15" font-weight="700" fill="#0f172a">SaaS App — app.tairly.com</text>
+    <text x="670" y="292" font-size="11.5" fill="#64748b">Angular 19 + Angular Material SPA · nginx on Railway · consumes PDF + SSE</text>
+    <text x="670" y="309" font-size="11.5" fill="#64748b">repo: ats-fit-frontend</text>
+  </g>
+  <!-- edge -> presentation -->
+  <line x1="700" y1="190" x2="420" y2="236" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="900" y1="190" x2="930" y2="236" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ============ ZONE 3: API PLATFORM ============ -->
+  <rect x="40" y="344" width="1180" height="392" rx="16" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+  <text x="60" y="372" font-size="12.5" font-weight="700" letter-spacing="1" fill="#059669">API PLATFORM</text>
+  <text x="60" y="396" font-size="15.5" font-weight="700" fill="#0f172a">Railway · tairly-api — NestJS (TypeScript)</text>
+  <text x="430" y="396" font-size="12" fill="#475569">REST /api/v1 (URI versioning) · Swagger/OpenAPI · graceful shutdown · pre-deploy migrations</text>
+
+  <!-- cross-cutting chips -->
+  <g font-size="11" fill="#065f46">
+    <rect x="60" y="410" width="138" height="26" rx="13" fill="#d1fae5" stroke="#6ee7b7"/><text x="70" y="427">Request-Id middleware</text>
+    <rect x="206" y="410" width="62" height="26" rx="13" fill="#d1fae5" stroke="#6ee7b7"/><text x="216" y="427">CORS</text>
+    <rect x="276" y="410" width="118" height="26" rx="13" fill="#d1fae5" stroke="#6ee7b7"/><text x="286" y="427">JWT Auth Guard</text>
+    <rect x="402" y="410" width="128" height="26" rx="13" fill="#d1fae5" stroke="#6ee7b7"/><text x="412" y="427">Rate-Limit Guard</text>
+    <rect x="538" y="410" width="158" height="26" rx="13" fill="#d1fae5" stroke="#6ee7b7"/><text x="548" y="427">UserContext middleware</text>
+    <rect x="704" y="410" width="148" height="26" rx="13" fill="#d1fae5" stroke="#6ee7b7"/><text x="714" y="427">Response interceptor</text>
+    <rect x="860" y="410" width="132" height="26" rx="13" fill="#d1fae5" stroke="#6ee7b7"/><text x="870" y="427">Exception filter</text>
+    <rect x="1000" y="410" width="158" height="26" rx="13" fill="#d1fae5" stroke="#6ee7b7"/><text x="1010" y="427">Joi-validated config</text>
+  </g>
+
+  <!-- module cards: 4 cols x 3 rows -->
+  <!-- helper geometry: x at 56, 337, 618, 899 ; w 265 ; rows y 448, 540, 632 ; h 80 -->
+  <g>
+    <!-- row 1 -->
+    <rect x="56" y="448" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="56" y="448" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="72" y="478" font-size="13.5" font-weight="700" fill="#0f172a">Auth</text>
+    <text x="72" y="498" font-size="10.8" fill="#64748b">JWT, email/password,</text>
+    <text x="72" y="513" font-size="10.8" fill="#64748b">Google OAuth, password reset</text>
+
+    <rect x="337" y="448" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="337" y="448" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="353" y="478" font-size="13.5" font-weight="700" fill="#0f172a">User</text>
+    <text x="353" y="498" font-size="10.8" fill="#64748b">Resume upload, profiles,</text>
+    <text x="353" y="513" font-size="10.8" fill="#64748b">feature usage, onboarding</text>
+
+    <rect x="618" y="448" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="618" y="448" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="634" y="478" font-size="13.5" font-weight="700" fill="#0f172a">Resume Tailoring</text>
+    <text x="634" y="498" font-size="10.8" fill="#64748b">JD analysis, optimize, PDF,</text>
+    <text x="634" y="513" font-size="10.8" fill="#64748b">history, diff, cover letter</text>
+
+    <rect x="899" y="448" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="899" y="448" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="915" y="478" font-size="13.5" font-weight="700" fill="#0f172a">Batch Tailoring v2</text>
+    <text x="915" y="498" font-size="10.8" fill="#64748b">Async 202 + SSE progress,</text>
+    <text x="915" y="513" font-size="10.8" fill="#64748b">parallel jobs (×3)</text>
+
+    <!-- row 2 -->
+    <rect x="56" y="540" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="56" y="540" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="72" y="570" font-size="13.5" font-weight="700" fill="#0f172a">Job Application</text>
+    <text x="72" y="590" font-size="10.8" fill="#64748b">CRUD, status pipeline,</text>
+    <text x="72" y="605" font-size="10.8" fill="#64748b">interviews, stats</text>
+
+    <rect x="337" y="540" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="337" y="540" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="353" y="570" font-size="13.5" font-weight="700" fill="#0f172a">Subscription</text>
+    <text x="353" y="590" font-size="10.8" fill="#64748b">Plans, checkout, webhooks,</text>
+    <text x="353" y="605" font-size="10.8" fill="#64748b">entitlement state</text>
+
+    <rect x="618" y="540" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="618" y="540" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="634" y="570" font-size="13.5" font-weight="700" fill="#0f172a">Rate Limit &amp; Usage</text>
+    <text x="634" y="590" font-size="10.8" fill="#64748b">Plan quotas,</text>
+    <text x="634" y="605" font-size="10.8" fill="#64748b">usage tracking</text>
+
+    <rect x="899" y="540" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="899" y="540" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="915" y="570" font-size="13.5" font-weight="700" fill="#0f172a">Job Relevance Gate</text>
+    <text x="915" y="590" font-size="10.8" fill="#64748b">Pre-gen fit check</text>
+    <text x="915" y="605" font-size="10.8" fill="#64748b">(Claude Haiku), kill-switch</text>
+
+    <!-- row 3 -->
+    <rect x="56" y="632" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="56" y="632" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="72" y="662" font-size="13.5" font-weight="700" fill="#0f172a">Beta Access</text>
+    <text x="72" y="682" font-size="10.8" fill="#64748b">Invites, redemption,</text>
+    <text x="72" y="697" font-size="10.8" fill="#64748b">lifecycle emails</text>
+
+    <rect x="337" y="632" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="337" y="632" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="353" y="662" font-size="13.5" font-weight="700" fill="#0f172a">Contact</text>
+    <text x="353" y="682" font-size="10.8" fill="#64748b">Contact-form intake</text>
+    <text x="353" y="697" font-size="10.8" fill="#64748b">+ notification</text>
+
+    <rect x="618" y="632" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="618" y="632" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="634" y="662" font-size="13.5" font-weight="700" fill="#0f172a">ATS Match</text>
+    <text x="634" y="682" font-size="10.8" fill="#64748b">ATS keyword match</text>
+    <text x="634" y="697" font-size="10.8" fill="#64748b">scoring history</text>
+
+    <rect x="899" y="632" width="265" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/><rect x="899" y="632" width="265" height="5" rx="2.5" fill="#059669"/>
+    <text x="915" y="662" font-size="13.5" font-weight="700" fill="#0f172a">Health</text>
+    <text x="915" y="682" font-size="10.8" fill="#64748b">Liveness probe</text>
+    <text x="915" y="697" font-size="10.8" fill="#64748b">GET /api/v1/health</text>
+  </g>
+
+  <!-- presentation -> API -->
+  <line x1="935" y1="320" x2="630" y2="340" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="760" y="334" font-size="11" fill="#475569">HTTPS · JWT · SSE</text>
+
+  <!-- API -> external (dashed) -->
+  <line x1="1164" y1="488" x2="1264" y2="380" stroke="#e11d48" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arrowDash)"/>
+  <line x1="1164" y1="580" x2="1264" y2="557" stroke="#e11d48" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arrowDash)"/>
+  <line x1="1164" y1="672" x2="1264" y2="647" stroke="#e11d48" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arrowDash)"/>
+
+  <!-- ============ ZONE 4: ASYNC PROCESSING ============ -->
+  <rect x="40" y="760" width="1180" height="120" rx="14" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+  <text x="60" y="786" font-size="12.5" font-weight="700" letter-spacing="1" fill="#d97706">ASYNC PROCESSING — Bull on Redis</text>
+  <g font-size="11.5" fill="#92400e">
+    <rect x="60" y="800" width="190" height="60" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+    <text x="78" y="826" font-size="13" font-weight="700" fill="#0f172a">Workers / Processors</text>
+    <text x="78" y="846" font-size="10.8" fill="#92400e">3 retries · exp backoff · conc. 3</text>
+
+    <rect x="270" y="800" width="218" height="60" rx="10" fill="#ffffff" stroke="#fcd34d"/>
+    <text x="284" y="824" font-size="11.5" font-weight="700">resume_processing</text>
+    <text x="284" y="846" font-size="10.5" fill="#92400e">PDF extraction</text>
+
+    <rect x="504" y="800" width="218" height="60" rx="10" fill="#ffffff" stroke="#fcd34d"/>
+    <text x="518" y="824" font-size="11.5" font-weight="700">profile_enrichment</text>
+    <text x="518" y="846" font-size="10.5" fill="#92400e">build enriched profile</text>
+
+    <rect x="738" y="800" width="200" height="60" rx="10" fill="#ffffff" stroke="#fcd34d"/>
+    <text x="752" y="824" font-size="11.5" font-weight="700">changes_diff</text>
+    <text x="752" y="846" font-size="10.5" fill="#92400e">before/after diff</text>
+
+    <rect x="954" y="800" width="248" height="60" rx="10" fill="#ffffff" stroke="#fcd34d"/>
+    <text x="968" y="824" font-size="11.5" font-weight="700">batch_tailoring_v2 · beta emails</text>
+    <text x="968" y="846" font-size="10.5" fill="#92400e">parallel batch jobs → SSE</text>
+  </g>
+  <!-- API -> async -->
+  <line x1="630" y1="736" x2="630" y2="756" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="642" y="752" font-size="11" fill="#475569">enqueue jobs</text>
+
+  <!-- ============ ZONE 5: DATA STORES ============ -->
+  <rect x="40" y="904" width="1180" height="252" rx="14" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5"/>
+  <text x="60" y="930" font-size="12.5" font-weight="700" letter-spacing="1" fill="#7c3aed">DATA STORES</text>
+
+  <!-- PostgreSQL -->
+  <g>
+    <rect x="60" y="944" width="700" height="196" rx="12" fill="#ffffff" stroke="#c4b5fd" filter="url(#shadow)"/>
+    <rect x="60" y="944" width="700" height="5" rx="2.5" fill="#7c3aed"/>
+    <text x="80" y="976" font-size="15" font-weight="700" fill="#0f172a">PostgreSQL — Railway plugin (TypeORM)</text>
+    <text x="80" y="996" font-size="11" fill="#64748b">System of record · private networking · auto-backups · pre-deploy migrations</text>
+    <g font-size="10.5" fill="#5b21b6">
+      <text x="80" y="1024" font-size="11" font-weight="700" fill="#0f172a">Identity</text>
+      <text x="80" y="1042">users · password_reset_tokens</text>
+      <text x="80" y="1058">user_subscriptions</text>
+
+      <text x="330" y="1024" font-size="11" font-weight="700" fill="#0f172a">Resume / Batch</text>
+      <text x="330" y="1042">candidate_resumes · extracted_resume_content</text>
+      <text x="330" y="1058">enriched_resume_profile · resume_generations</text>
+      <text x="330" y="1074">resume_templates · tailoring_session</text>
+      <text x="330" y="1090">batch_tailoring_run · batch_tailoring_job</text>
+
+      <text x="80" y="1090" font-size="11" font-weight="700" fill="#0f172a">Billing &amp; Ops</text>
+      <text x="80" y="1108">subscription_plan · payment_history</text>
+      <text x="80" y="1124">usage_tracking · rate_limit_config · job_application</text>
+    </g>
+  </g>
+
+  <!-- Redis -->
+  <g>
+    <rect x="780" y="944" width="200" height="196" rx="12" fill="#ffffff" stroke="#c4b5fd" filter="url(#shadow)"/>
+    <rect x="780" y="944" width="200" height="5" rx="2.5" fill="#7c3aed"/>
+    <text x="800" y="976" font-size="15" font-weight="700" fill="#0f172a">Redis</text>
+    <text x="800" y="998" font-size="11" fill="#64748b">Railway plugin</text>
+    <text x="800" y="1024" font-size="11" fill="#475569">• Bull queue backend</text>
+    <text x="800" y="1046" font-size="11" fill="#475569">• Batch / run state</text>
+    <text x="800" y="1068" font-size="11" fill="#475569">• Template &amp; service</text>
+    <text x="800" y="1084" font-size="11" fill="#475569">&#160;&#160;cache (TTL)</text>
+  </g>
+
+  <!-- S3 -->
+  <g>
+    <rect x="1000" y="944" width="200" height="196" rx="12" fill="#ffffff" stroke="#c4b5fd" filter="url(#shadow)"/>
+    <rect x="1000" y="944" width="200" height="5" rx="2.5" fill="#7c3aed"/>
+    <text x="1020" y="976" font-size="15" font-weight="700" fill="#0f172a">AWS S3</text>
+    <text x="1020" y="998" font-size="11" fill="#64748b">Object storage</text>
+    <text x="1020" y="1024" font-size="11" fill="#475569">• Candidate resumes</text>
+    <text x="1020" y="1046" font-size="11" fill="#475569">• Generated PDFs</text>
+    <text x="1020" y="1068" font-size="11" fill="#475569">• Resume templates</text>
+    <text x="1020" y="1090" font-size="11" fill="#475569">• Email templates</text>
+    <text x="1020" y="1112" font-size="10.5" fill="#94a3b8">presigned access</text>
+  </g>
+
+  <!-- async -> data, API -> data -->
+  <line x1="360" y1="880" x2="360" y2="940" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="372" y="916" font-size="11" fill="#475569">read / write</text>
+  <line x1="1090" y1="736" x2="1090" y2="940" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="1098" y="850" font-size="11" fill="#475569">S3 PDFs</text>
+
+  <!-- footer -->
+  <text x="40" y="1172" font-size="11" fill="#94a3b8">Modular monolith · async-first · single source of truth (Postgres) · object storage offload (S3) · edge delivery (Cloudflare) · default-deny auth · signed webhooks</text>
+</svg>
