@@ -2,10 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PaymentHistory } from '../../../database/entities/payment-history.entity';
-import { UserService } from '../../user/user.service';
-import { SubscriptionPlanService } from './subscription-plan.service';
+import { SubscriptionPlan, User } from '../../../database/entities';
 import { PaymentStatus, PaymentType, Currency } from '../enums/payment.enum';
-import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
+import { PaymentEventType } from '../enums/payment-event-type.enum';
+import { NormalizedWebhookEvent } from '../externals/interfaces/normalized-webhook-event.interface';
+import { PaymentClaimResult } from '../interfaces/payment-claim-result.interface';
 import { OrderBy, OrderByType } from '../../../shared/types/order-by.type';
 import {
   BadRequestException,
@@ -13,6 +14,52 @@ import {
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { IdValidator } from '../../../shared/validators/id.validator';
+import { redactCustomerPii } from '../utils/redact-customer-pii.util';
+
+/** A claim older than this is dead (crashed handler / restart) and becomes
+ * reclaimable. Stays well below Creem's retry cadence (30s/1m/5m/1h). */
+const CLAIM_STALE_INTERVAL = '2 minutes';
+
+/**
+ * Exhaustive event-type -> status map so every row gets an explicit status
+ * instead of silently staying at the column's `PENDING` default. `UNKNOWN`
+ * maps to PENDING deliberately (an honest "don't know"), not as a fallthrough.
+ */
+const EVENT_TYPE_TO_STATUS: Record<PaymentEventType, PaymentStatus> = {
+  [PaymentEventType.SUBSCRIPTION_ACTIVATED]: PaymentStatus.SUCCESS,
+  [PaymentEventType.SUBSCRIPTION_RENEWED]: PaymentStatus.SUCCESS,
+  [PaymentEventType.SUBSCRIPTION_TRIALING]: PaymentStatus.SUCCESS,
+  [PaymentEventType.SUBSCRIPTION_PAYMENT_FAILED]: PaymentStatus.FAILED,
+  [PaymentEventType.SUBSCRIPTION_CANCEL_SCHEDULED]: PaymentStatus.SUCCESS,
+  [PaymentEventType.SUBSCRIPTION_CANCELLED]: PaymentStatus.CANCELLED,
+  [PaymentEventType.SUBSCRIPTION_EXPIRED]: PaymentStatus.EXPIRED,
+  [PaymentEventType.SUBSCRIPTION_PAUSED]: PaymentStatus.SUCCESS,
+  [PaymentEventType.SUBSCRIPTION_UPDATED]: PaymentStatus.SUCCESS,
+  [PaymentEventType.PAYMENT_REFUNDED]: PaymentStatus.REFUNDED,
+  [PaymentEventType.PAYMENT_DISPUTED]: PaymentStatus.FAILED,
+  [PaymentEventType.UNKNOWN]: PaymentStatus.PENDING,
+};
+
+/** Exhaustive companion map for the NOT NULL `payment_type` column. */
+const EVENT_TYPE_TO_PAYMENT_TYPE: Record<PaymentEventType, PaymentType> = {
+  [PaymentEventType.SUBSCRIPTION_ACTIVATED]: PaymentType.SUBSCRIPTION,
+  [PaymentEventType.SUBSCRIPTION_RENEWED]: PaymentType.SUBSCRIPTION,
+  [PaymentEventType.SUBSCRIPTION_TRIALING]: PaymentType.SUBSCRIPTION,
+  [PaymentEventType.SUBSCRIPTION_PAYMENT_FAILED]: PaymentType.SUBSCRIPTION,
+  [PaymentEventType.SUBSCRIPTION_CANCEL_SCHEDULED]: PaymentType.SUBSCRIPTION,
+  [PaymentEventType.SUBSCRIPTION_CANCELLED]: PaymentType.SUBSCRIPTION,
+  [PaymentEventType.SUBSCRIPTION_EXPIRED]: PaymentType.SUBSCRIPTION,
+  [PaymentEventType.SUBSCRIPTION_PAUSED]: PaymentType.SUBSCRIPTION,
+  [PaymentEventType.SUBSCRIPTION_UPDATED]: PaymentType.SUBSCRIPTION,
+  [PaymentEventType.PAYMENT_REFUNDED]: PaymentType.REFUND,
+  [PaymentEventType.PAYMENT_DISPUTED]: PaymentType.REFUND,
+  [PaymentEventType.UNKNOWN]: PaymentType.ONE_TIME,
+};
+
+interface ClaimQueryRow {
+  id: string;
+  inserted: boolean;
+}
 
 @Injectable()
 export class PaymentHistoryService {
@@ -21,233 +68,162 @@ export class PaymentHistoryService {
   constructor(
     @InjectRepository(PaymentHistory)
     private paymentHistoryRepository: Repository<PaymentHistory>,
-    private userService: UserService,
-    private subscriptionPlanService: SubscriptionPlanService,
   ) {}
 
   /**
-   * Create payment history record from payment gateway notification
+   * Atomic replay gate for the public, unauthenticated payment webhook.
+   * Reserves (or recognises as already-owned/duplicate) the `payment_history`
+   * row for `event.gatewayTransactionId` via one conditional UPSERT — see
+   * `1815400000000-AddProcessingClaimedAtToPaymentHistory`. No transaction is
+   * held across this call and the caller's handler: claim and
+   * `markAsProcessed` are each atomic alone; wrapping the handler (which
+   * calls AWS SES) in a DB transaction would be false atomicity that pins a
+   * pooled connection for no benefit.
+   *
+   * `plan` must already be resolved by the caller and passed in (resolved
+   * once, in the controller). Money is sourced only from `plan`, never from
+   * the webhook payload.
    */
-  async paymentConfirmation(paymentGatewayData: any): Promise<PaymentHistory> {
-    try {
-      this.validatePaymentGatewayData(paymentGatewayData);
+  async claimPaymentEvent(
+    event: NormalizedWebhookEvent,
+    user: Pick<User, 'id' | 'email'>,
+    plan: SubscriptionPlan | null,
+  ): Promise<PaymentClaimResult> {
+    const transactionId = event.gatewayTransactionId;
+    if (!transactionId) {
+      throw new BadRequestException(
+        'Webhook event is missing a gateway transaction id',
+        ERROR_CODES.BAD_REQUEST,
+      );
+    }
 
-      const existingPayment =
-        await this.checkExistingPayment(paymentGatewayData);
-      if (existingPayment) {
-        return existingPayment;
+    const { amount, currency } = this.resolveAmountAndCurrency(plan, event);
+    const status = EVENT_TYPE_TO_STATUS[event.type];
+    const paymentType = EVENT_TYPE_TO_PAYMENT_TYPE[event.type];
+    const metadata = this.buildAuditMetadata(event, user);
+    // GDPR Art. 5(1)(c) data minimisation: never persist the webhook's raw
+    // customer contact fields a second time — `customer_email` below is the
+    // one intentional, purpose-built copy. `redactCustomerPii` deep-clones
+    // as it walks, so `event.raw` itself is left untouched for any other
+    // reader of this event. See that function's doc comment for the full
+    // rationale and why a nested `customer` object is caught recursively
+    // rather than at one hard-coded path.
+    const redactedPayload = redactCustomerPii(event.raw);
+
+    const claimRows: ClaimQueryRow[] =
+      await this.paymentHistoryRepository.query(
+        `
+      INSERT INTO payment_history (
+        payment_gateway_transaction_id, amount, currency, status, payment_type,
+        user_id, subscription_plan_id, payment_gateway_response, customer_email,
+        is_test_mode, metadata, processing_claimed_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb, now())
+      ON CONFLICT (payment_gateway_transaction_id)
+      DO UPDATE SET processing_claimed_at = now()
+      WHERE payment_history.processed_at IS NULL
+        AND (
+          payment_history.processing_claimed_at IS NULL
+          OR payment_history.processing_claimed_at < now() - interval '${CLAIM_STALE_INTERVAL}'
+        )
+      RETURNING id, (xmax = 0) AS inserted
+      `,
+        [
+          transactionId,
+          amount,
+          currency,
+          status,
+          paymentType,
+          user.id,
+          plan?.id ?? null,
+          JSON.stringify(redactedPayload ?? {}),
+          event.customerEmail ?? null,
+          event.isTestMode,
+          metadata ? JSON.stringify(metadata) : null,
+        ],
+      );
+
+    if (claimRows.length === 0) {
+      const existing = await this.findByExternalPaymentId(transactionId);
+      if (!existing) {
+        // The UPSERT reported a conflict (0 rows) but no row now exists for
+        // this transaction id — should be unreachable. Fail loudly rather
+        // than fabricate a row; a wrong "duplicate" here would silently drop
+        // a legitimate event.
+        this.logger.error(
+          `Claim conflict for transaction ${transactionId} could not be resolved to an existing row`,
+        );
+        throw new InternalServerErrorException(
+          'Payment history claim conflict could not be resolved',
+          ERROR_CODES.INTERNAL_SERVER,
+        );
       }
+      return { outcome: 'duplicate', row: existing };
+    }
 
-      const paymentHistory =
-        await this.createPaymentHistoryFromGatewayData(paymentGatewayData);
-      const savedPayment =
-        await this.paymentHistoryRepository.save(paymentHistory);
-
-      this.logger.log(
-        `Payment history created successfully: ${savedPayment.id}`,
-      );
-      return savedPayment;
-    } catch (error) {
-      this.logger.error(
-        'Failed to create payment history from payment gateway notification',
-        error,
-      );
+    const { id, inserted } = claimRows[0];
+    const row = await this.paymentHistoryRepository.findOne({ where: { id } });
+    if (!row) {
       throw new InternalServerErrorException(
-        'Failed to process payment confirmation',
+        `Claimed payment history row ${id} vanished before it could be read back`,
         ERROR_CODES.INTERNAL_SERVER,
       );
     }
+
+    return { outcome: inserted ? 'reserved' : 'retry', row };
   }
 
   /**
-   * Validate payment gateway notification data structure
+   * `payment_history.amount`/`currency` are the plan's list price, not the
+   * charged price — discounts and grandfathered pricing make them diverge.
+   * This is not a ledger; Creem is authoritative for disputes, refunds, and
+   * tax. Sourcing from our own `subscription_plans` row (rather than the
+   * webhook payload, which does not reliably carry price) avoids persisting
+   * an attacker- or provider-quirk-controlled amount into a financial table.
    */
-  private validatePaymentGatewayData(paymentGatewayData: any): void {
-    if (!paymentGatewayData || typeof paymentGatewayData !== 'object') {
-      throw new BadRequestException(
-        'Invalid payment gateway data provided',
-        ERROR_CODES.BAD_REQUEST,
+  private resolveAmountAndCurrency(
+    plan: SubscriptionPlan | null,
+    event: NormalizedWebhookEvent,
+  ): { amount: number; currency: string } {
+    if (!plan) {
+      this.logger.error(
+        `No subscription plan resolved for transaction ${event.gatewayTransactionId} ` +
+          `(gatewayProductId=${event.gatewayProductId}) — recording amount=0`,
       );
+      return { amount: 0, currency: Currency.USD };
     }
-
-    if (!paymentGatewayData.data?.id) {
-      throw new BadRequestException(
-        'Missing payment ID in payment gateway data',
-        ERROR_CODES.BAD_REQUEST,
-      );
-    }
-
-    if (!paymentGatewayData.meta?.event_name) {
-      throw new BadRequestException(
-        'Missing event name in payment gateway data',
-        ERROR_CODES.BAD_REQUEST,
-      );
-    }
+    return { amount: plan.price, currency: plan.currency };
   }
 
   /**
-   * Check if payment already exists
+   * The only thing this service ever writes to `metadata` is the
+   * email-mismatch audit signal — data for humans to review, never a gate on
+   * processing (requirement 5). `metadata.email` from the original checkout
+   * is never read here for any lookup.
    */
-  private async checkExistingPayment(
-    paymentGatewayData: any,
-  ): Promise<PaymentHistory | null> {
-    const existingPayment = await this.findByExternalPaymentId(
-      paymentGatewayData.data?.id,
+  private buildAuditMetadata(
+    event: NormalizedWebhookEvent,
+    user: Pick<User, 'id' | 'email'>,
+  ): Record<string, unknown> | null {
+    if (
+      !event.customerEmail ||
+      !user.email ||
+      event.customerEmail.toLowerCase() === user.email.toLowerCase()
+    ) {
+      return null;
+    }
+
+    this.logger.warn(
+      `Customer email on webhook (${event.customerEmail}) does not match resolved ` +
+        `user email for transaction ${event.gatewayTransactionId}. Recording as an ` +
+        `audit signal only — this never gates processing.`,
     );
-    if (existingPayment) {
-      this.logger.log(`Payment history already exists: ${existingPayment.id}`);
-    }
-    return existingPayment;
-  }
 
-  /**
-   * Create payment history entity from payment gateway notification data
-   */
-  private async createPaymentHistoryFromGatewayData(
-    paymentGatewayData: any,
-  ): Promise<PaymentHistory> {
-    const paymentHistory = new PaymentHistory();
-
-    this.setBasicPaymentData(paymentHistory, paymentGatewayData);
-    await this.setUserInformation(paymentHistory, paymentGatewayData);
-    await this.setSubscriptionPlanInformation(
-      paymentHistory,
-      paymentGatewayData,
-    );
-    this.setAmountAndCurrency(paymentHistory, paymentGatewayData);
-
-    return paymentHistory;
-  }
-
-  /**
-   * Set basic payment information
-   */
-  private setBasicPaymentData(
-    paymentHistory: PaymentHistory,
-    paymentGatewayData: any,
-  ): void {
-    paymentHistory.payment_gateway_response = paymentGatewayData;
-    paymentHistory.payment_gateway_transaction_id = paymentGatewayData.data?.id;
-    paymentHistory.status = this.mapPaymentGatewayStatus(
-      paymentGatewayData?.data?.attributes?.status,
-    );
-    paymentHistory.payment_type = this.determinePaymentType(
-      paymentGatewayData?.meta?.event_name,
-    );
-    paymentHistory.is_test_mode = paymentGatewayData?.meta?.test_mode || false;
-    paymentHistory.customer_email =
-      paymentGatewayData?.data?.attributes?.user_email;
-  }
-
-  /**
-   * Set user information from payment gateway notification data
-   */
-  private async setUserInformation(
-    paymentHistory: PaymentHistory,
-    paymentGatewayData: any,
-  ): Promise<void> {
-    const customData = this.extractCustomData(paymentGatewayData);
-
-    if (customData?.user_id) {
-      const user = await this.findUserSafely(customData.user_id);
-      if (user) {
-        paymentHistory.user_id = user.id;
-        this.logger.log(`Found user ID in custom data: ${customData.user_id}`);
-      }
-    }
-
-    // Store custom data in metadata
-    if (customData) {
-      paymentHistory.metadata = {
-        ...(paymentHistory.metadata || {}),
-        customData,
-      };
-    }
-  }
-
-  /**
-   * Set subscription plan information
-   */
-  private async setSubscriptionPlanInformation(
-    paymentHistory: PaymentHistory,
-    paymentGatewayData: any,
-  ): Promise<void> {
-    const customData = this.extractCustomData(paymentGatewayData);
-
-    // Try from custom data first
-    if (customData?.plan_id) {
-      const plan = await this.findSubscriptionPlanSafely(customData.plan_id);
-      if (plan) {
-        paymentHistory.subscription_plan_id = plan.id;
-        this.logger.log(
-          `Linked payment to subscription plan via custom data: ${plan.id}`,
-        );
-        return;
-      }
-    }
-
-    // Try from variant ID
-    const variantId =
-      paymentGatewayData.data?.attributes?.first_order_item?.variant_id;
-    if (variantId) {
-      const plan = await this.findSubscriptionPlanByVariantSafely(
-        variantId?.toString(),
-      );
-      if (plan) {
-        paymentHistory.subscription_plan_id = plan.id;
-        this.logger.log(`Linked payment to subscription plan: ${plan.id}`);
-      }
-    }
-  }
-
-  /**
-   * Set amount and currency information
-   */
-  private setAmountAndCurrency(
-    paymentHistory: PaymentHistory,
-    paymentGatewayData: any,
-  ): void {
-    const amountInCents =
-      paymentGatewayData.data?.attributes?.total ||
-      paymentGatewayData.data?.attributes?.subtotal ||
-      paymentGatewayData.data?.attributes?.total_usd ||
-      paymentGatewayData.data?.attributes?.subtotal_formatted;
-
-    if (amountInCents) {
-      paymentHistory.amount = parseFloat((amountInCents / 100).toFixed(2));
-    }
-
-    paymentHistory.currency =
-      paymentGatewayData.data?.attributes?.currency || Currency.USD;
-  }
-
-  /**
-   * Safely find user without throwing exceptions
-   */
-  private async findUserSafely(userId: string): Promise<any | null> {
-    const validatedUserId = IdValidator.validateId(userId, 'User ID');
-    const user = await this.userService.getUserById(validatedUserId);
-    return user;
-  }
-
-  /**
-   * Safely find subscription plan without throwing exceptions
-   */
-  private async findSubscriptionPlanSafely(
-    planId: string,
-  ): Promise<any | null> {
-    const plan = await this.subscriptionPlanService.findById(planId);
-    return plan;
-  }
-
-  /**
-   * Safely find subscription plan by variant without throwing exceptions
-   */
-  private async findSubscriptionPlanByVariantSafely(
-    variantId: string,
-  ): Promise<any | null> {
-    const plan = await this.subscriptionPlanService.findByVariantId(variantId);
-    return plan;
+    return {
+      emailMismatch: {
+        resolvedUserEmail: user.email,
+        gatewayCustomerEmail: event.customerEmail,
+      },
+    };
   }
 
   /**
@@ -293,30 +269,9 @@ export class PaymentHistoryService {
   }
 
   /**
-   * Find payment history by subscription plan
-   */
-  async findBySubscriptionPlan(
-    subscriptionPlanId: string,
-    orderBy: OrderByType = OrderBy.DESC,
-  ): Promise<PaymentHistory[] | null> {
-    // Guard clause: Validate subscriptionPlanId
-    if (!subscriptionPlanId || subscriptionPlanId.trim() === '') {
-      this.logger.warn(
-        'findBySubscriptionPlan called with invalid subscriptionPlanId:',
-        subscriptionPlanId,
-      );
-      return null;
-    }
-
-    return await this.paymentHistoryRepository.find({
-      where: { subscription_plan_id: subscriptionPlanId.trim() },
-      relations: ['user'],
-      order: { created_at: orderBy },
-    });
-  }
-
-  /**
-   * Mark payment as processed
+   * Mark payment as processed. Must only be called after the routed handler
+   * has succeeded — never between the claim and a successful handler run, or
+   * a failure gets silently reported as done and Creem stops retrying it.
    */
   async markAsProcessed(paymentId: string): Promise<void> {
     const validatedPaymentId = IdValidator.validateId(paymentId, 'Payment ID');
@@ -364,202 +319,5 @@ export class PaymentHistoryService {
     payment.markAsFailed(error.trim());
     await this.paymentHistoryRepository.save(payment);
     this.logger.log(`Payment marked as failed: ${payment.id}, Error: ${error}`);
-  }
-
-  /**
-   * Get payment statistics
-   */
-  async getPaymentStats(userId?: string) {
-    const validUserId = userId
-      ? IdValidator.validateId(userId, 'User ID')
-      : undefined;
-    const whereCondition = validUserId ? { user_id: validUserId } : {};
-
-    const [totalPayments, successfulPayments, totalRevenue] = await Promise.all(
-      [
-        this.paymentHistoryRepository.count({ where: whereCondition }),
-        this.paymentHistoryRepository.count({
-          where: { ...whereCondition, status: PaymentStatus.SUCCESS },
-        }),
-        this.paymentHistoryRepository
-          .createQueryBuilder('payment')
-          .select('SUM(payment.amount)', 'sum')
-          .where('payment.status = :status', { status: PaymentStatus.SUCCESS })
-          .andWhere(validUserId ? 'payment.user_id = :userId' : '1=1', {
-            userId: validUserId,
-          })
-          .getRawOne(),
-      ],
-    );
-
-    return {
-      totalPayments,
-      successfulPayments,
-      failedPayments: totalPayments - successfulPayments,
-      totalRevenue: parseFloat(totalRevenue?.sum || '0'),
-      successRate:
-        totalPayments > 0 ? (successfulPayments / totalPayments) * 100 : 0,
-    };
-  }
-
-  /**
-   * Map payment gateway status to our internal PaymentStatus enum
-   */
-  private mapPaymentGatewayStatus(paymentGatewayStatus: string): PaymentStatus {
-    // Guard clause: Handle invalid or missing status
-    if (!paymentGatewayStatus || paymentGatewayStatus.trim() === '') {
-      this.logger.warn(
-        'mapPaymentGatewayStatus called with invalid status:',
-        paymentGatewayStatus,
-      );
-      return PaymentStatus.PENDING;
-    }
-
-    const gatewayStatusMap: Record<string, PaymentStatus> = {
-      paid: PaymentStatus.SUCCESS,
-      active: PaymentStatus.SUCCESS,
-      cancelled: PaymentStatus.CANCELLED,
-      expired: PaymentStatus.EXPIRED,
-      failed: PaymentStatus.FAILED,
-      refunded: PaymentStatus.REFUNDED,
-      pending: PaymentStatus.PENDING,
-    };
-
-    const normalizedStatus = paymentGatewayStatus.toLowerCase().trim();
-    const mappedStatus = gatewayStatusMap[normalizedStatus];
-
-    if (!mappedStatus) {
-      this.logger.warn(
-        `Unknown payment gateway status received: ${paymentGatewayStatus}, defaulting to PENDING`,
-      );
-      return PaymentStatus.PENDING;
-    }
-
-    return mappedStatus;
-  }
-
-  /**
-   * Determine payment type from event name
-   */
-  private determinePaymentType(eventName: string): PaymentType {
-    if (!eventName) return PaymentType.ONE_TIME;
-
-    if (eventName.includes('subscription')) {
-      return PaymentType.SUBSCRIPTION;
-    } else if (eventName.includes('refund')) {
-      return PaymentType.REFUND;
-    } else {
-      return PaymentType.ONE_TIME;
-    }
-  }
-
-  /**
-   * Extract custom data from payment gateway notification payload
-   * Payment gateways return custom data in different locations depending on the event type
-   */
-  private extractCustomData(
-    paymentGatewayData: PaymentConfirmationDto,
-  ): Record<string, any> | null {
-    try {
-      // Cast to any to access dynamic properties that might not be in the DTO interface
-      const payload = paymentGatewayData as any;
-
-      // Try different possible locations for custom data
-      const possibleLocations = [
-        payload.data?.attributes?.custom_data,
-        payload.data?.attributes?.checkout_data?.custom,
-        payload.data?.attributes?.checkout_data?.custom_data,
-        payload.meta?.custom_data,
-        payload.data?.relationships?.subscription?.data?.attributes
-          ?.custom_data,
-        // For order-related events
-        payload.data?.attributes?.first_order_item?.custom_data,
-        // For subscription events
-        payload.data?.attributes?.subscription?.custom_data,
-      ];
-
-      for (const location of possibleLocations) {
-        if (
-          location &&
-          typeof location === 'object' &&
-          Object.keys(location).length > 0
-        ) {
-          this.logger.log(
-            `Found custom data in payment gateway notification:`,
-            location,
-          );
-          return location;
-        }
-      }
-
-      // If no structured custom data found, check for string-based custom data
-      const customDataString =
-        payload.data?.attributes?.custom_data_string ||
-        payload.data?.attributes?.checkout_data?.custom_string;
-
-      if (customDataString) {
-        const parsed = JSON.parse(customDataString);
-        this.logger.log(
-          `Found custom data string in payment gateway notification:`,
-          parsed,
-        );
-        return parsed;
-      }
-
-      this.logger.log(
-        'No custom data found in payment gateway notification payload',
-      );
-      return null;
-    } catch (error) {
-      this.logger.error(
-        'Error extracting custom data from payment gateway notification:',
-        error,
-      );
-      return null;
-    }
-  }
-
-  /**
-   * Extract failure reason from payment gateway notification payload
-   * Follows Single Responsibility Principle - only extracts failure information
-   *
-   * @param paymentGatewayData - Payment gateway notification data
-   * @returns Failure reason string or null if not found
-   */
-  private extractFailureReason(paymentGatewayData: any): string | null {
-    try {
-      const payload = paymentGatewayData;
-
-      // Try different possible locations for failure information
-      const possibleFailureReasons = [
-        payload.data?.attributes?.failure_reason,
-        payload.data?.attributes?.status_reason,
-        payload.data?.attributes?.decline_reason,
-        payload.data?.attributes?.error_message,
-        payload.meta?.error_message,
-        payload.meta?.failure_reason,
-        payload.error?.message,
-      ];
-
-      for (const reason of possibleFailureReasons) {
-        if (reason && typeof reason === 'string' && reason.trim() !== '') {
-          this.logger.log(
-            `Found failure reason in payment gateway notification: ${reason}`,
-          );
-          return reason.trim();
-        }
-      }
-
-      this.logger.log(
-        'No specific failure reason found in payment gateway notification',
-      );
-      return 'Payment failed - reason not provided by payment gateway';
-    } catch (error) {
-      this.logger.error(
-        'Error extracting failure reason from payment gateway notification:',
-        error,
-      );
-      return 'Payment failed - unable to extract failure reason';
-    }
   }
 }

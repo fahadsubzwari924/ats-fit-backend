@@ -5,8 +5,8 @@ import { SubscriptionController } from './controllers/subscription.controller';
 import { SubscriptionService } from './services/subscription.service';
 import { SubscriptionPlanService } from './services/subscription-plan.service';
 import { PaymentService } from '../../shared/services/payment.service';
-import { LemonSqueezyService } from './externals/services/lemon_squeezy.service';
-import { LemonSqueezyPaymentGateway } from './externals/gateways/lemonsqueezy-payment.gateway';
+import { CreemService } from './externals/services/creem.service';
+import { CreemPaymentGateway } from './externals/gateways/creem-payment.gateway';
 import { PaymentGatewayFactory } from './externals/factories/payment-gateway.factory';
 import { UserSubscription } from '../../database/entities/user-subscription.entity';
 import { UserModule } from '../user/user.module';
@@ -37,8 +37,8 @@ import { PaymentHistoryService } from './services/payment-history.service';
     PaymentGatewayFactory,
 
     // Payment Gateway Implementations
-    LemonSqueezyService,
-    LemonSqueezyPaymentGateway,
+    CreemService,
+    CreemPaymentGateway,
 
     // Factory Provider for Payment Gateway
     {

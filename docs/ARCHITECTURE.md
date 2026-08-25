@@ -40,6 +40,67 @@ Describe what the system does for users and the main runtime boundaries.
 - Next likely split: _TBD_
 - Deprecations: _TBD_
 
+## Payment gateway abstraction
+
+### Provider-neutral webhook events
+
+`IPaymentGateway` (`src/modules/subscription/externals/interfaces/payment-gateway.interface.ts`)
+is the only payment surface the rest of the app depends on. The current
+implementation, `CreemPaymentGateway`, does two jobs no caller is allowed to
+skip: verify the inbound webhook signature, and translate the provider's
+payload into a `NormalizedWebhookEvent`
+(`externals/interfaces/normalized-webhook-event.interface.ts`). Every
+consumer downstream — `SubscriptionController`, `SubscriptionService`,
+`PaymentHistoryService` — reads only that normalized shape and never touches
+Creem's raw JSON. `CreemService` (`externals/services/creem.service.ts`) is
+the sole file permitted to import the `creem` SDK; everything above it is
+SDK-agnostic.
+
+**Why:** the module has already swapped providers once (LemonSqueezy →
+Creem, 2026-08). Normalizing at the gateway boundary means the next swap
+touches one adapter, not every service that currently reasons about payment
+state.
+
+### Webhook ingress: verify → parse → claim → route
+
+`POST /subscriptions/payment-confirmation` is `@Public()` and
+internet-facing — signature verification is the entire security boundary
+protecting it. The flow, in order:
+
+1. **Verify** the raw request body against the header bag (two Creem
+   signature schemes; scheme selection is deterministic, never "fall back to
+   the weaker one"). Runs strictly before any DB read or write.
+2. **Parse** into a `NormalizedWebhookEvent`. Never throws — an
+   unrecognised event type becomes `PaymentEventType.UNKNOWN` rather than an
+   exception, so a 200 is still possible for events this codebase doesn't
+   act on.
+3. **Resolve** the user from `event.metadata.user_id` (server-derived at
+   checkout) and the plan once, reusing both for every step below.
+4. **Claim.** A single conditional `UPSERT` against
+   `payment_history.payment_gateway_transaction_id` (a `UNIQUE` constraint)
+   atomically reserves the row before any handler runs, or recognises the
+   delivery as a duplicate. No DB transaction spans the claim and the
+   handler — the handler calls AWS SES, and holding a pooled connection
+   across a network call would be false atomicity.
+5. **Route** on event type, then mark the row processed only once the
+   handler succeeds. An unhandled exception leaves the claim unfinished, so
+   the provider's own retry schedule reprocesses the event.
+
+### Cancellation is scheduled, not an event
+
+Cancelling sets `is_cancelled = true` and `status = SCHEDULED_CANCEL` but
+leaves `is_active` true — access is retained until the current billing
+period ends. The downgrade happens only when a `subscription.expired`
+webhook arrives. There is no immediate-cancellation code path.
+
+Files of record:
+- `src/modules/subscription/externals/interfaces/normalized-webhook-event.interface.ts`
+- `src/modules/subscription/externals/gateways/creem-payment.gateway.ts`
+- `src/modules/subscription/externals/webhooks/creem-webhook-verifier.ts`
+- `src/modules/subscription/externals/webhooks/creem-webhook-parser.ts`
+- `src/modules/subscription/services/payment-history.service.ts` (`claimPaymentEvent`)
+- `src/modules/subscription/controllers/subscription.controller.ts` (`paymentConfirmation`)
+
 ## Resume tailoring pipeline
 
 ### Tech-substitution guardrail (resume optimization)

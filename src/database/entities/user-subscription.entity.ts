@@ -22,6 +22,10 @@ export class UserSubscription {
   @Column({ name: 'payment_gateway_subscription_id' })
   payment_gateway_subscription_id: string;
 
+  @Index('IDX_user_subscriptions_payment_gateway_customer_id')
+  @Column({ name: 'payment_gateway_customer_id', nullable: true })
+  payment_gateway_customer_id: string;
+
   @Column({
     type: 'enum',
     enum: SubscriptionStatus,

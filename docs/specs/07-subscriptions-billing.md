@@ -48,7 +48,7 @@ Pro is offered in two billing cycles:
 | **Pro Monthly** | $12.00 USD / month | `monthly` |
 | **Pro Annual** | $89.00 USD / year | `yearly` (~38 % saving vs monthly) |
 
-Plan names, prices, and `payment_gateway_variant_id` values are seeded via `scripts/seed/seed-subscription-plans-service.ts`. Gateway variant IDs must be set to real Lemon Squeezy variant IDs before going live (placeholders are used in development).
+Plan names, prices, and `payment_gateway_product_id` values are seeded via `scripts/seed/seed-subscription-plans-service.ts`. Creem sells products, not variants — gateway product IDs must be set to real Creem `prod_*` ids before going live (placeholders are used in development).
 
 ### Plan entitlements (canonical)
 
@@ -89,17 +89,63 @@ Plan names, prices, and `payment_gateway_variant_id` values are seeded via `scri
 
 ### Intended flow
 
-1. **Parse** notification: require enough data to identify **user** (e.g. email in custom/meta payload) and **plan** (plan id in custom data). Exact gateway JSON shape: **see runbook** (Lemon Squeezy–style `meta` / `data` is assumed in `PaymentHistoryService` validators).
-2. **Verify signature** when the gateway sends a signature header and the webhook secret is configured in env; in development, verification may be relaxed—**see code and runbook**.
-3. **Idempotency:** If the same external payment id was already stored, **do not** duplicate payment history.
-4. **Persist payment history** for audit (status, amounts, raw payload reference—per entity design).
-5. **Branch on event outcome:**
-   - **Subscription payment / activation success** → **`handleSuccessfulPayment`** path → **`processPaymentGatewayEvent`** → create or update **user subscription** and related user plan state per business rules (see `CreateSubscriptionFromPaymentGatewayDto` / `SubscriptionService.create`).
-   - **Payment failed** (or explicit failure event) → **`handleFailedPayment`** path → notify user (e.g. payment-failed email template) with safe template data; do **not** activate subscription.
+The gateway (`CreemPaymentGateway`) never hands services raw Creem JSON. It
+verifies and parses every payload into a `NormalizedWebhookEvent`
+(`externals/interfaces/normalized-webhook-event.interface.ts`); everything
+below consumes only that shape.
+
+1. **Verify signature** over the raw request body, before any DB read or
+   write. Creem signs under two schemes — a standard scheme with a 300s
+   replay window and a legacy scheme without one; scheme selection is
+   deterministic, never "try the other one on failure." An unverifiable
+   request returns 400 and nothing is persisted.
+2. **Parse** the payload into a `NormalizedWebhookEvent`. Parsing never
+   throws — an unrecognised event type becomes `PaymentEventType.UNKNOWN`.
+3. **Resolve the user** from `event.metadata.user_id` (server-derived at
+   checkout). `event.customerEmail` is a fallback only, used when
+   `user_id` is absent; the client-supplied `metadata.email` is never read
+   for entitlement.
+4. **Resolve the plan once**, from `event.metadata.plan_id` or
+   `event.gatewayProductId`, and reuse the same resolution for every
+   downstream step.
+5. **Idempotency:** an atomic claim against `payment_history`, keyed on
+   `event.gatewayTransactionId` (a `UNIQUE` DB constraint), reserves the row
+   before any handler runs. A second delivery of the same transaction is
+   recognised as a duplicate and the handler is skipped.
+6. **Persist payment history** for audit (status, amounts sourced from the
+   local `subscription_plans` row — never the webhook payload — plus a
+   redacted raw payload reference).
+7. **Branch on event type:**
+   - **Activation / renewal / trial** (`SUBSCRIPTION_ACTIVATED`,
+     `SUBSCRIPTION_RENEWED`, `SUBSCRIPTION_TRIALING`) → `handleSuccessfulPayment`
+     → `processPaymentGatewayEvent` → create or update the user subscription
+     and upgrade the user to premium.
+   - **Payment failed** (`SUBSCRIPTION_PAYMENT_FAILED`) → `handleFailedPayment`
+     → notify the user; do **not** activate the subscription.
+   - **Cancellation scheduled** (`SUBSCRIPTION_CANCEL_SCHEDULED`) →
+     `handleCancellationScheduled` — see "Cancellation is scheduled, not
+     immediate" below.
+   - **Cancelled / expired** (`SUBSCRIPTION_CANCELLED`, `SUBSCRIPTION_EXPIRED`)
+     → `handleSubscriptionDeactivated` → revoke access.
+8. **Mark processed** only after the handler succeeds. An exception between
+   the claim and this step leaves the row unfinished, so Creem's retry
+   legitimately reprocesses the event.
+
+### Cancellation is scheduled, not immediate
+
+`DELETE /subscriptions/:id/cancel` calls Creem in `scheduled` mode. The local
+row is updated to `is_cancelled = true`, `status = SCHEDULED_CANCEL`, but
+**`is_active` stays true** — the user keeps access until the period ends.
+Access is revoked only when `subscription.expired` arrives. There is no
+immediate-cancellation path.
 
 ### Ordering (intended)
 
-Apply **subscription state updates** and **payment history** in an order that preserves auditability: typically record or update payment row, then apply subscription side effects, or use a single transactional boundary where the DB supports it—**implementation detail** in code; runbook documents operational recovery.
+The claim on `payment_history` is reserved **before** the subscription side
+effects run, and marked processed only after they succeed — see steps 5–8
+above. This makes the claim itself the auditability boundary; no separate
+transaction wraps the handler, because the handler calls AWS SES and holding
+a pooled DB connection across a network call would be false atomicity.
 
 ## Non-production utilities
 

@@ -87,19 +87,19 @@ export class SubscriptionPlanQueryBuilder {
       validatedWhere.name = validatedWhere.name.trim();
     }
 
-    // Validate payment_gateway_variant_id if provided
-    if (validatedWhere.payment_gateway_variant_id !== undefined) {
+    // Validate payment_gateway_product_id if provided
+    if (validatedWhere.payment_gateway_product_id !== undefined) {
       if (
-        typeof validatedWhere.payment_gateway_variant_id !== 'string' ||
-        validatedWhere.payment_gateway_variant_id.trim().length === 0
+        typeof validatedWhere.payment_gateway_product_id !== 'string' ||
+        validatedWhere.payment_gateway_product_id.trim().length === 0
       ) {
         throw new BadRequestException(
-          'Payment gateway variant ID must be a non-empty string',
+          'Payment gateway product ID must be a non-empty string',
           ERROR_CODES.BAD_REQUEST,
         );
       }
-      validatedWhere.payment_gateway_variant_id =
-        validatedWhere.payment_gateway_variant_id.trim();
+      validatedWhere.payment_gateway_product_id =
+        validatedWhere.payment_gateway_product_id.trim();
     }
 
     return validatedWhere;

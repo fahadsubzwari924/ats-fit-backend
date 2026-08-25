@@ -13,13 +13,21 @@ import { PaymentStatus, PaymentType } from '../../modules/subscription/enums';
 import { SubscriptionPlan } from './subscription-plan.entity';
 
 @Entity('payment_history')
-@Index(['user_id'])
-@Index(['created_at'])
+@Index(['user_id', 'status'])
+@Index(['subscription_plan_id', 'created_at'])
 export class PaymentHistory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'payment_gateway_transaction_id' })
+  /**
+   * Unique by design: this is the atomic replay gate for the public webhook
+   * endpoint (`INSERT ... ON CONFLICT (payment_gateway_transaction_id)`).
+   * The `unique: true` here must stay in sync with the DB constraint
+   * `UQ_payment_history_gateway_transaction_id` — without it, a future
+   * `migration:generate` diff will propose DROPPING that constraint and
+   * silently reopen webhook replay.
+   */
+  @Column({ name: 'payment_gateway_transaction_id', unique: true })
   payment_gateway_transaction_id: string;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
@@ -74,6 +82,21 @@ export class PaymentHistory {
   @Column({ name: 'processed_at', type: 'timestamp', nullable: true })
   processed_at: Date;
 
+  /**
+   * Atomic replay-claim gate for the public webhook endpoint. Set to `now()`
+   * by the claim UPSERT in `PaymentHistoryService.claimPaymentEvent` when a
+   * delivery reserves this row; cleared implicitly once `processed_at` is
+   * set. A claim older than 2 minutes is treated as stale/crashed and is
+   * reclaimable by the next delivery. See
+   * `1815400000000-AddProcessingClaimedAtToPaymentHistory`.
+   */
+  @Column({
+    name: 'processing_claimed_at',
+    type: 'timestamp',
+    nullable: true,
+  })
+  processing_claimed_at: Date | null;
+
   // Error handling
   @Column({ name: 'retry_count', default: 0 })
   retry_count: number;
@@ -86,6 +109,17 @@ export class PaymentHistory {
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
+
+  /**
+   * Set when this row's personal fields have been stripped in response to a
+   * GDPR erasure request. `NULL` (the default for every existing and newly
+   * inserted row) means the row has not been anonymized. Nothing writes to
+   * this column yet — the `UserErasureService` that will is a separate,
+   * later piece of work; this column exists ahead of it so the schema is
+   * ready. See `1815500000000-AddAnonymizedAtToPaymentHistory`.
+   */
+  @Column({ name: 'anonymized_at', type: 'timestamp', nullable: true })
+  anonymized_at: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;

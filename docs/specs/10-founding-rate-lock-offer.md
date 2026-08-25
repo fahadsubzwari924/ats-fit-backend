@@ -48,7 +48,7 @@ Add to `User` entity (or equivalent auth/billing table):
 
 Add to `SubscriptionPlan` configuration (or a new `price_override` table keyed by user):
 
-- Founding price for Pro Monthly: **$7.20 USD**. Implement via Lemon Squeezy **variant-level coupon** OR a server-side price override that the checkout builder applies when `founding_rate_locked = true`. Prefer server-side override so the rate survives Lemon Squeezy coupon expiry / changes.
+- Founding price for Pro Monthly: **$7.20 USD**. Implemented via `CREEM_FOUNDING_DISCOUNT_CODE` — a Creem discount code applied at checkout when `user.founding_rate_locked = true` (`SubscriptionController.createPaymentCheckout`). A server-side price override remains the fallback design if the discount-code approach proves fragile, since it would survive Creem-side coupon expiry or changes without a code dependency.
 
 ## Flow (intended)
 
@@ -98,7 +98,7 @@ Founding users use the **same Pro entitlements** as standard Pro users (see [08-
 
 ## Non-functional notes
 
-- **Idempotency:** Webhook-driven `founding_rate_locked = true` transition must be idempotent against retried Lemon Squeezy webhooks.
+- **Idempotency:** Webhook-driven `founding_rate_locked = true` transition must be idempotent against retried Creem webhooks — covered by the `payment_history` claim gate documented in [07-subscriptions-billing.md](./07-subscriptions-billing.md).
 - **Atomicity:** Slot assignment (1-100) must be transactional — no two rows may claim the same `founding_slot_number`. Enforce via unique DB constraint + retry loop on collision.
 - **Observability:** Emit metrics for `founding_slots_assigned`, `founding_codes_sent`, `founding_codes_redeemed`, `founding_codes_expired_unredeemed`.
 

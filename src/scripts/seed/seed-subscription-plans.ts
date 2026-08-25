@@ -20,7 +20,7 @@ export async function seedSubscriptionPlans(dataSource: DataSource) {
       price: 12.0,
       currency: Currency.USD,
       billing_cycle: BillingCycle.MONTHLY,
-      payment_gateway_variant_id: '1012070',
+      payment_gateway_product_id: 'prod_V8Po3DhfTEmTsm',
       is_active: true,
       features: [
         '30 tailored resumes per month — single or batch',
@@ -46,7 +46,7 @@ export async function seedSubscriptionPlans(dataSource: DataSource) {
       price: 89.0,
       currency: Currency.USD,
       billing_cycle: BillingCycle.YEARLY,
-      payment_gateway_variant_id: '1012071',
+      payment_gateway_product_id: 'prod_V8PoKFEiezEs1G',
       is_active: true,
       features: [
         '30 tailored resumes per month — single or batch',

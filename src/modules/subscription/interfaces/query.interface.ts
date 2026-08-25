@@ -10,7 +10,7 @@ export interface ISubscriptionPlanWhereClause {
   billing_cycle?: BillingCycle;
   price?: number;
   name?: string;
-  payment_gateway_variant_id?: string;
+  payment_gateway_product_id?: string;
 }
 
 /**

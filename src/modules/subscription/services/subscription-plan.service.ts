@@ -188,14 +188,14 @@ export class SubscriptionPlanService {
     return plan;
   }
 
-  async findByVariantId(variantId: string): Promise<SubscriptionPlan | null> {
-    const validatedVariantId = IdValidator.validateId(
-      variantId,
-      'Payment gateway variant ID',
+  async findByProductId(productId: string): Promise<SubscriptionPlan | null> {
+    const validatedProductId = IdValidator.validateId(
+      productId,
+      'Payment gateway product ID',
     );
 
     return await this.subscriptionPlanRepository.findOne({
-      where: { payment_gateway_variant_id: validatedVariantId },
+      where: { payment_gateway_product_id: validatedProductId },
     });
   }
 

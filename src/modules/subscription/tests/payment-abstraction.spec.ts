@@ -5,6 +5,7 @@ import { PAYMENT_GATEWAY_TOKEN } from '../externals/interfaces/payment-gateway.i
 import { Currency } from '../enums/payment.enum';
 import { PaymentProvider } from '../enums/payment-provider.enum';
 import { SubscriptionStatus } from '../enums/subscription-status.enum';
+import { PaymentEventType } from '../enums/payment-event-type.enum';
 
 describe('Payment Abstraction Layer', () => {
   let paymentService: PaymentService;
@@ -41,6 +42,15 @@ describe('Payment Abstraction Layer', () => {
         portalUrl: 'https://test-provider.com/portal/123',
       }),
       getCustomerSubscriptions: jest.fn().mockResolvedValue([]),
+      verifyWebhookSignature: jest.fn().mockReturnValue(true),
+      parseWebhook: jest.fn().mockReturnValue({
+        eventId: 'evt_123',
+        type: PaymentEventType.SUBSCRIPTION_ACTIVATED,
+        rawType: 'subscription_created',
+        isTestMode: false,
+        metadata: {},
+        raw: {},
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -147,14 +157,12 @@ describe('Payment Abstraction Layer', () => {
   });
 
   describe('Provider Switching Simulation', () => {
-    it('should return LemonSqueezy provider name', async () => {
+    it('should return the configured provider name', async () => {
       // Mock the provider name
-      mockPaymentGateway.getProviderName.mockReturnValue(
-        PaymentProvider.LEMONSQUEEZY,
-      );
+      mockPaymentGateway.getProviderName.mockReturnValue(PaymentProvider.CREEM);
 
       const providerName = await paymentService.getProviderName();
-      expect(providerName).toBe(PaymentProvider.LEMONSQUEEZY);
+      expect(providerName).toBe(PaymentProvider.CREEM);
     });
 
     it('should work with different payment providers (Stripe example)', async () => {
@@ -204,7 +212,7 @@ describe('Payment Abstraction Layer', () => {
  * 🎯 What this test proves:
  *
  * 1. ✅ **Complete Abstraction**: PaymentService works with ANY provider that implements IPaymentGateway
- * 2. ✅ **Provider Agnostic**: Same code works with LemonSqueezy, Stripe, Paddle, etc.
+ * 2. ✅ **Provider Agnostic**: Same code works with Creem, Stripe, Paddle, etc.
  * 3. ✅ **Easy Testing**: Can mock any provider implementation
  * 4. ✅ **Consistent Interface**: All operations have the same signature regardless of provider
  * 5. ✅ **Error Handling**: Provider-specific errors are handled consistently

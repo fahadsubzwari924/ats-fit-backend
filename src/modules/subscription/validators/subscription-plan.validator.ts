@@ -20,10 +20,10 @@ export class SubscriptionPlanValidator {
       min: 0,
       message: 'Price is required and must be a non-negative number',
     },
-    PAYMENT_GATEWAY_VARIANT_ID: {
+    PAYMENT_GATEWAY_PRODUCT_ID: {
       required: true,
       minLength: 1,
-      message: 'Payment gateway variant ID is required',
+      message: 'Payment gateway product ID is required',
     },
   };
 
@@ -61,10 +61,10 @@ export class SubscriptionPlanValidator {
       validationErrors.push(this.VALIDATION_RULES.PRICE.message);
     }
 
-    // Validate payment gateway variant ID
-    if (!this.isValidString(data.payment_gateway_variant_id)) {
+    // Validate payment gateway product ID
+    if (!this.isValidString(data.payment_gateway_product_id)) {
       validationErrors.push(
-        this.VALIDATION_RULES.PAYMENT_GATEWAY_VARIANT_ID.message,
+        this.VALIDATION_RULES.PAYMENT_GATEWAY_PRODUCT_ID.message,
       );
     }
 
@@ -96,7 +96,7 @@ export class SubscriptionPlanValidator {
       ...data,
       plan_name: data.plan_name?.trim(),
       description: data.description?.trim(),
-      payment_gateway_variant_id: data.payment_gateway_variant_id?.trim(),
+      payment_gateway_product_id: data.payment_gateway_product_id?.trim(),
       currency: data.currency || Currency.USD,
     };
   }

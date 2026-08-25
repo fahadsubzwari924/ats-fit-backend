@@ -83,7 +83,7 @@ Long-running and side-effect work runs off the request path with **3 retries / e
 | **OpenAI** | Primary tailoring & resume-extraction LLM (`OPENAI_MODEL`) |
 | **Anthropic Claude (Haiku 4.5)** | Job-relevance pre-generation gate |
 | **AWS SES + Brevo** | Transactional & lifecycle email (templated) |
-| **Lemon Squeezy** | Checkout, payments, signed webhooks |
+| **Creem** | Checkout, payments, signed webhooks (normalized to a provider-neutral event before touching services) |
 | **Google OAuth** | Federated sign-in |
 | **PDF engine** | Puppeteer / node-latex (in-process render) |
 
@@ -94,7 +94,7 @@ Long-running and side-effect work runs off the request path with **3 retries / e
 1. **Onboard** — sign up → upload PDF → `resume_processing` extraction → profile Q&A → `profile_enrichment` → onboarding complete.
 2. **Tailor (single)** — `POST /resume-tailoring/generate` → (optional **relevance gate** in parallel; low-fit returns a JSON warning instead of a PDF) → JD analysis + optimization (with tech-substitution guardrails) → PDF stream + metric headers → `changes_diff` persisted async.
 3. **Tailor (batch v2)** — `POST .../batch/v2/generate` returns **202** in <500 ms → jobs enqueued → worker processes 3-in-parallel → **SSE** (`job_started`/`job_progress`/`job_completed`/`batch_completed`) → state survives reconnects via `batch_tailoring_*` tables.
-4. **Monetize** — list plans → checkout (Lemon Squeezy) → **signed webhook** `POST /subscriptions/payment-confirmation` → idempotent `payment_history` write → entitlement update.
+4. **Monetize** — list plans → checkout (Creem) → **signed webhook** `POST /subscriptions/payment-confirmation` → verify → parse to a normalized event → idempotent `payment_history` claim → entitlement update.
 
 ---
 

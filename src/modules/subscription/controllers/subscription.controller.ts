@@ -18,6 +18,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { SubscriptionService } from '../services/subscription.service';
 import { SubscriptionPlanService } from '../services/subscription-plan.service';
 import { PaymentService } from '../../../shared/services/payment.service';
@@ -25,7 +26,6 @@ import { PaymentHistoryService } from '../services/payment-history.service';
 import { UserService } from '../../user/user.service';
 import { CreateSubscriptionDto } from '../dtos/subscription.dto';
 import { SubscriptionPlanResponseDto } from '../dtos/subscription-plan.dto';
-import { PaymentConfirmationDto } from '../dtos/payment-confirmation.dto';
 import { User } from '../../../database/entities/user.entity';
 import { SubscriptionPlan } from '../../../database/entities/subscription-plan.entity';
 import { CheckoutResponseDto } from '../dtos/checkout-response.dto';
@@ -33,12 +33,17 @@ import { JwtAuthGuard } from '../../auth/jwt.guard';
 import { RequestWithUserContext } from '../../../shared/interfaces/request-user.interface';
 import {
   BadRequestException,
+  ForbiddenException,
+  InternalServerErrorException,
   NotFoundException,
 } from '../../../shared/exceptions/custom-http-exceptions';
 import { MESSAGES } from '../../../shared/constants/messages';
 import { ERROR_CODES } from '../../../shared/constants/error-codes';
 import { Public } from '../../auth/decorators/public.decorator';
-import { ExternalPaymentGatewayEvents } from '../externals/enums';
+import { NormalizedWebhookEvent } from '../externals/interfaces/normalized-webhook-event.interface';
+import { WebhookHeaders } from '../externals/interfaces/payment-gateway.interface';
+import { PaymentEventType } from '../enums/payment-event-type.enum';
+import { isUUID } from 'class-validator';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -53,6 +58,7 @@ export class SubscriptionController {
     private readonly paymentHistoryService: PaymentHistoryService, // ✅ Payment history handling
     private readonly subscriptionPlanService: SubscriptionPlanService,
     private readonly userService: UserService,
+    private readonly configService: ConfigService,
   ) {}
 
   @Post('checkout')
@@ -203,7 +209,7 @@ export class SubscriptionController {
       customData: Record<string, any>;
       discountCode?: string;
     } = {
-      variantId: subscriptionPlan.payment_gateway_variant_id,
+      variantId: subscriptionPlan.payment_gateway_product_id,
       email: createSubscriptionDto.metadata?.email,
       customData: {
         user_id: userId,
@@ -220,7 +226,9 @@ export class SubscriptionController {
       try {
         const user = await this.userService.getUserById(userId);
         if (user?.founding_rate_locked === true) {
-          const couponCode = process.env.LS_FOUNDING_COUPON_CODE;
+          const couponCode = this.configService.get<string>(
+            'CREEM_FOUNDING_DISCOUNT_CODE',
+          );
           if (couponCode) {
             checkoutRequest.discountCode = couponCode;
             this.logger.log(
@@ -228,7 +236,7 @@ export class SubscriptionController {
             );
           } else {
             this.logger.warn(
-              `[BetaAccess] WARN: LS_FOUNDING_COUPON_CODE not configured — founding rate not applied`,
+              `[BetaAccess] WARN: CREEM_FOUNDING_DISCOUNT_CODE not configured — founding rate not applied`,
             );
           }
         }
@@ -273,6 +281,18 @@ export class SubscriptionController {
         );
       }
 
+      // IDOR guard: caller supplies an arbitrary subscription id — verify it
+      // belongs to the authenticated caller before returning it.
+      if (subscription.user_id !== request?.userContext?.userId) {
+        this.logger.warn(
+          `User ${request?.userContext?.userId} attempted to access subscription ${id} owned by ${subscription.user_id}`,
+        );
+        throw new ForbiddenException(
+          'You do not own this subscription',
+          ERROR_CODES.FORBIDDEN,
+        );
+      }
+
       this.logger.log(
         `Subscription retrieved successfully: ${subscription.id}`,
       );
@@ -287,6 +307,15 @@ export class SubscriptionController {
           stack: error.stack,
         },
       );
+
+      // Re-throw known exceptions to maintain proper error responses
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
 
       // Handle unexpected errors (database connection issues, etc.)
       throw new BadRequestException(
@@ -308,6 +337,18 @@ export class SubscriptionController {
     @Req() request: RequestWithUserContext,
   ) {
     try {
+      // IDOR guard: caller supplies an arbitrary userId — only the
+      // authenticated caller's own subscriptions may be returned.
+      if (userId !== request?.userContext?.userId) {
+        this.logger.warn(
+          `User ${request?.userContext?.userId} attempted to access subscriptions for user ${userId}`,
+        );
+        throw new ForbiddenException(
+          'You do not own this resource',
+          ERROR_CODES.FORBIDDEN,
+        );
+      }
+
       this.logger.log(`Retrieving subscriptions for user ID: ${userId}`);
 
       // Get user subscriptions from database
@@ -327,6 +368,14 @@ export class SubscriptionController {
           stack: error.stack,
         },
       );
+
+      // Re-throw known exceptions to maintain proper error responses
+      if (
+        error instanceof ForbiddenException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
 
       // Handle unexpected errors (database connection issues, etc.)
       throw new BadRequestException(
@@ -349,6 +398,19 @@ export class SubscriptionController {
     @Req() request: RequestWithUserContext,
   ) {
     try {
+      // IDOR guard: caller supplies an arbitrary userId — this endpoint
+      // leaks customer_email, amounts, and the raw payment_gateway_response,
+      // so only the authenticated caller's own history may be returned.
+      if (userId !== request?.userContext?.userId) {
+        this.logger.warn(
+          `User ${request?.userContext?.userId} attempted to access payment history for user ${userId}`,
+        );
+        throw new ForbiddenException(
+          'You do not own this resource',
+          ERROR_CODES.FORBIDDEN,
+        );
+      }
+
       this.logger.log(`Retrieving payment history for user ID: ${userId}`);
 
       // Verify user exists
@@ -384,6 +446,7 @@ export class SubscriptionController {
       // Re-throw known exceptions to maintain proper error responses
       if (
         error instanceof NotFoundException ||
+        error instanceof ForbiddenException ||
         error instanceof BadRequestException
       ) {
         throw error;
@@ -600,128 +663,312 @@ export class SubscriptionController {
   })
   @ApiResponse({ status: 400, description: 'Invalid Payment request' })
   async paymentConfirmation(
-    @Headers('x-signature') signature: string,
-    @Body() payload: PaymentConfirmationDto,
+    @Headers() headers: WebhookHeaders,
+    @Body() payload: unknown,
     @Req() req: RawBodyRequest<Request>,
-  ) {
+  ): Promise<void> {
+    this.logger.log('🔔 Webhook "payment-confirmation" received');
+
+    // Step 1: Signature verification FIRST, strictly before any DB read or
+    // write. Creem's two schemes are keyed off different headers, so the
+    // whole header bag is passed through — never a single named header.
+    //
+    // The raw bytes Creem actually signed must be used verbatim. There is
+    // deliberately NO `JSON.stringify(payload)` fallback: re-serialised JSON
+    // is never byte-identical to what was signed (key order, spacing,
+    // unicode escaping), and "fixing" the resulting mismatches is exactly
+    // how a fail-open bug gets introduced. If the raw body is unavailable,
+    // reject — using the same generic rejection as a bad signature, so the
+    // response never discloses which case occurred.
+    if (!req.rawBody) {
+      this.rejectWebhook('missing-raw-body');
+    }
+
+    const rawBody = req.rawBody.toString('utf8');
+    const signatureValid = this.paymentService.verifyWebhookSignature(
+      headers,
+      rawBody,
+    );
+    if (!signatureValid) {
+      this.rejectWebhook('invalid-signature');
+    }
+
+    // Step 2: Parse. This never throws by design — an unrecognised or
+    // malformed payload yields PaymentEventType.UNKNOWN, not an exception.
+    const event = this.paymentService.parseWebhook(payload);
+
     try {
-      this.logger.log('🔔 Webhook "payment-confirmation" received');
-
-      // Step 1: Verify signature FIRST — reject before any state mutation
-      // Use raw body bytes to match exactly what LemonSqueezy signed
-      const rawBody = req.rawBody?.toString('utf8') ?? JSON.stringify(payload);
-      const signatureValid = await this.subscriptionService.verifySignature(
-        signature,
-        rawBody,
-      );
-      if (!signatureValid) {
-        this.logger.warn('Webhook rejected: invalid signature');
-        throw new BadRequestException(
-          'Invalid signature',
-          ERROR_CODES.BAD_REQUEST,
-        );
-      }
-
-      // Step 2: Extract and validate custom data
-      const customData = payload?.meta?.custom_data ?? {};
-      const { email, plan_id } = customData as {
-        email?: string;
-        plan_id?: string;
-      };
-
-      if (!email) {
-        throw new BadRequestException(
-          'Email not found in payment payload',
-          ERROR_CODES.BAD_REQUEST,
-        );
-      }
-      if (plan_id == null) {
-        throw new BadRequestException(
-          'Plan ID not found in payment payload',
-          ERROR_CODES.BAD_REQUEST,
-        );
-      }
-
-      // Step 3: Resolve user and plan
-      const user = await this.userService.getUserByEmail(email);
+      // Step 3: Resolve the entitled user from metadata.user_id — never
+      // metadata.email (client-supplied at checkout; the authorization
+      // defect this migration exists to close).
+      const user = await this.resolveWebhookUser(event);
       if (!user) {
-        throw new NotFoundException(
-          'User not found',
-          ERROR_CODES.USER_NOT_FOUND,
-        );
+        // payment_history.user_id is NOT NULL with an FK — an insert with
+        // no resolved user can never succeed, and a non-200 here would make
+        // Creem retry an unfixable event forever on its full retry
+        // schedule. Log loudly, acknowledge, do not write payment_history.
+        this.logger.error('Webhook user could not be resolved — skipping', {
+          eventId: event.eventId,
+          gatewayTransactionId: event.gatewayTransactionId,
+          gatewayProductId: event.gatewayProductId,
+          customerEmail: event.customerEmail,
+        });
+        return;
       }
 
-      const subscriptionPlan = await this.subscriptionPlanService.findById(
-        String(plan_id),
+      // Audit-only cross-check — NEVER gates or alters processing. Paying
+      // with a work card while signed up personally is legitimate.
+      if (
+        event.customerEmail &&
+        user.email &&
+        event.customerEmail.toLowerCase() !== user.email.toLowerCase()
+      ) {
+        this.logger.warn('Webhook customerEmail does not match resolved user', {
+          eventId: event.eventId,
+          resolvedUserEmail: user.email,
+          gatewayCustomerEmail: event.customerEmail,
+        });
+      }
+
+      // Step 4: Resolve the plan ONCE, here, and pass it through every call
+      // below — never let a downstream service independently re-resolve it
+      // (two resolution paths for one event is a drift risk between routing
+      // and the persisted subscription_plan_id).
+      const plan = await this.resolveWebhookPlan(event);
+
+      // Step 5: Atomic claim gate — reserves (or recognises as duplicate)
+      // the payment_history row for this transaction before any handler
+      // runs.
+      const claim = await this.paymentHistoryService.claimPaymentEvent(
+        event,
+        user,
+        plan,
       );
-      if (!subscriptionPlan) {
-        throw new NotFoundException(
-          'Subscription plan not found',
-          ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
+
+      if (claim.outcome === 'duplicate') {
+        this.logger.log(
+          `Webhook event ${event.eventId} (transaction ${event.gatewayTransactionId}) is a duplicate — skipping handler`,
         );
+        return;
       }
 
-      // Step 4: Route event to the correct handler
-      const eventName = payload.meta
-        ?.event_name as ExternalPaymentGatewayEvents;
-      await this.routeWebhookEvent(eventName, payload, user, subscriptionPlan);
+      // Step 6: Route on the normalized event type, then mark processed
+      // only once the handler has succeeded. If the handler throws, let it
+      // propagate — the row keeps processed_at NULL and Creem's retry
+      // legitimately reprocesses it.
+      await this.routeWebhookEvent(event, user, plan);
+      await this.paymentHistoryService.markAsProcessed(claim.row.id);
 
-      // Step 5: Record payment history (idempotent — skips if transaction ID already exists)
-      const paymentHistory =
-        await this.paymentHistoryService.paymentConfirmation(payload);
-      await this.paymentHistoryService.markAsProcessed(paymentHistory.id);
-
-      this.logger.log(`✅ Webhook processed: ${eventName}`);
+      this.logger.log(`✅ Webhook processed: ${event.type} (${event.eventId})`);
     } catch (error) {
-      this.logger.error('Webhook processing failed', error);
+      this.logger.error('Webhook processing failed', {
+        error: error?.message,
+        eventId: event.eventId,
+        eventType: event.type,
+      });
       throw error;
     }
   }
 
+  /**
+   * Every rejection returns the identical 400 status and body regardless of
+   * reason. Varying the response by cause (missing headers vs. expired
+   * timestamp vs. bad signature vs. malformed body) hands an attacker a
+   * feedback channel for refining a forged signature. The real reason is
+   * logged only, never echoed to the caller. A non-200 is correct here too
+   * — it lets Creem's 30s/1m/5m/1h retry schedule self-heal a transient
+   * misconfiguration.
+   */
+  private rejectWebhook(reason: string): never {
+    this.logger.warn(`Webhook rejected: ${reason}`);
+    throw new BadRequestException(
+      'Invalid webhook request',
+      ERROR_CODES.BAD_REQUEST,
+    );
+  }
+
+  /**
+   * Resolve the entitled user for a webhook event.
+   *
+   * `metadata.user_id` is server-derived at checkout time and authoritative.
+   * `metadata.email` is NEVER read here — it is client-supplied at checkout
+   * and is the authorization defect this migration exists to close (see
+   * "Authorization gap found during the Task 6 security consult"). The only
+   * fallback is `event.customerEmail` — Creem's own record of who actually
+   * paid — used only when `user_id` is absent or unusable, and always with
+   * a warning: this should never fire for a checkout created after the fix.
+   *
+   * `user_id` is validated as UUID *shape* before it ever reaches the
+   * database. `users.id` is a Postgres `uuid` column, so a non-UUID string
+   * can never resolve to a row — it's not a "user not found", it's an input
+   * that can never succeed. Rejecting it here (rather than letting the
+   * lookup throw) means we never have to distinguish "the driver rejected
+   * this cast" from "the DB is unreachable" by parsing an error — the
+   * distinction is made before the call, not after. A rejection from
+   * `getUserById` for a validly-shaped id (e.g. connection failure) is
+   * deliberately NOT caught: that's a "could not check right now" failure,
+   * and must propagate so Creem's retry schedule gets another chance at it.
+   */
+  private async resolveWebhookUser(
+    event: NormalizedWebhookEvent,
+  ): Promise<User | null> {
+    const userId = event.metadata?.user_id;
+    const hasUserId = typeof userId === 'string' && userId.trim() !== '';
+
+    if (hasUserId) {
+      if (!isUUID(userId)) {
+        this.logger.error(
+          `Webhook metadata.user_id (${userId}) is not a valid UUID (event ${event.eventId}) — falling back to customerEmail`,
+        );
+      } else {
+        const user = await this.userService.getUserById(userId);
+        if (!user) {
+          this.logger.error(
+            `Webhook metadata.user_id (${userId}) did not resolve to an active user (event ${event.eventId})`,
+          );
+        }
+        return user;
+      }
+    }
+
+    if (event.customerEmail) {
+      this.logger.warn(
+        `Webhook event ${event.eventId} has no resolvable metadata.user_id — falling back to customerEmail lookup (should never fire for our own checkout)`,
+      );
+      return this.userService.getUserByEmail(event.customerEmail);
+    }
+
+    return null;
+  }
+
+  /**
+   * Resolve the subscription plan ONCE for this event: `metadata.plan_id`
+   * first, falling back to the plan whose `payment_gateway_product_id`
+   * matches `event.gatewayProductId`. The result is passed through to both
+   * the claim gate and the routed handler — never resolved a second time.
+   */
+  private async resolveWebhookPlan(
+    event: NormalizedWebhookEvent,
+  ): Promise<SubscriptionPlan | null> {
+    const planId = event.metadata?.plan_id;
+    if (typeof planId === 'string' && planId.trim() !== '') {
+      try {
+        return await this.subscriptionPlanService.findById(planId);
+      } catch {
+        this.logger.warn(
+          `Webhook metadata.plan_id (${planId}) did not resolve to a plan (event ${event.eventId}) — falling back to gatewayProductId`,
+        );
+      }
+    }
+
+    if (event.gatewayProductId) {
+      const plan = await this.subscriptionPlanService.findByProductId(
+        event.gatewayProductId,
+      );
+      if (!plan) {
+        this.logger.error(
+          `No subscription plan found for gatewayProductId ${event.gatewayProductId} (event ${event.eventId})`,
+        );
+      }
+      return plan;
+    }
+
+    this.logger.error(
+      `Webhook event ${event.eventId} has neither metadata.plan_id nor gatewayProductId — plan cannot be resolved`,
+    );
+    return null;
+  }
+
+  /**
+   * Route a claimed webhook event on its normalized type.
+   *
+   * `PAYMENT_REFUNDED` and `PAYMENT_DISPUTED` are wired here — a security
+   * consult found nothing routed to either, and `handlePaymentDisputed` had
+   * zero callers despite existing on SubscriptionService.
+   */
   private async routeWebhookEvent(
-    eventName: ExternalPaymentGatewayEvents,
-    payload: PaymentConfirmationDto,
+    event: NormalizedWebhookEvent,
     user: User,
-    subscriptionPlan: SubscriptionPlan,
+    plan: SubscriptionPlan | null,
   ): Promise<void> {
-    switch (eventName) {
-      case ExternalPaymentGatewayEvents.SUBSCRIPTION_CREATED:
-      case ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_SUCCESS:
-      case ExternalPaymentGatewayEvents.SUBSCRIPTION_RESUMED:
-      case ExternalPaymentGatewayEvents.SUBSCRIPTION_UNPAUSED:
+    switch (event.type) {
+      case PaymentEventType.SUBSCRIPTION_ACTIVATED:
+      case PaymentEventType.SUBSCRIPTION_RENEWED:
+      case PaymentEventType.SUBSCRIPTION_TRIALING:
         await this.subscriptionService.handleSuccessfulPayment(
-          payload,
+          event,
           user,
-          subscriptionPlan,
+          this.requirePlan(event, plan),
         );
         break;
 
-      case ExternalPaymentGatewayEvents.SUBSCRIPTION_PAYMENT_FAILED:
+      case PaymentEventType.SUBSCRIPTION_PAYMENT_FAILED:
         await this.subscriptionService.handleFailedPayment(
-          payload,
+          event,
           user,
-          subscriptionPlan,
+          this.requirePlan(event, plan),
         );
         break;
 
-      case ExternalPaymentGatewayEvents.SUBSCRIPTION_CANCELLED:
-      case ExternalPaymentGatewayEvents.SUBSCRIPTION_EXPIRED:
+      case PaymentEventType.SUBSCRIPTION_CANCEL_SCHEDULED:
+        await this.subscriptionService.handleCancellationScheduled(event, user);
+        break;
+
+      case PaymentEventType.SUBSCRIPTION_CANCELLED:
+      case PaymentEventType.SUBSCRIPTION_EXPIRED:
         await this.subscriptionService.handleSubscriptionDeactivated(
-          payload,
+          event,
           user,
         );
         break;
 
-      case ExternalPaymentGatewayEvents.SUBSCRIPTION_UPDATED:
-      case ExternalPaymentGatewayEvents.SUBSCRIPTION_PAUSED:
-        await this.subscriptionService.handleSubscriptionUpdated(payload);
+      case PaymentEventType.SUBSCRIPTION_UPDATED:
+      case PaymentEventType.SUBSCRIPTION_PAUSED:
+        await this.subscriptionService.handleSubscriptionUpdated(event);
         break;
 
+      case PaymentEventType.PAYMENT_DISPUTED:
+        await this.subscriptionService.handlePaymentDisputed(event, user);
+        break;
+
+      case PaymentEventType.PAYMENT_REFUNDED:
+        this.logger.log(
+          `Refund event ${event.eventId} recorded in payment history only`,
+        );
+        break;
+
+      case PaymentEventType.UNKNOWN:
       default:
         this.logger.log(
-          `Unhandled webhook event type: ${eventName} — recorded in history only`,
+          `Unhandled/unrecognised webhook event type (${event.rawType}) — recorded in history only (event ${event.eventId})`,
         );
+        break;
     }
+  }
+
+  /**
+   * `SUBSCRIPTION_ACTIVATED`/`RENEWED`/`TRIALING` and `PAYMENT_FAILED`
+   * cannot be routed without a resolved plan — SubscriptionService's
+   * handlers require one. Throwing here (rather than silently skipping the
+   * handler) propagates as a non-200 so Creem retries once the underlying
+   * data issue — a stale `metadata.plan_id` or an unseeded
+   * `gatewayProductId` — is fixed. This is a data-integrity failure, not a
+   * signature-verification one, so it is not subject to the no-oracle rule.
+   */
+  private requirePlan(
+    event: NormalizedWebhookEvent,
+    plan: SubscriptionPlan | null,
+  ): SubscriptionPlan {
+    if (!plan) {
+      this.logger.error(
+        `Cannot route event ${event.eventId} (${event.type}): no subscription plan resolved`,
+      );
+      throw new InternalServerErrorException(
+        'Unable to resolve subscription plan for webhook event',
+        ERROR_CODES.INTERNAL_SERVER,
+      );
+    }
+    return plan;
   }
   //#endregion
 }

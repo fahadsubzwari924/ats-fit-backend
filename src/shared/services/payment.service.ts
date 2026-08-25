@@ -9,7 +9,9 @@ import {
   CancelSubscriptionRequest,
   CancelSubscriptionResponse,
   PAYMENT_GATEWAY_TOKEN,
+  WebhookHeaders,
 } from '../../modules/subscription/externals/interfaces/payment-gateway.interface';
+import { NormalizedWebhookEvent } from '../../modules/subscription/externals/interfaces/normalized-webhook-event.interface';
 import {
   InternalServerErrorException,
   NotFoundException,
@@ -151,18 +153,11 @@ export class PaymentService {
   /**
    * Verify webhook signature
    */
-  verifyWebhookSignature(signature: string, payload: string): boolean {
+  verifyWebhookSignature(headers: WebhookHeaders, rawBody: string): boolean {
     try {
-      if (!this.paymentGateway.verifyWebhookSignature) {
-        this.logger.warn(
-          'Webhook signature verification not supported by current payment gateway',
-        );
-        return true; // Allow webhook if verification not supported
-      }
-
       const isValid = this.paymentGateway.verifyWebhookSignature(
-        signature,
-        payload,
+        headers,
+        rawBody,
       );
 
       if (!isValid) {
@@ -174,6 +169,13 @@ export class PaymentService {
       this.logger.error('Webhook signature verification failed', error);
       return false;
     }
+  }
+
+  /**
+   * Translate a provider webhook payload into the internal event shape
+   */
+  parseWebhook(rawPayload: unknown): NormalizedWebhookEvent {
+    return this.paymentGateway.parseWebhook(rawPayload);
   }
 
   /**

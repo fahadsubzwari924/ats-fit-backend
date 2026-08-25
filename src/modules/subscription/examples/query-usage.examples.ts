@@ -107,12 +107,12 @@ export class SubscriptionPlanQueryExamples {
   }
 
   /**
-   * Example 6: Search by payment gateway variant ID
+   * Example 6: Search by payment gateway product ID
    */
-  async getPlanByVariantId(variantId: string) {
+  async getPlanByProductId(productId: string) {
     const queryOptions: ISubscriptionPlanQueryOptions = {
       where: {
-        payment_gateway_variant_id: variantId,
+        payment_gateway_product_id: productId,
         is_active: true,
       },
     };
