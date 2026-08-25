@@ -14,20 +14,10 @@ import { AllExceptionsFilter } from './shared/modules/response/exception.filter'
 import { RequestIdMiddleware } from './shared/modules/response/request-id.middleware';
 import { Request, Response, NextFunction } from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { lemonSqueezySetup } from '@lemonsqueezy/lemonsqueezy.js';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, { rawBody: true });
-
-  // Lemon Squeezy SDK setup
-  lemonSqueezySetup({
-    apiKey: process.env.LEMON_SQUEEZY_API_KEY,
-    onError: (error) => {
-      logger.error('Payment gateway SDK Error:', error);
-      // Optionally throw or handle
-    },
-  });
 
   // Enable graceful shutdown for Cloud Run
   app.enableShutdownHooks();
@@ -180,7 +170,7 @@ async function setupNgrokTunnel(port: number | string, logger: Logger) {
     const tunnelUrl = tunnel.url();
     logger.log(`✅ Ngrok tunnel established: ${tunnelUrl}`);
     logger.log(
-      `📱 Webhook URL for LemonSqueezy dashboard: ${tunnelUrl}/api/v1/subscriptions/payment-confirmation`,
+      `📱 Webhook URL for Creem dashboard: ${tunnelUrl}/api/v1/subscriptions/payment-confirmation`,
     );
   } catch (error) {
     logger.error('Failed to setup ngrok tunnel:', error);

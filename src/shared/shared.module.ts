@@ -10,8 +10,8 @@ import { CacheService } from './services/cache.service';
 import { ValidationModule } from './modules/validation/validation.module';
 import { AIContentService } from './services/ai-content.service';
 import { FileValidationPipe } from './pipes/file-validation.pipe';
-import { LemonSqueezyService } from '../modules/subscription/externals/services/lemon_squeezy.service';
-import { LemonSqueezyPaymentGateway } from '../modules/subscription/externals/gateways/lemonsqueezy-payment.gateway';
+import { CreemService } from '../modules/subscription/externals/services/creem.service';
+import { CreemPaymentGateway } from '../modules/subscription/externals/gateways/creem-payment.gateway';
 import { EMAIL_SERVICE_TOKEN } from './interfaces/email.interface';
 import { AwsSesService } from './modules/external/services/aws-ses.service';
 import { S3TemplateProviderService } from './services/s3-template-provider.service';
@@ -55,8 +55,8 @@ import { TEMPLATE_RENDERER_TOKEN } from './interfaces/template-renderer.interfac
     },
 
     // Payment Gateways
-    LemonSqueezyService,
-    LemonSqueezyPaymentGateway,
+    CreemService,
+    CreemPaymentGateway,
   ],
   exports: [
     BaseMapperService,

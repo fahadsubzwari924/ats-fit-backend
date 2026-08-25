@@ -67,9 +67,9 @@ export default () => ({
     // File size limits
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 5242880, // 5MB
   },
-  lemonSqueezy: {
-    apiKey: process.env.LEMON_SQUEEZY_API_KEY,
-    storeId: process.env.LEMON_SQUEEZY_STORE_ID,
-    webhookSecret: process.env.LEMON_SQUEEZY_WEBHOOK_SECRET,
+  creem: {
+    apiKey: process.env.CREEM_API_KEY,
+    webhookSecret: process.env.CREEM_WEBHOOK_SECRET,
+    foundingDiscountCode: process.env.CREEM_FOUNDING_DISCOUNT_CODE,
   },
 });

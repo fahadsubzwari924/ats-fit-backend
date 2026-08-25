@@ -199,9 +199,14 @@ export class ReplacementQuotaService {
   }
 
   /**
-   * For MONTHLY subscriptions: the billing window starts at `starts_at`
-   * (LemonSqueezy creates a new subscription row on each renewal, so
-   * `starts_at` is the current period start).
+   * For MONTHLY subscriptions: the billing window starts at `starts_at`,
+   * which is always the CURRENT period start.
+   *
+   * Creem keeps one subscription row for the lifetime of the subscription,
+   * so `starts_at` is only correct here because `SubscriptionService`
+   * refreshes it from the webhook's `periodStart` on every renewal. If that
+   * refresh is ever removed, `starts_at` pins to the original signup date
+   * and this quota silently stops resetting for paying customers.
    *
    * resetsAt = starts_at + 1 calendar month.
    */

@@ -59,12 +59,11 @@ export const validationSchema = Joi.object({
   OPENAI_API_KEY: Joi.string().required(),
   OPENAI_MODEL: Joi.string().default('gpt-4-turbo'),
 
-  // LemonSqueezy configuration (optional for now)
-  LEMON_SQUEEZY_API_KEY: Joi.string().optional().allow(''),
-  LEMON_SQUEEZY_STORE_ID: Joi.string().optional().allow(''),
-  LEMON_SQUEEZY_WEBHOOK_SECRET: Joi.string().optional().allow(''),
+  // Creem configuration (optional for now)
+  CREEM_API_KEY: Joi.string().optional().allow(''),
+  CREEM_WEBHOOK_SECRET: Joi.string().optional().allow(''),
   // Optional: discount/coupon code applied to Pro Monthly checkouts for founding-rate-locked users
-  LS_FOUNDING_COUPON_CODE: Joi.string().optional().allow(''),
+  CREEM_FOUNDING_DISCOUNT_CODE: Joi.string().optional().allow(''),
 
   // App configuration
   APP_URL: Joi.string().optional().default('http://localhost:3000'),

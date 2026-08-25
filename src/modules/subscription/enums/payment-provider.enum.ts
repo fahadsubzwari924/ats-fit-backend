@@ -6,10 +6,10 @@
  * when dealing with different payment providers.
  */
 export enum PaymentProvider {
-  LEMONSQUEEZY = 'lemonsqueezy',
   STRIPE = 'stripe',
   PADDLE = 'paddle',
   PAYPAL = 'paypal',
+  CREEM = 'creem',
 }
 
 /**

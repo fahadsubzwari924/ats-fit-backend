@@ -7,6 +7,10 @@
 
 import { PaymentProvider } from '../../enums/payment-provider.enum';
 import { SubscriptionStatus } from '../../enums/subscription-status.enum';
+import { NormalizedWebhookEvent } from './normalized-webhook-event.interface';
+
+/** Subset of incoming request headers needed for signature verification. */
+export type WebhookHeaders = Record<string, string | string[] | undefined>;
 
 export interface CreateCheckoutRequest {
   variantId: string;
@@ -65,7 +69,7 @@ export interface CancelSubscriptionResponse {
 /**
  * Payment Gateway Interface
  *
- * All payment providers (LemonSqueezy, Stripe, Paddle, etc.)
+ * All payment providers (Creem, Stripe, Paddle, etc.)
  * must implement this interface.
  */
 export interface IPaymentGateway {
@@ -104,9 +108,14 @@ export interface IPaymentGateway {
   getCustomerSubscriptions(customerId: string): Promise<SubscriptionInfo[]>;
 
   /**
-   * Verify webhook signature (optional, for providers that support it)
+   * Verify webhook authenticity from the request headers + raw body.
    */
-  verifyWebhookSignature?(signature: string, payload: string): boolean;
+  verifyWebhookSignature(headers: WebhookHeaders, rawBody: string): boolean;
+
+  /**
+   * Translate a provider webhook payload into the internal event shape.
+   */
+  parseWebhook(rawPayload: unknown): NormalizedWebhookEvent;
 }
 
 /**

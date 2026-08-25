@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IPaymentGateway } from '../interfaces/payment-gateway.interface';
-import { LemonSqueezyPaymentGateway } from '../gateways/lemonsqueezy-payment.gateway';
+import { CreemPaymentGateway } from '../gateways/creem-payment.gateway';
 import {
   BadRequestException,
   InternalServerErrorException,
@@ -23,7 +23,7 @@ import {
 export class PaymentGatewayFactory {
   constructor(
     private readonly configService: ConfigService,
-    private readonly lemonSqueezyGateway: LemonSqueezyPaymentGateway,
+    private readonly creemGateway: CreemPaymentGateway,
     // Add other gateways here when implemented
     // private readonly stripeGateway: StripePaymentGateway,
     // private readonly paddleGateway: PaddlePaymentGateway,
@@ -36,8 +36,8 @@ export class PaymentGatewayFactory {
     const provider = this.getActivePaymentProvider();
 
     switch (provider) {
-      case PaymentProvider.LEMONSQUEEZY:
-        return this.lemonSqueezyGateway as unknown as IPaymentGateway;
+      case PaymentProvider.CREEM:
+        return this.creemGateway as unknown as IPaymentGateway;
 
       case PaymentProvider.STRIPE:
         // return this.stripeGateway;
@@ -72,7 +72,7 @@ export class PaymentGatewayFactory {
    */
   private getActivePaymentProvider(): PaymentProvider {
     const provider = this.configService
-      .get<string>('PAYMENT_PROVIDER', PaymentProvider.LEMONSQUEEZY)
+      .get<string>('PAYMENT_PROVIDER', PaymentProvider.CREEM)
       .toLowerCase();
 
     if (!isValidPaymentProvider(provider)) {

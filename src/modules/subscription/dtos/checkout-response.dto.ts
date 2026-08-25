@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export class CheckoutResponseDto {
   @ApiProperty({
     description: 'The URL to redirect the user to complete payment',
-    example: 'https://checkout.lemonsqueezy.com/...',
+    example: 'https://creem.io/payment/prod_xxxxxxxx',
   })
   checkoutUrl: string;
 

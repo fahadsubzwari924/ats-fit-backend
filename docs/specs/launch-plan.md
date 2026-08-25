@@ -315,7 +315,7 @@ Referral system shipped. First Reddit posts. Stranger beta recruits. First Brevo
 
 **Task 3.4 — Stranger beta invites (30 min)**
 - Send Appendix C.1 email to 15 highest-engagement waitlist entries
-- Give them a coupon code for 30-day free Pro (create via Lemon Squeezy admin)
+- Give them a coupon code for 30-day free Pro (create via Creem dashboard)
 - Expected yes rate: 50–60% → 8–10 acceptances
 
 **Task 3.5 — Referral system backend shipping (45 min)**
@@ -446,7 +446,7 @@ Run through every item below. **Any red → consider delaying launch by 7 days (
 #### Backend
 - [ ] Waitlist signup endpoint: 100-concurrent load test passes without timeouts (run via `k6` or `oha`)
 - [ ] Referral system: 3-tester end-to-end test passes (A refers B, B confirms, A's count increments)
-- [ ] Founding Rate checkout: staging test with real Lemon Squeezy coupon → real webhook → user's `founding_rate_locked` set to true, `$7.20/mo` price honored
+- [ ] Founding Rate checkout: staging test with real Creem discount code → real webhook → user's `founding_rate_locked` set to true, `$7.20/mo` price honored
 - [ ] Webhook idempotency: double-fire same webhook → no duplicate subscriptions
 - [ ] Core tailoring: P95 latency <30s over 100 real runs (sample from real usage logs)
 
@@ -465,7 +465,7 @@ Run through every item below. **Any red → consider delaying launch by 7 days (
 
 #### Ops
 - [ ] Monitoring dashboards up (DB, API error rate, Brevo send success)
-- [ ] Stripe/Lemon Squeezy alerts to your phone for any webhook failure
+- [ ] Creem alerts to your phone for any webhook failure
 - [ ] You have caffeine and food for Mon night (launch is 12:01 AM PST Tue = midnight PST, your local time likely evening Mon)
 
 #### Nurture email 2

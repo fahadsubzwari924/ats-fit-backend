@@ -30,10 +30,10 @@ export class CreateSubscriptionPlanDto {
   currency?: string;
 
   @ApiProperty({
-    description: 'Payment gateway variant ID for the plan',
+    description: 'Payment gateway product ID for the plan',
     example: '1012063',
   })
-  payment_gateway_variant_id: string;
+  payment_gateway_product_id: string;
 
   @ApiPropertyOptional({
     description:
@@ -75,12 +75,12 @@ export class UpdateSubscriptionPlanDto {
   currency?: string;
 
   @ApiPropertyOptional({
-    description: 'Payment gateway variant ID',
+    description: 'Payment gateway product ID',
     example: '1012063',
   })
   @IsOptional()
   @IsString()
-  payment_gateway_variant_id?: string;
+  payment_gateway_product_id?: string;
   @ApiPropertyOptional({
     description:
       'Feature bullets: strings or { title, subitems[] } for nested lines',
@@ -120,7 +120,7 @@ export class SubscriptionPlanResponseDto {
   currency: string;
 
   @ApiProperty()
-  payment_gateway_variant_id: string;
+  payment_gateway_product_id: string;
 
   @ApiProperty()
   is_active: boolean;
